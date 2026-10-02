@@ -11,6 +11,10 @@ data:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: foo-projekt
         service-areas:
+          - area-name: business-services
+            area-label: Business
+            label-combinations:
+              - app.kubernetes.io/part-of: foo
           - area-name: infrastructure-services
             area-label: Infrastruktur
             label-combinations:
@@ -20,6 +24,15 @@ data:
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: bar
+        service-areas:
+          - area-name: business-services
+            area-label: Business
+            label-combinations:
+              - app.kubernetes.io/part-of: bar
+          - area-name: infrastructure-services
+            area-label: Infrastruktur
+            label-combinations:
+              - app.kubernetes.io/part-of: database
     actionHandlers:
       - action-name: delete-pod
         enabled: true
