@@ -9,6 +9,21 @@ info:
     GET-Endpunkte liefern einen `ETag`. Sendet das Frontend diesen als `If-None-Match` mit und hat sich
     nichts geändert, antwortet der Server mit `304 Not Modified` ohne Body.
 paths:
+  /api/cluster:
+    get:
+      summary: Statische Angaben zum Cluster
+      description: Werte aus der config.yaml (Abschnitt cluster); sie ändern sich erst mit einem Neustart des Backends.
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Aktuelle Daten
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClusterResponse' }
+        '304': { $ref: '#/components/responses/NotModified' }
   /api/projects:
     get:
       summary: Projekte und ihre Namespaces
@@ -261,6 +276,13 @@ components:
                             servicePortName: { type: string }
                             servicePortNumber: { type: integer, format: int32 }
                             resolvedServicePortNumber: { type: integer, format: int32 }
+    ClusterResponse:
+      type: object
+      required: [dnsName]
+      properties:
+        dnsName:
+          type: string
+          description: DNS-Name (oder IP) der Nodes für alle NodePort-Services (<dnsName>:<nodePort>); leer, wenn nicht konfiguriert.
     ProjectsResponse:
       type: object
       required: [projects]

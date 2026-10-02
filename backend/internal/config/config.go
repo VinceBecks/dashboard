@@ -4,12 +4,14 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"feature-dashboard/internal/model"
 )
@@ -19,10 +21,18 @@ type Config struct {
 	Projects       []Project             `yaml:"projects"`
 	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
 	Store          StoreConfig           `yaml:"store"`
+	Cluster        ClusterConfig         `yaml:"cluster"`
 	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt per link-variables-overrides
 	// überschreibbar.
 	LinkVariables map[string]string `yaml:"link-variables"`
 	Links         []Link            `yaml:"links"`
+}
+
+// ClusterConfig enthält Angaben zum Cluster, die das Dashboard anzeigt.
+type ClusterConfig struct {
+	// DNSName ist der DNS-Name (oder die IP), unter dem die Nodes erreichbar sind. Er gilt für alle
+	// NodePort-Services: <dns-name>:<node-port>. Optional.
+	DNSName string `yaml:"dns-name"`
 }
 
 // Link ist ein konfigurierbarer Absprung (z. B. nach Kibana), den das Dashboard an Objekten anzeigt.
@@ -183,6 +193,9 @@ func (c *Config) Validate() error {
 		errs = append(errs, validateServiceAreas(fmt.Sprintf("projects[%d]", i), p.ServiceAreas)...)
 	}
 	errs = append(errs, validateLinks(c.Links, projects)...)
+	if d := c.Cluster.DNSName; d != "" && net.ParseIP(d) == nil && len(validation.IsDNS1123Subdomain(strings.ToLower(d))) > 0 {
+		errs = append(errs, fmt.Errorf("cluster.dns-name %q ist weder ein gültiger DNS-Name noch eine IP (ohne Schema und Port angeben)", d))
+	}
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
 		if a.Name == "" {

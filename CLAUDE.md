@@ -160,6 +160,7 @@ Wird beim Startup einmal eingelesen. Enthält:
 1. Die Projekte und die für sie relevanten Namespace-Labels.
 2. Die ActionHandler und ob sie aktiviert sind.
 3. Store konfiguration
+4. Cluster-Angaben (optional)
 
 Beispiel für Projekte:
 
@@ -279,6 +280,16 @@ links:
 - Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
   (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
 
+Beispiel für Cluster-Angaben:
+
+```yaml
+cluster:
+  dns-name: k8s-nodes.mycomp.de       # optional; DNS-Name oder IP der Nodes, ohne Schema und Port
+```
+
+- `dns-name` gilt für alle NodePort-Services. Das Frontend lädt ihn über `GET /api/cluster` und zeigt je Port
+  `<dns-name>:<node-port>` mit Kopieren-Button an. Ohne `dns-name` wird nur der NodePort angezeigt.
+
 Beispiel für store-konfiguration
 ```yaml
 store:
@@ -306,6 +317,7 @@ Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Regis
 
 Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachliche Endpunkte:
 
+- `GET /api/cluster` liefert statische Cluster-Angaben aus der `config.yaml` (z. B. den DNS-Namen der Nodes)
 - `GET /api/projects` liefert eine Liste der Projekte und deren Namespaces
 - `GET /api/projects/{project-name}/namespaces/{namespace-name}` zum Laden der Objekte des Namespaces (inkl. dem
   namespace selber)
@@ -361,7 +373,8 @@ zur Namespace-Seite.
 
 1. Aktionen, die zum Namespace-Objekt gehören.
 2. Übersicht der Ingress-Objekte mit ihren Pfaden und den Aktionen auf Ingress-Objekten.
-3. Auflistung der existierenden Node-Port-Services
+3. Auflistung der existierenden Node-Port-Services; je Port die Adresse `<dns-name>:<node-port>` (DNS-Name aus
+   `GET /api/cluster`) mit einem Button zum Kopieren in die Zwischenablage
 4. Übersicht der Anwendungs-Services (ClusterIP), je Service-Bereich ein Abschnitt (Reihenfolge aus dem Backend,
    „others“ zuletzt), darin je Service eine Kachel. Darüber ein Quick-Filter (ab zwei Bereichen) mit einem Chip je
    Bereich; mehrere Bereiche sind gleichzeitig wählbar, ohne Auswahl werden alle gezeigt. Die Auswahl steht in der

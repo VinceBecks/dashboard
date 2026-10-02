@@ -203,3 +203,19 @@ func TestLinksValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterDNSName(t *testing.T) {
+	for _, valid := range []string{"", "k8s-nodes.mycomp.de", "Nodes.MyComp.de", "10.0.0.12"} {
+		cfg, err := Parse([]byte("cluster:\n  dns-name: \"" + valid + "\"\n"))
+		if err != nil {
+			t.Errorf("%q: %v", valid, err)
+		} else if cfg.Cluster.DNSName != valid {
+			t.Errorf("DNSName = %q, want %q", cfg.Cluster.DNSName, valid)
+		}
+	}
+	for _, invalid := range []string{"https://nodes.mycomp.de", "nodes.mycomp.de:30000", "nodes mycomp"} {
+		if _, err := Parse([]byte("cluster:\n  dns-name: \"" + invalid + "\"\n")); err == nil {
+			t.Errorf("%q: Fehler erwartet", invalid)
+		}
+	}
+}

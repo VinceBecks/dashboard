@@ -5,6 +5,8 @@ metadata:
   namespace: feature-dashboard
 data:
   config.yaml: |
+    cluster:
+      dns-name: k8s-nodes.mycomp.de.local
     projects:
       - project-name: foo-projekt
         namespace-labels:

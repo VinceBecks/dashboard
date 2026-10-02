@@ -5,7 +5,6 @@ import {
   Card,
   CardContent,
   CardHeader,
-  Chip,
   Grid,
   Link as MuiLink,
   Paper,
@@ -21,11 +20,13 @@ import {
 import type { ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client';
-import type { Ingress, NamespaceResponse, ObjectKind, ObjectRef, Service } from '../api/types';
+import type { ClusterResponse, Ingress, NamespaceResponse, ObjectKind, ObjectRef, Service, ServicePort } from '../api/types';
+import { CopyButton } from '../components/CopyButton';
 import { ObjectButtons } from '../components/ObjectButtons';
 import { ServiceAreaFilter } from '../components/ServiceAreaFilter';
 import { ServiceCard } from '../components/ServiceCard';
 import { Loading, PollError } from '../components/StatusViews';
+import { CLUSTER_POLL_INTERVAL_MS } from '../config';
 import { usePolling } from '../hooks/usePolling';
 
 /** Namespace-Seite: Aktionen, Ingresses, NodePort-Services und Anwendungs-Services (je Service-Bereich) mit ihren Replicas. */
@@ -33,6 +34,7 @@ export function NamespacePage() {
   const { project = '', namespace = '' } = useParams();
   const url = `/api/projects/${encodeURIComponent(project)}/namespaces/${encodeURIComponent(namespace)}`;
   const { data, error, loading, refresh } = usePolling<NamespaceResponse>(url);
+  const cluster = usePolling<ClusterResponse>('/api/cluster', CLUSTER_POLL_INTERVAL_MS);
 
   // Ausgewählte Service-Bereiche stehen in der URL (?area=a&area=b), damit sie Neuladen und Teilen überstehen.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,7 +100,12 @@ export function NamespacePage() {
             </Stack>
           </Section>
 
-          <NodePortSection services={data.services.filter((s) => s.type === 'NodePort')} objectRef={ref} onExecuted={refresh} />
+          <NodePortSection
+            services={data.services.filter((s) => s.type === 'NodePort')}
+            dnsName={cluster.data?.dnsName ?? ''}
+            objectRef={ref}
+            onExecuted={refresh}
+          />
 
           {data.serviceAreas.length > 1 && (
             <ServiceAreaFilter areas={data.serviceAreas} selected={selectedAreas} onChange={setSelectedAreas} />
@@ -188,10 +195,13 @@ function IngressCard({ ingress, object, onExecuted }: ObjectProps & { ingress: I
 
 function NodePortSection({
   services,
+  dnsName,
   objectRef,
   onExecuted,
 }: {
   services: Service[];
+  /** DNS-Name der Nodes aus GET /api/cluster; leer, wenn nicht konfiguriert. */
+  dnsName: string;
   objectRef: (kind: ObjectKind, name: string) => ObjectRef;
   onExecuted: () => void;
 }) {
@@ -202,7 +212,7 @@ function NodePortSection({
           <TableHead>
             <TableRow>
               <TableCell>Service</TableCell>
-              <TableCell>Ports (Port → NodePort)</TableCell>
+              <TableCell>Erreichbar unter</TableCell>
               <TableCell>Aktionen</TableCell>
             </TableRow>
           </TableHead>
@@ -211,14 +221,11 @@ function NodePortSection({
               <TableRow key={s.name}>
                 <TableCell>{s.name}</TableCell>
                 <TableCell>
-                  {s.ports.map((p) => (
-                    <Chip
-                      key={`${p.name}-${p.port}`}
-                      size="small"
-                      sx={{ mr: 0.5 }}
-                      label={`${p.name ? `${p.name}: ` : ''}${p.port} → ${p.nodePort ?? '-'}`}
-                    />
-                  ))}
+                  <Stack spacing={0.5}>
+                    {s.ports.map((p) => (
+                      <NodePortAddress key={`${p.name}-${p.port}`} port={p} dnsName={dnsName} />
+                    ))}
+                  </Stack>
                 </TableCell>
                 <TableCell>
                   <ObjectButtons actions={s.actions} links={s.links} object={objectRef('service', s.name)} onExecuted={onExecuted} />
@@ -229,6 +236,30 @@ function NodePortSection({
         </Table>
       </TableContainer>
     </Section>
+  );
+}
+
+/** Eine Port-Zeile: „<Name> (<Port>)“, die Adresse <dns>:<nodePort> und ein Kopieren-Button. */
+function NodePortAddress({ port, dnsName }: { port: ServicePort; dnsName: string }) {
+  const address = port.nodePort ? (dnsName ? `${dnsName}:${port.nodePort}` : String(port.nodePort)) : undefined;
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography variant="body2" color="text.secondary" sx={{ minWidth: '6em' }}>
+        {port.name ? `${port.name} (${port.port})` : port.port}
+      </Typography>
+      {address ? (
+        <>
+          <Typography variant="body2" component="code" sx={{ fontFamily: 'monospace' }}>
+            {address}
+          </Typography>
+          <CopyButton text={address} label={`${address} kopieren`} />
+        </>
+      ) : (
+        <Typography variant="body2" color="text.secondary">
+          kein NodePort
+        </Typography>
+      )}
+    </Stack>
   );
 }
 

@@ -99,5 +99,9 @@ actionHandlers:
 #           query:(language:kuery,query:'kubernetes.namespace:"{{ .Namespace }}"
 #           {{- range $k, $v := .Selector }} and kubernetes.labels.{{ replace $k "." "_" }}:"{{ $v }}"{{ end }}'))
 
+# DNS-Name (oder IP) der Nodes, unter dem alle NodePort-Services erreichbar sind: <dns-name>:<node-port>.
+cluster:
+  dns-name: k8s-nodes.mycomp.de
+
 store:
   recreate-store-interval: 1h

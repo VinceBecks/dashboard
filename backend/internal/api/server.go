@@ -30,16 +30,24 @@ type Server struct {
 	ready     func() bool
 	staticDir string
 	links     *links.Registry
+	cluster   config.ClusterConfig
+	startedAt time.Time
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
 func NewServer(st *store.Store, registry *actions.Registry, projects []config.Project, ready func() bool) *Server {
-	return &Server{store: st, registry: registry, projects: projects, ready: ready}
+	return &Server{store: st, registry: registry, projects: projects, ready: ready, startedAt: time.Now()}
 }
 
 // WithStaticDir lässt den Server zusätzlich den Frontend-Build aus dir ausliefern.
 func (s *Server) WithStaticDir(dir string) *Server {
 	s.staticDir = dir
+	return s
+}
+
+// WithCluster setzt die Cluster-Angaben für GET /api/cluster.
+func (s *Server) WithCluster(c config.ClusterConfig) *Server {
+	s.cluster = c
 	return s
 }
 
@@ -54,6 +62,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
+	mux.HandleFunc("GET /api/cluster", s.handleCluster)
 	mux.HandleFunc("GET /api/projects", s.handleProjects)
 	mux.HandleFunc("GET /api/projects/{project}/namespaces/{namespace}", s.handleNamespace)
 	mux.HandleFunc("PATCH /api/actions/{action}", s.handleAction)
@@ -77,6 +86,21 @@ func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// ClusterResponse ist die Antwort von GET /api/cluster.
+type ClusterResponse struct {
+	// DNSName ist der DNS-Name der Nodes für alle NodePort-Services; leer, wenn nicht konfiguriert.
+	DNSName string `json:"dnsName"`
+}
+
+// handleCluster liefert statische Cluster-Angaben aus der config.yaml. Sie ändern sich erst mit einem Neustart,
+// daher dient der Startzeitpunkt als ETag.
+func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
+	if notModified(w, r, s.startedAt) {
+		return
+	}
+	writeJSON(w, http.StatusOK, ClusterResponse{DNSName: s.cluster.DNSName})
 }
 
 // ProjectsResponse ist die Antwort von GET /api/projects.

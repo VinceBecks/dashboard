@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Action, Link, NamespaceResponse } from '../api/types';
-import { mockFetch } from '../test/fetchMock';
+import { mockFetch, type MockResponse } from '../test/fetchMock';
 import { NamespacePage } from './NamespacePage';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -67,6 +67,12 @@ const data: NamespaceResponse = {
   ],
 };
 
+/** Beantwortet /api/cluster mit einem DNS-Namen und alle anderen Anfragen mit res. */
+const api =
+  (res: MockResponse) =>
+  (url: string): MockResponse =>
+    url === '/api/cluster' ? { status: 200, body: { dnsName: 'k8s-nodes.mycomp.de' }, etag: '"c"' } : res;
+
 function renderPage(path = '/projects/foo/namespaces/feat-1') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -79,11 +85,11 @@ function renderPage(path = '/projects/foo/namespaces/feat-1') {
 
 describe('NamespacePage', () => {
   it('zeigt Aktionen, Ingresses, NodePort- und Anwendungs-Services', async () => {
-    const fetchMock = mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    const fetchMock = mockFetch(api({ status: 200, body: data, etag: '"1"' }));
     renderPage();
 
     expect(await screen.findByRole('heading', { name: 'feat-1' })).toBeInTheDocument();
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/projects/foo/namespaces/feat-1');
+    expect(fetchMock.mock.calls.map((c) => c[0])).toContain('/api/projects/foo/namespaces/feat-1');
     expect(screen.getByRole('button', { name: 'Namespace löschen' })).toBeInTheDocument();
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
@@ -94,7 +100,8 @@ describe('NamespacePage', () => {
 
     const nodePorts = screen.getByRole('heading', { name: 'NodePort-Services' }).parentElement!;
     expect(within(nodePorts).getByText('debug')).toBeInTheDocument();
-    expect(within(nodePorts).getByText('80 → 30080')).toBeInTheDocument();
+    expect(within(nodePorts).getByText('k8s-nodes.mycomp.de:30080')).toBeInTheDocument();
+    expect(within(nodePorts).getByRole('button', { name: 'k8s-nodes.mycomp.de:30080 kopieren' })).toBeInTheDocument();
 
     const apps = screen.getByRole('heading', { name: 'Business' }).parentElement!;
     expect(within(apps).queryByText('debug')).not.toBeInTheDocument();
@@ -115,7 +122,7 @@ describe('NamespacePage', () => {
   });
 
   it('zeigt Aktionen nur als Icon mit dem Titel als Tooltip', async () => {
-    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    mockFetch(api({ status: 200, body: data, etag: '"1"' }));
     renderPage();
     const button = await screen.findByRole('button', { name: 'Namespace löschen' });
     expect(button).not.toHaveTextContent('Namespace löschen');
@@ -127,7 +134,7 @@ describe('NamespacePage', () => {
   });
 
   it('filtert die Service-Bereiche per Quick-Filter mit Mehrfachauswahl', async () => {
-    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    mockFetch(api({ status: 200, body: data, etag: '"1"' }));
     const user = userEvent.setup();
     renderPage();
     const areaHeadings = async () =>
@@ -152,7 +159,7 @@ describe('NamespacePage', () => {
   });
 
   it('übernimmt die Filter-Auswahl aus der URL und ignoriert unbekannte Bereiche', async () => {
-    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    mockFetch(api({ status: 200, body: data, etag: '"1"' }));
     renderPage('/projects/foo/namespaces/feat-1?area=infra&area=gibt-es-nicht');
     await screen.findByRole('heading', { name: 'Infrastruktur' });
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
@@ -160,7 +167,7 @@ describe('NamespacePage', () => {
   });
 
   it('zeigt keinen Filter bei nur einem Bereich', async () => {
-    mockFetch(() => ({
+    mockFetch(api({
       status: 200,
       body: { ...data, serviceAreas: [{ id: 'others', label: 'Anwendungs-Services', services: ['web'] }] },
       etag: '"1"',
@@ -179,7 +186,7 @@ describe('NamespacePage', () => {
           : s,
       ),
     };
-    mockFetch(() => ({ status: 200, body: withLinks, etag: '"1"' }));
+    mockFetch(api({ status: 200, body: withLinks, etag: '"1"' }));
     renderPage();
     const business = (await screen.findByRole('heading', { name: 'Business' })).parentElement!;
     const actionGroup = within(business).getByRole('group', { name: 'Aktionen' });
@@ -193,7 +200,7 @@ describe('NamespacePage', () => {
   });
 
   it('zeigt Links an Namespace und Pods, die in einem neuen Tab öffnen', async () => {
-    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    mockFetch(api({ status: 200, body: data, etag: '"1"' }));
     renderPage();
     const nsLink = await screen.findByRole('link', { name: 'Namespace-Logs' });
     expect(nsLink).toHaveAttribute('href', 'https://kibana.example/ns');
@@ -207,8 +214,25 @@ describe('NamespacePage', () => {
     expect(screen.queryByRole('button', { name: 'Pod löschen' })).not.toBeInTheDocument();
   });
 
+  it('kopiert die NodePort-Adresse in die Zwischenablage', async () => {
+    mockFetch(api({ status: 200, body: data, etag: '"1"' }));
+    const user = userEvent.setup();
+    Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'k8s-nodes.mycomp.de:30080 kopieren' }));
+    expect(await navigator.clipboard.readText()).toBe('k8s-nodes.mycomp.de:30080');
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Kopiert');
+  });
+
+  it('zeigt nur den NodePort, wenn kein DNS-Name konfiguriert ist', async () => {
+    mockFetch((url) => (url === '/api/cluster' ? { status: 200, body: { dnsName: '' } } : { status: 200, body: data }));
+    renderPage();
+    const nodePorts = (await screen.findByRole('heading', { name: 'NodePort-Services' })).parentElement!;
+    await waitFor(() => expect(within(nodePorts).getByRole('button', { name: '30080 kopieren' })).toBeInTheDocument());
+  });
+
   it('meldet einen nicht (mehr) existierenden Namespace', async () => {
-    mockFetch(() => ({ status: 404, body: { error: 'namespace nicht gefunden' } }));
+    mockFetch(api({ status: 404, body: { error: 'namespace nicht gefunden' } }));
     renderPage();
     expect(await screen.findByText(/existiert nicht \(mehr\)/)).toBeInTheDocument();
   });

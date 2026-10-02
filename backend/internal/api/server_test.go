@@ -235,3 +235,22 @@ links:
 		t.Errorf("leere links erwartet: %s", body)
 	}
 }
+
+func TestCluster(t *testing.T) {
+	st, _, _ := setup(t)
+	h := NewServer(st, actions.NewRegistry(), nil, func() bool { return true }).
+		WithCluster(config.ClusterConfig{DNSName: "k8s-nodes.mycomp.de"}).Handler()
+	rec := do(h, "GET", "/api/cluster", "", "")
+	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"dnsName":"k8s-nodes.mycomp.de"}` {
+		t.Fatalf("status %d, body %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "GET", "/api/cluster", "", rec.Header().Get("ETag")); rec.Code != 304 {
+		t.Fatalf("304 erwartet, got %d", rec.Code)
+	}
+
+	// Ohne Konfiguration: leerer Name.
+	_, plain, _ := setup(t)
+	if body := do(plain, "GET", "/api/cluster", "", "").Body.String(); strings.TrimSpace(body) != `{"dnsName":""}` {
+		t.Fatalf("body %s", body)
+	}
+}

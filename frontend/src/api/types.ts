@@ -115,6 +115,12 @@ export interface Project {
   namespaces: Namespace[];
 }
 
+/** Antwort von GET /api/cluster. */
+export interface ClusterResponse {
+  /** DNS-Name der Nodes für alle NodePort-Services; leer, wenn nicht konfiguriert. */
+  dnsName: string;
+}
+
 export interface ProjectsResponse {
   projects: Project[];
 }
