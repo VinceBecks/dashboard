@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Action, NamespaceResponse } from '../api/types';
@@ -81,13 +82,25 @@ describe('NamespacePage', () => {
 
     const apps = screen.getByRole('heading', { name: 'Anwendungs-Services' }).parentElement!;
     expect(within(apps).queryByText('debug')).not.toBeInTheDocument();
-    expect(within(apps).getByText('http 80→8080')).toBeInTheDocument();
+    // Port-Mappings der Anwendungs-Services werden nicht angezeigt.
+    expect(within(apps).queryByText(/8080/)).not.toBeInTheDocument();
     expect(within(apps).getByRole('button', { name: 'Service neu starten' })).toBeInTheDocument();
     expect(within(apps).getByText('web-1')).toBeInTheDocument();
     expect(within(apps).getByText('Ready')).toBeInTheDocument();
 
     // Pod-Aktionen werden vorerst nicht angezeigt.
     expect(screen.queryByRole('button', { name: 'Pod löschen' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt Aktionen nur als Icon mit dem Titel als Tooltip', async () => {
+    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Namespace löschen' });
+    expect(button).not.toHaveTextContent('Namespace löschen');
+    expect(button.querySelector('svg')).not.toBeNull();
+
+    await userEvent.setup().hover(button);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Namespace löschen');
   });
 
   it('meldet einen nicht (mehr) existierenden Namespace', async () => {

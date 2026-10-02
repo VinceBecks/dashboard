@@ -25,7 +25,7 @@ import {
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { ApiError } from '../api/client';
-import type { Ingress, NamespaceResponse, ObjectKind, ObjectRef, Pod, Service, ServicePort } from '../api/types';
+import type { Ingress, NamespaceResponse, ObjectKind, ObjectRef, Pod, Service } from '../api/types';
 import { ActionButtons } from '../components/ActionButtons';
 import { Loading, PollError } from '../components/StatusViews';
 import { usePolling } from '../hooks/usePolling';
@@ -211,11 +211,7 @@ function ServiceCard({ service, pods, object, onExecuted }: ObjectProps & { serv
     .filter((p): p is Pod => p !== undefined);
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardHeader
-        title={service.name}
-        subheader={service.ports.map(formatServicePort).join(', ')}
-        slotProps={{ title: { variant: 'h6' } }}
-      />
+      <CardHeader title={service.name} slotProps={{ title: { variant: 'h6' } }} />
       <CardContent sx={{ pt: 0 }}>
         <ActionButtons actions={service.actions} object={object} onExecuted={onExecuted} />
         <Divider sx={{ my: 1.5 }} />
@@ -246,9 +242,4 @@ function ServiceCard({ service, pods, object, onExecuted }: ObjectProps & { serv
 function PodStatus({ pod }: { pod: Pod }) {
   const color = pod.ready ? 'success' : pod.phase === 'Failed' ? 'error' : 'warning';
   return <Chip size="small" color={color} label={pod.ready ? 'Ready' : pod.phase || 'Unbekannt'} />;
-}
-
-function formatServicePort(p: ServicePort): string {
-  const target = p.resolvedTargetPort ?? p.targetPort;
-  return `${p.name ? `${p.name} ` : ''}${p.port}→${target}`;
 }

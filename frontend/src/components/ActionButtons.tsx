@@ -1,4 +1,4 @@
-import { Alert, Button, Snackbar, Stack } from '@mui/material';
+import { Alert, IconButton, Snackbar, Stack, Tooltip } from '@mui/material';
 import { useState } from 'react';
 import type { Action, ActionResult, ObjectRef } from '../api/types';
 import { ActionDialog } from './ActionDialog';
@@ -11,7 +11,7 @@ interface Props {
   onExecuted?: () => void;
 }
 
-/** Buttons für alle Aktionen eines Objekts – vollständig aus den Backend-Daten aufgebaut. */
+/** Icon-Buttons für alle Aktionen eines Objekts – vollständig aus den Backend-Daten aufgebaut. */
 export function ActionButtons({ actions, object, onExecuted }: Props) {
   const [active, setActive] = useState<Action>();
   const [result, setResult] = useState<ActionResult>();
@@ -22,17 +22,14 @@ export function ActionButtons({ actions, object, onExecuted }: Props) {
 
   return (
     <>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
         {actions.map((a) => (
-          <Button
-            key={a.id}
-            size="small"
-            variant="outlined"
-            startIcon={<ActionIcon name={a.lucideIcon} color={a.lucideIconColor} />}
-            onClick={() => setActive(a)}
-          >
-            {a.title}
-          </Button>
+          // Nur das Icon; der Titel erscheint als Tooltip und dient als zugänglicher Name.
+          <Tooltip key={a.id} title={a.title}>
+            <IconButton size="small" aria-label={a.title} onClick={() => setActive(a)}>
+              <ActionIcon name={a.lucideIcon} color={a.lucideIconColor} size={20} />
+            </IconButton>
+          </Tooltip>
         ))}
       </Stack>
       {active && (
