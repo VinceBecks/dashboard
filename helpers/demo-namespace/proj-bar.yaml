@@ -4,8 +4,8 @@ global:
 
 namespace:
   labels:
-    mycomp.de/is-feature-environment: true
-    mycomp.de/project-name: bar-projekt
+    mycomp.de/is-feature-environment: "true"
+    mycomp.de/project-name: bar
 
 app1:
   enabled: false

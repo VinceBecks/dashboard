@@ -1,0 +1,33 @@
+global:
+  namespace:
+    name: foobar-fancy-feature
+
+namespace:
+  labels:
+    mycomp.de/is-feature-environment: "true"
+    mycomp.de/project-name: foobar
+
+app1:
+  enabled: false
+app2:
+  enabled: true
+  name: database
+  replicaCount: 1
+  labels:
+    app.kubernetes.io/part-of: database
+app3:
+  enabled: true
+  name: business-app-1
+  replicaCount: 1
+  labels:
+    app.kubernetes.io/part-of: foobar
+app4:
+  enabled: true
+  name: business-app-2
+  replicaCount: 1
+  labels:
+    app.kubernetes.io/part-of: foobar
+  service:
+    port: 5432
+app5:
+  enabled: false

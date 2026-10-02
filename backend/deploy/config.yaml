@@ -33,6 +33,19 @@ data:
             area-label: Infrastruktur
             label-combinations:
               - app.kubernetes.io/part-of: database
+      - project-name: foobar-projekt
+        namespace-labels:
+          mycomp.de/is-feature-environment: true
+          mycomp.de/project-name: foobar
+        service-areas:
+          - area-name: business-services
+            area-label: Business
+            label-combinations:
+              - app.kubernetes.io/part-of: foobar
+          - area-name: infrastructure-services
+            area-label: Infrastruktur
+            label-combinations:
+              - app.kubernetes.io/part-of: database
     actionHandlers:
       - action-name: delete-pod
         enabled: true

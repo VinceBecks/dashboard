@@ -4,7 +4,7 @@ global:
 
 namespace:
   labels:
-    mycomp.de/is-feature-environment: true
+    mycomp.de/is-feature-environment: "true"
     mycomp.de/project-name: foo-projekt
 
 app1:
