@@ -324,7 +324,9 @@ zur Namespace-Seite.
 2. Übersicht der Ingress-Objekte mit ihren Pfaden und den Aktionen auf Ingress-Objekten.
 3. Auflistung der existierenden Node-Port-Services
 4. Übersicht der Anwendungs-Services (ClusterIP), je Service-Bereich ein Abschnitt (Reihenfolge aus dem Backend,
-   „others“ zuletzt), darin je Service eine Kachel:
+   „others“ zuletzt), darin je Service eine Kachel. Darüber ein Quick-Filter (ab zwei Bereichen) mit einem Chip je
+   Bereich; mehrere Bereiche sind gleichzeitig wählbar, ohne Auswahl werden alle gezeigt. Die Auswahl steht in der
+   URL (`?area=<id>&area=<id>`).
     - zuerst die Aktionen des Service-Objekts,
     - danach die Replicas (Pods), die der Service referenziert.
 

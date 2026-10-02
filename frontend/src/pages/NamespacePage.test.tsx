@@ -56,9 +56,9 @@ const data: NamespaceResponse = {
   ],
 };
 
-function renderPage() {
+function renderPage(path = '/projects/foo/namespaces/feat-1') {
   return render(
-    <MemoryRouter initialEntries={['/projects/foo/namespaces/feat-1']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/projects/:project/namespaces/:namespace" element={<NamespacePage />} />
       </Routes>
@@ -113,6 +113,50 @@ describe('NamespacePage', () => {
 
     await userEvent.setup().hover(button);
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Namespace löschen');
+  });
+
+  it('filtert die Service-Bereiche per Quick-Filter mit Mehrfachauswahl', async () => {
+    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    const user = userEvent.setup();
+    renderPage();
+    const areaHeadings = async () =>
+      (await screen.findAllByRole('heading', { level: 2 })).map((h) => h.textContent).slice(2);
+
+    expect(await areaHeadings()).toEqual(['Business', 'Infrastruktur', 'Andere']);
+    const filter = screen.getByRole('group', { name: 'Service-Bereiche filtern' });
+    expect(within(filter).getByRole('button', { name: 'Alle' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(within(filter).getByRole('button', { name: 'Business (1)' }));
+    expect(await areaHeadings()).toEqual(['Business']);
+    expect(within(filter).getByRole('button', { name: 'Alle' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(within(filter).getByRole('button', { name: 'Andere (1)' }));
+    expect(await areaHeadings()).toEqual(['Business', 'Andere']);
+
+    await user.click(within(filter).getByRole('button', { name: 'Business (1)' }));
+    expect(await areaHeadings()).toEqual(['Andere']);
+
+    await user.click(within(filter).getByRole('button', { name: 'Alle' }));
+    expect(await areaHeadings()).toEqual(['Business', 'Infrastruktur', 'Andere']);
+  });
+
+  it('übernimmt die Filter-Auswahl aus der URL und ignoriert unbekannte Bereiche', async () => {
+    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    renderPage('/projects/foo/namespaces/feat-1?area=infra&area=gibt-es-nicht');
+    await screen.findByRole('heading', { name: 'Infrastruktur' });
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(headings).toEqual(['Ingresses', 'NodePort-Services', 'Infrastruktur']);
+  });
+
+  it('zeigt keinen Filter bei nur einem Bereich', async () => {
+    mockFetch(() => ({
+      status: 200,
+      body: { ...data, serviceAreas: [{ id: 'others', label: 'Anwendungs-Services', services: ['web'] }] },
+      etag: '"1"',
+    }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Anwendungs-Services' });
+    expect(screen.queryByRole('group', { name: 'Service-Bereiche filtern' })).not.toBeInTheDocument();
   });
 
   it('meldet einen nicht (mehr) existierenden Namespace', async () => {

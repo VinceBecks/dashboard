@@ -23,10 +23,11 @@ import {
   Typography,
 } from '@mui/material';
 import type { ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client';
 import type { Ingress, NamespaceResponse, ObjectKind, ObjectRef, Pod, Service } from '../api/types';
 import { ActionButtons } from '../components/ActionButtons';
+import { ServiceAreaFilter } from '../components/ServiceAreaFilter';
 import { Loading, PollError } from '../components/StatusViews';
 import { usePolling } from '../hooks/usePolling';
 
@@ -35,6 +36,21 @@ export function NamespacePage() {
   const { project = '', namespace = '' } = useParams();
   const url = `/api/projects/${encodeURIComponent(project)}/namespaces/${encodeURIComponent(namespace)}`;
   const { data, error, loading, refresh } = usePolling<NamespaceResponse>(url);
+
+  // Ausgewählte Service-Bereiche stehen in der URL (?area=a&area=b), damit sie Neuladen und Teilen überstehen.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const knownAreas = new Set(data?.serviceAreas.map((a) => a.id));
+  const selectedAreas = searchParams.getAll('area').filter((id) => knownAreas.has(id));
+  const setSelectedAreas = (ids: string[]) =>
+    setSearchParams(
+      (params) => {
+        params.delete('area');
+        ids.forEach((id) => params.append('area', id));
+        return params;
+      },
+      { replace: true },
+    );
+  const visibleAreas = data?.serviceAreas.filter((a) => selectedAreas.length === 0 || selectedAreas.includes(a.id)) ?? [];
 
   const notFound = error instanceof ApiError && error.status === 404;
   const ref = (kind: ObjectKind, name: string): ObjectRef => ({ kind, namespace, name });
@@ -82,7 +98,11 @@ export function NamespacePage() {
 
           <NodePortSection services={data.services.filter((s) => s.type === 'NodePort')} objectRef={ref} onExecuted={refresh} />
 
-          {data.serviceAreas.map((area) => {
+          {data.serviceAreas.length > 1 && (
+            <ServiceAreaFilter areas={data.serviceAreas} selected={selectedAreas} onChange={setSelectedAreas} />
+          )}
+
+          {visibleAreas.map((area) => {
             const services = area.services
               .map((name) => data.services.find((s) => s.name === name))
               .filter((s): s is Service => s !== undefined);
