@@ -1,0 +1,15 @@
+apiVersion: v2
+name: demo-namespace
+description: A simple namespace
+type: application
+version: 0.1.0
+appVersion: "1.27"
+dependencies:
+  - name: demo-app
+    version: 0.1.0
+    repository: "file://../demo-app"
+    alias: app1
+  - name: demo-app
+    version: 0.1.0
+    repository: "file://../demo-app"
+    alias: app2

@@ -1,3 +1,5 @@
 .idea
 .DS_Store
 backend/bin/
+Chart.lock
+**/*.tgz

@@ -1,0 +1,17 @@
+global:
+  namespace:
+    name: bar
+
+namespace:
+  labels:
+    mycomp.de/is-feature-environment: "true"
+    mycomp.de/project-name: foo-projekt
+
+app1:
+  replicaCount: 2
+  labels:
+    app.kubernetes.io/part-of: "hello"
+app2:
+  replicaCount: 1
+  labels:
+    app.kubernetes.io/part-of: "world"
