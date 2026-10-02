@@ -44,7 +44,7 @@ paths:
     patch:
       summary: Aktion auf einem Objekt ausführen
       description: |
-        Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die WATCH-API im Store,
+        Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die Informer-Events im Store,
         also mit dem nächsten Abruf der GET-Endpunkte.
       parameters:
         - { name: action, in: path, required: true, description: Aktion-ID, schema: { type: string } }

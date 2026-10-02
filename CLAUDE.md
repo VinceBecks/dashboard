@@ -67,7 +67,7 @@ Namespace bestimmt. Welche Labels für welches Projekt gelten, steht in der `con
 ### Kubernetes-Anbindung
 
 - Es wird die Bibliothek `client-go` verwendet
-- Das Backend nutzt die WATCH-API von Kubernetes, um stets aktuell zu sein.
+- Das Backend nutzt die Informer-API von `client-go` (`SharedInformerFactory`, Event-Handler, Lister), um stets aktuell zu sein.
 - In einem definierbaren Interval wird der komplette store geleert und neu befüllt, um regelmäßig einen sauberen Stand zu haben, der nicht durch Fehler bei der Erfassung vorgekommen ist. Der Interval ist konfigurierbar über die `config.yaml`  
 - Relevant sind nur vier Objekt-Typen: **Namespace, Service, Ingress, Pod**. Keine weiteren Typen beobachten.
 - Von diesen Objekten werden nur wenige Kern-Informationen übernommen, nicht das vollständige Objekt.
@@ -94,7 +94,7 @@ aufgelöste Port-Nummer eines Service). Das beim Implementieren von Converter-Lo
   beim Lesen entstehen immer Kopien. Niemand hält einen Pointer auf den Zustand im Store.
 - Deshalb: keine Pointer auf Structs im Store ablegen und keine Caches mit deserialisierten Objekten daneben aufbauen,
   die diese Garantie unterlaufen.
-- Der Store wird nebenläufig gelesen (HTTP) und geschrieben (Watch-Events, ActionHandler) und muss entsprechend
+- Der Store wird nebenläufig gelesen (HTTP) und geschrieben (Informer-Events) und muss entsprechend
   abgesichert sein.
 - Der store merkt sich wann es eine letzte Änderung gab von Namespaces zu Projekten (hinzugefügt/verändert/entfernt) und
   merkt sich zusätzliche, wann das letzte Mal ein Objekt innerhalb eines Namespaces hinzugefügt/verändert/entfernt wurde
@@ -195,7 +195,7 @@ store:
     1. ob er für ein konkretes Objekt *applicable* ist,
     2. ob er zum Ausführen zusätzliche Eingaben vom Nutzer braucht, und wenn ja, welche Formular-Felder.
 - Ein ActionHandler kann Veränderungen in Kubernetes vornehmen (Pods löschen, Service erstellen, ...). Diese werden aber
-  nicht von der Aktion im Store verändert. Die veränderung kommt nur durch die WATCH-API
+  nicht von der Aktion im Store verändert. Die Veränderung kommt nur über die Informer-Events.
 - Ein ActionHandler gibt ein Result zurück, welches zeigt, ob die Aktion erfolgreich ausgeführt wurde oder nicht
 
 Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Registry registrieren, Eintrag in der
@@ -280,12 +280,17 @@ die diese Seite braucht). Bei `304` bleibt der bestehende Zustand unverändert, 
 - Projekte, Labels und aktive Aktionen kommen aus der `config.yaml`, nicht aus dem Code.
 - Ändert ein ActionHandler den Cluster, muss der Store konsistent mitgeführt werden.
 
-## Noch nicht festgelegt
+## Getroffene Entscheidungen
 
-- regelmäßig store ganz neu machen
+- Backend: `k8s.io/client-go` v0.33.x mit Informern, HTTP mit stdlib `net/http`, YAML mit `gopkg.in/yaml.v3`.
+- Build/Test: Makefile + `go test`, Dockerfile (distroless).
+- Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit ETags)
+  ändern sich nur, wenn sich das gespeicherte JSON tatsächlich ändert.
+- Periodischer Neuaufbau: frische Informer, kompletter neuer Store-Inhalt, atomarer Austausch;
+  Timestamps nur für Namespaces mit abweichendem Inhalt.
+
+## Noch nicht festgelegt
 
 Diese Punkte sind offen. Vor der Umsetzung nachfragen, statt eine Annahme zu treffen:
 
-- Go-Bibliotheken (z. B. `client-go` passend zu 1.33) sowie Build-Tool, UI-Bibliothek und Routing im Frontend.
-- Build-, Test- und Start-Befehle. Sobald sie feststehen, hier eintragen.
-- Verhalten, wenn das Watch-Event zu einem per Aktion angelegten Objekt eintrifft, das bereits im Store liegt.
+- Build-Tool, Routing und Build-/Test-/Start-Befehle im Frontend.

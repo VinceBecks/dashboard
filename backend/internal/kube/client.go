@@ -1,4 +1,4 @@
-// Package kube bindet den Kubernetes-Cluster per WATCH-API an den Store an.
+// Package kube bindet den Kubernetes-Cluster per Informer-API an den Store an.
 package kube
 
 import (

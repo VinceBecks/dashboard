@@ -47,7 +47,7 @@ type Result struct {
 }
 
 // Handler setzt genau eine Aktion um. Er verändert nur den Cluster, nie den Store;
-// der Store wird ausschließlich über die WATCH-API aktualisiert.
+// der Store wird ausschließlich über die Informer-Events aktualisiert.
 type Handler interface {
 	// Configure übernimmt die handler-spezifischen extra-handler-configs.
 	Configure(extra map[string]any) error
