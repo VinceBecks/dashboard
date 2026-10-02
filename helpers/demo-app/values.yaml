@@ -1,8 +1,8 @@
 namespace:
-  name: mydemons
+  name: myotherdemons
   labels:
-    environment: demo
-    team: platform
+    mycomp.de/is-feature-environment: "true"
+    mycomp.de/project-name: foo-projekt
 
 replicaCount: 2
 
