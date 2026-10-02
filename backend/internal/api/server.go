@@ -22,15 +22,22 @@ var openAPISpec []byte
 
 // Server beantwortet die HTTP-Anfragen des Dashboards.
 type Server struct {
-	store    *store.Store
-	registry *actions.Registry
-	projects []config.Project
-	ready    func() bool
+	store     *store.Store
+	registry  *actions.Registry
+	projects  []config.Project
+	ready     func() bool
+	staticDir string
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
 func NewServer(st *store.Store, registry *actions.Registry, projects []config.Project, ready func() bool) *Server {
 	return &Server{store: st, registry: registry, projects: projects, ready: ready}
+}
+
+// WithStaticDir lässt den Server zusätzlich den Frontend-Build aus dir ausliefern.
+func (s *Server) WithStaticDir(dir string) *Server {
+	s.staticDir = dir
+	return s
 }
 
 // Handler liefert den HTTP-Handler mit allen Routen.
@@ -49,6 +56,9 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(swaggerHTML))
 	})
+	if s.staticDir != "" {
+		mux.Handle("GET /", staticHandler(s.staticDir))
+	}
 	return mux
 }
 

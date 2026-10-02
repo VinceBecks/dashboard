@@ -25,15 +25,16 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "Pfad zur config.yaml")
 	listen := flag.String("listen", ":8080", "HTTP-Adresse")
 	kubeconfig := flag.String("kubeconfig", "", "Pfad zur kubeconfig (leer: In-Cluster, sonst KUBECONFIG/~/.kube/config)")
+	staticDir := flag.String("static-dir", "", "Verzeichnis mit dem Frontend-Build (leer: Frontend nicht ausliefern)")
 	flag.Parse()
 
-	if err := run(*configPath, *listen, *kubeconfig); err != nil {
+	if err := run(*configPath, *listen, *kubeconfig, *staticDir); err != nil {
 		slog.Error("Backend beendet mit Fehler", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath, listen, kubeconfig string) error {
+func run(configPath, listen, kubeconfig, staticDir string) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
@@ -63,7 +64,7 @@ func run(configPath, listen, kubeconfig string) error {
 
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           api.NewServer(st, registry, cfg.Projects, watcher.Ready).Handler(),
+		Handler:           api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	serverErr := make(chan error, 1)

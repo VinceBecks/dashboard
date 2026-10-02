@@ -14,10 +14,10 @@ vet:
 	go vet ./...
 
 run:
-	go run ./cmd/dashboard --config $(CONFIG) --kubeconfig "$${KUBECONFIG:-$$HOME/.kube/config}"
+	go run ./cmd/dashboard --config $(CONFIG) --kubeconfig "$${KUBECONFIG:-$$HOME/.kube/config}" $(if $(STATIC_DIR),--static-dir $(STATIC_DIR))
 
 docker:
-	docker build -t $(IMAGE) .
+	docker build -f ../Dockerfile -t $(IMAGE) ..
 
 clean:
 	rm -rf bin

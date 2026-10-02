@@ -19,7 +19,8 @@ hochgefahren haben und welche Services darin laufen.
 - Keine Authentifizierung im Dashboard
 
 ## Aktueller Stand
-Das Backend ist implementiert (Plan: `plans/backend-implementierung.md`). Das Frontend existiert noch nicht.
+Backend und Frontend sind implementiert (Plan Backend: `plans/backend-implementierung.md`).
+Das Backend liefert im Cluster auch das gebaute Frontend aus (ein Image, `Dockerfile` im Repository-Root).
 
 Backend-Pakete (`backend/`):
 
@@ -45,7 +46,22 @@ Im Ordner `backend/`:
 - `make vet` – `go vet ./...`
 - `make run` – lokal gegen den Cluster aus `KUBECONFIG` bzw. `~/.kube/config` mit `config.example.yaml`
   (andere Config: `make run CONFIG=pfad.yaml`)
-- `make docker` – Container-Image bauen; Manifeste unter `backend/deploy/`
+- `make run STATIC_DIR=../frontend/dist` – zusätzlich den Frontend-Build ausliefern
+- `make docker` – Image mit Backend + Frontend bauen (Kontext: Repository-Root); Manifeste unter `backend/deploy/`
+
+## Build, Test, Start (Frontend)
+
+Im Ordner `frontend/` (Vite, React 19, MUI, React Router, Lucide):
+
+- `npm ci` – Abhängigkeiten installieren
+- `npm run dev` – Dev-Server; `/api` wird an das lokale Backend auf `localhost:8080` weitergeleitet
+- `npm test` – Vitest + Testing Library
+- `npm run lint` – ESLint
+- `npm run build` – Typprüfung + Production-Build nach `dist/`
+
+Frontend-Struktur: `src/api` (Typen gemäß `openapi.yaml`, Client mit ETag), `src/hooks/usePolling.ts`
+(Polling, Intervall in `src/config.ts`), `src/components` (generische Aktions-Buttons/-Dialoge),
+`src/pages` (Übersicht, Namespace-Seite).
 
 ## Fachliche Begriffe
 
@@ -285,6 +301,9 @@ die diese Seite braucht). Bei `304` bleibt der bestehende Zustand unverändert, 
 
 - Backend: `k8s.io/client-go` v0.33.x mit Informern, HTTP mit stdlib `net/http`, YAML mit `gopkg.in/yaml.v3`.
 - Build/Test: Makefile + `go test`, Dockerfile (distroless).
+- Frontend: Vite, React Router; Auslieferung durch das Backend (`--static-dir`, SPA-Fallback auf `index.html`);
+  Polling alle 10 Sekunden.
+- Aktionen werden im Frontend immer über einen Dialog bestätigt; Formular-Felder erscheinen darin, falls vorhanden.
 - Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit ETags)
   ändern sich nur, wenn sich das gespeicherte JSON tatsächlich ändert.
 - Periodischer Neuaufbau: frische Informer, kompletter neuer Store-Inhalt, atomarer Austausch;
@@ -292,6 +311,4 @@ die diese Seite braucht). Bei `304` bleibt der bestehende Zustand unverändert, 
 
 ## Noch nicht festgelegt
 
-Diese Punkte sind offen. Vor der Umsetzung nachfragen, statt eine Annahme zu treffen:
-
-- Build-Tool, Routing und Build-/Test-/Start-Befehle im Frontend.
+Aktuell keine offenen Punkte. Neue offene Punkte hier eintragen und vor der Umsetzung nachfragen.

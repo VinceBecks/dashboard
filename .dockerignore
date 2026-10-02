@@ -1,0 +1,7 @@
+.git
+.idea
+helpers
+plans
+**/node_modules
+frontend/dist
+backend/bin
