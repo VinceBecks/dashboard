@@ -10,6 +10,12 @@ data:
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: foo-projekt
+        service-areas:
+          - area-name: infrastructure-services
+            area-label: Infrastruktur
+            label-combinations:
+              - app.kubernetes.io/part-of: rabbitmq
+              - app.kubernetes.io/part-of: database
       - project-name: bar-projekt
         namespace-labels:
           mycomp.de/is-feature-environment: true

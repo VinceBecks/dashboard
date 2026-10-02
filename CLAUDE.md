@@ -71,6 +71,7 @@ Frontend-Struktur: `src/api` (Typen gemäß `openapi.yaml`, Client mit ETag), `s
 | Feature-Umgebung   | Genau ein Namespace. Gehört zu genau einem Projekt.                                                  |
 | Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                          |
 | Replica            | Ein Pod, der von einem Anwendungs-Service referenziert wird.                                         |
+| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services, zugeordnet über Service-Labels.             |
 | Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts im In-Memory-Store.                       |
 | Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch genau einen ActionHandler. |
 
@@ -176,6 +177,23 @@ projects:
 - `project-name` ist der eindeutige Name des Projektes
 - `namespace-labels` definiert Labels, die alle am Namespace definiert sein müssen, damit der Namespace zu dem Projekt
   gehört
+- `service-areas` (optional) teilt die Anwendungs-Services (ClusterIP) im Dashboard in Bereiche auf:
+
+```yaml
+    others-area-label: Andere          # optional; Standard "Andere", ohne service-areas "Anwendungs-Services"
+    service-areas:
+      - area-name: business-services   # eindeutig je Projekt, "others" ist reserviert
+        area-label: Business
+        label-combinations:            # ODER über die Einträge, UND innerhalb eines Eintrags; keine leeren Einträge
+          - app.kubernetes.io/part-of: shop
+            app.kubernetes.io/component: backend
+          - app.kubernetes.io/part-of: billing
+```
+
+  Ein Service kann in mehreren Bereichen liegen. Nicht zugeordnete Services landen im Bereich `others`. Die
+  Zuordnung berechnet die API zur Antwortzeit (`serviceAreas` in der Namespace-Response, Services per Name
+  referenziert); der Store bleibt unverändert. Gleiche Bereiche in mehreren Projekten per YAML-Anker
+  (`&name` / `*name`) wiederverwenden.
 
 Beispiel für ActionHandler:
 
@@ -305,7 +323,8 @@ zur Namespace-Seite.
 1. Aktionen, die zum Namespace-Objekt gehören.
 2. Übersicht der Ingress-Objekte mit ihren Pfaden und den Aktionen auf Ingress-Objekten.
 3. Auflistung der existierenden Node-Port-Services
-4. Übersicht der Anwendungs-Services (ClusterIP), je Service eine Kachel:
+4. Übersicht der Anwendungs-Services (ClusterIP), je Service-Bereich ein Abschnitt (Reihenfolge aus dem Backend,
+   „others“ zuletzt), darin je Service eine Kachel:
     - zuerst die Aktionen des Service-Objekts,
     - danach die Replicas (Pods), die der Service referenziert.
 

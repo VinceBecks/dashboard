@@ -4,11 +4,29 @@ projects:
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: foo-projekt
       mycomp.de/organization-unit: development
+    # Aufteilung der Anwendungs-Services im Dashboard. Ein Service gehört zu einem Bereich, wenn er alle Labels
+    # mindestens einer label-combination trägt. Nicht zugeordnete Services landen im Bereich "others".
+    others-area-label: Andere  # optional, Standard "Andere"
+    service-areas:
+      - &business-area
+        area-name: business-services
+        area-label: Business
+        label-combinations:
+          - app.kubernetes.io/part-of: shop
+            app.kubernetes.io/component: backend
+          - app.kubernetes.io/part-of: billing
+      - area-name: infrastructure-services
+        area-label: Infrastruktur
+        label-combinations:
+          - app.kubernetes.io/part-of: rabbitmq
+          - app.kubernetes.io/part-of: database
   - project-name: bar-projekt
     namespace-labels:
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: bar
       mycomp.de/organization-unit: operations
+    service-areas:
+      - *business-area  # YAML-Anker: gleicher Bereich wie bei foo-projekt
 
 actionHandlers:
   - action-name: delete-pod

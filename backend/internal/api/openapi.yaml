@@ -264,9 +264,17 @@ components:
                 items: { $ref: '#/components/schemas/Namespace' }
     NamespaceResponse:
       type: object
-      required: [namespace, services, ingresses, pods]
+      required: [namespace, services, ingresses, pods, serviceAreas]
       properties:
         namespace: { $ref: '#/components/schemas/Namespace' }
+        serviceAreas:
+          type: array
+          description: |
+            Aufteilung der Anwendungs-Services (Typ ClusterIP) in Bereiche gemäß service-areas der config.yaml.
+            Konfigurierte Bereiche kommen in Config-Reihenfolge (auch leer), zuletzt der Bereich `others` mit allen
+            nicht zugeordneten Services. `others` fehlt, wenn er leer ist und Bereiche konfiguriert sind.
+            Ein Service kann in mehreren Bereichen vorkommen.
+          items: { $ref: '#/components/schemas/ServiceArea' }
         services:
           type: array
           items: { $ref: '#/components/schemas/Service' }
@@ -276,6 +284,16 @@ components:
         pods:
           type: array
           items: { $ref: '#/components/schemas/Pod' }
+    ServiceArea:
+      type: object
+      required: [id, label, services]
+      properties:
+        id: { type: string, description: 'area-name aus der config.yaml bzw. "others"' }
+        label: { type: string }
+        services:
+          type: array
+          description: Namen der Services aus `services`, sortiert nach Name
+          items: { type: string }
     ActionRequest:
       type: object
       required: [object]

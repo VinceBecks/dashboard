@@ -30,7 +30,7 @@ import { ActionButtons } from '../components/ActionButtons';
 import { Loading, PollError } from '../components/StatusViews';
 import { usePolling } from '../hooks/usePolling';
 
-/** Namespace-Seite: Aktionen, Ingresses, NodePort-Services und Anwendungs-Services mit ihren Replicas. */
+/** Namespace-Seite: Aktionen, Ingresses, NodePort-Services und Anwendungs-Services (je Service-Bereich) mit ihren Replicas. */
 export function NamespacePage() {
   const { project = '', namespace = '' } = useParams();
   const url = `/api/projects/${encodeURIComponent(project)}/namespaces/${encodeURIComponent(namespace)}`;
@@ -82,17 +82,22 @@ export function NamespacePage() {
 
           <NodePortSection services={data.services.filter((s) => s.type === 'NodePort')} objectRef={ref} onExecuted={refresh} />
 
-          <Section title="Anwendungs-Services" empty={!data.services.some((s) => s.type === 'ClusterIP')}>
-            <Grid container spacing={2}>
-              {data.services
-                .filter((s) => s.type === 'ClusterIP')
-                .map((svc) => (
-                  <Grid key={svc.name} size={{ xs: 12, md: 6, xl: 4 }}>
-                    <ServiceCard service={svc} pods={data.pods} object={ref('service', svc.name)} onExecuted={refresh} />
-                  </Grid>
-                ))}
-            </Grid>
-          </Section>
+          {data.serviceAreas.map((area) => {
+            const services = area.services
+              .map((name) => data.services.find((s) => s.name === name))
+              .filter((s): s is Service => s !== undefined);
+            return (
+              <Section key={area.id} title={area.label} empty={services.length === 0}>
+                <Grid container spacing={2}>
+                  {services.map((svc) => (
+                    <Grid key={svc.name} size={{ xs: 12, md: 6, xl: 4 }}>
+                      <ServiceCard service={svc} pods={data.pods} object={ref('service', svc.name)} onExecuted={refresh} />
+                    </Grid>
+                  ))}
+                </Grid>
+              </Section>
+            );
+          })}
         </Stack>
       )}
     </>

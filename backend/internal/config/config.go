@@ -23,6 +23,34 @@ type Config struct {
 type Project struct {
 	Name            string            `yaml:"project-name"`
 	NamespaceLabels map[string]string `yaml:"namespace-labels"`
+	// ServiceAreas teilen die Anwendungs-Services im Dashboard in Bereiche auf.
+	ServiceAreas []ServiceArea `yaml:"service-areas"`
+	// OthersAreaLabel ist das Label des Bereichs für nicht zugeordnete Services (siehe OthersLabel).
+	OthersAreaLabel string `yaml:"others-area-label"`
+}
+
+// OthersAreaName ist die reservierte ID des Bereichs für Services, die keinem Bereich zugeordnet sind.
+const OthersAreaName = "others"
+
+// OthersLabel liefert das Label des others-Bereichs. Ohne konfigurierte Bereiche heißt er „Anwendungs-Services“,
+// da er dann alle Anwendungs-Services enthält.
+func (p Project) OthersLabel() string {
+	switch {
+	case p.OthersAreaLabel != "":
+		return p.OthersAreaLabel
+	case len(p.ServiceAreas) == 0:
+		return "Anwendungs-Services"
+	default:
+		return "Andere"
+	}
+}
+
+// ServiceArea ist ein Bereich von Anwendungs-Services. Ein Service gehört dazu, wenn er alle Labels mindestens
+// einer LabelCombination trägt (ODER über die Kombinationen, UND innerhalb einer Kombination).
+type ServiceArea struct {
+	Name              string              `yaml:"area-name"`
+	Label             string              `yaml:"area-label"`
+	LabelCombinations []map[string]string `yaml:"label-combinations"`
 }
 
 // ActionHandlerConfig konfiguriert genau eine Aktion und damit genau eine ActionHandler-Instanz.
@@ -124,6 +152,7 @@ func (c *Config) Validate() error {
 		if len(p.NamespaceLabels) == 0 {
 			errs = append(errs, fmt.Errorf("projects[%d]: namespace-labels dürfen nicht leer sein", i))
 		}
+		errs = append(errs, validateServiceAreas(fmt.Sprintf("projects[%d]", i), p.ServiceAreas)...)
 	}
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
@@ -135,4 +164,33 @@ func (c *Config) Validate() error {
 		actions[a.Name] = true
 	}
 	return errors.Join(errs...)
+}
+
+func validateServiceAreas(prefix string, areas []ServiceArea) []error {
+	var errs []error
+	names := map[string]bool{}
+	for i, a := range areas {
+		at := fmt.Sprintf("%s.service-areas[%d]", prefix, i)
+		switch {
+		case a.Name == "":
+			errs = append(errs, fmt.Errorf("%s: area-name fehlt", at))
+		case a.Name == OthersAreaName:
+			errs = append(errs, fmt.Errorf("%s: area-name %q ist reserviert", at, OthersAreaName))
+		case names[a.Name]:
+			errs = append(errs, fmt.Errorf("%s: area-name %q ist nicht eindeutig", at, a.Name))
+		}
+		names[a.Name] = true
+		if a.Label == "" {
+			errs = append(errs, fmt.Errorf("%s: area-label fehlt", at))
+		}
+		if len(a.LabelCombinations) == 0 {
+			errs = append(errs, fmt.Errorf("%s: label-combinations dürfen nicht leer sein", at))
+		}
+		for j, c := range a.LabelCombinations {
+			if len(c) == 0 {
+				errs = append(errs, fmt.Errorf("%s.label-combinations[%d]: leere Kombination würde alle Services treffen", at, j))
+			}
+		}
+	}
+	return errs
 }

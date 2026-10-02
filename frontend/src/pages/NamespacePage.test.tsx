@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +40,11 @@ const data: NamespaceResponse = {
       actions: [],
     },
   ],
+  serviceAreas: [
+    { id: 'business', label: 'Business', services: ['web'] },
+    { id: 'infra', label: 'Infrastruktur', services: [] },
+    { id: 'others', label: 'Andere', services: ['web'] },
+  ],
   pods: [
     {
       name: 'web-1',
@@ -71,7 +76,7 @@ describe('NamespacePage', () => {
     expect(screen.getByRole('button', { name: 'Namespace löschen' })).toBeInTheDocument();
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(['Ingresses', 'NodePort-Services', 'Anwendungs-Services']);
+    expect(headings).toEqual(['Ingresses', 'NodePort-Services', 'Business', 'Infrastruktur', 'Andere']);
 
     expect(screen.getByText('web.example')).toBeInTheDocument();
     expect(screen.getByText('web:80')).toBeInTheDocument();
@@ -80,13 +85,19 @@ describe('NamespacePage', () => {
     expect(within(nodePorts).getByText('debug')).toBeInTheDocument();
     expect(within(nodePorts).getByText('80 → 30080')).toBeInTheDocument();
 
-    const apps = screen.getByRole('heading', { name: 'Anwendungs-Services' }).parentElement!;
+    const apps = screen.getByRole('heading', { name: 'Business' }).parentElement!;
     expect(within(apps).queryByText('debug')).not.toBeInTheDocument();
     // Port-Mappings der Anwendungs-Services werden nicht angezeigt.
     expect(within(apps).queryByText(/8080/)).not.toBeInTheDocument();
     expect(within(apps).getByRole('button', { name: 'Service neu starten' })).toBeInTheDocument();
     expect(within(apps).getByText('web-1')).toBeInTheDocument();
     expect(within(apps).getByText('Ready')).toBeInTheDocument();
+
+    // Leere Bereiche bleiben sichtbar; ein Service kann in mehreren Bereichen stehen.
+    const infra = screen.getByRole('heading', { name: 'Infrastruktur' }).parentElement!;
+    expect(within(infra).getByText('Keine vorhanden')).toBeInTheDocument();
+    const others = screen.getByRole('heading', { name: 'Andere' }).parentElement!;
+    expect(within(others).getByText('web-1')).toBeInTheDocument();
 
     // Pod-Aktionen werden vorerst nicht angezeigt.
     expect(screen.queryByRole('button', { name: 'Pod löschen' })).not.toBeInTheDocument();
@@ -97,7 +108,8 @@ describe('NamespacePage', () => {
     renderPage();
     const button = await screen.findByRole('button', { name: 'Namespace löschen' });
     expect(button).not.toHaveTextContent('Namespace löschen');
-    expect(button.querySelector('svg')).not.toBeNull();
+    // Lucide-Icons werden dynamisch nachgeladen.
+    await waitFor(() => expect(button.querySelector('svg')).not.toBeNull());
 
     await userEvent.setup().hover(button);
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Namespace löschen');

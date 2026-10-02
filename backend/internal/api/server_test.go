@@ -48,7 +48,12 @@ func setup(t *testing.T) (*store.Store, http.Handler, *podAction) {
 	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Enabled: true, Title: "Neustart", LucideIcon: "rotate-ccw"}}, actions.Deps{}); err != nil {
 		t.Fatal(err)
 	}
-	projects := []config.Project{{Name: "foo"}, {Name: "bar"}}
+	projects := []config.Project{
+		{Name: "foo", ServiceAreas: []config.ServiceArea{
+			{Name: "business", Label: "Business", LabelCombinations: []map[string]string{{"part-of": "shop"}}},
+		}},
+		{Name: "bar"},
+	}
 	return st, NewServer(st, reg, projects, func() bool { return true }).Handler(), action
 }
 
@@ -157,5 +162,33 @@ func TestDocsAndHealth(t *testing.T) {
 		if rec := do(h, "GET", path, "", ""); rec.Code != 200 {
 			t.Errorf("%s: status = %d", path, rec.Code)
 		}
+	}
+}
+
+func TestNamespaceServiceAreas(t *testing.T) {
+	st, h, _ := setup(t)
+	_ = st.Update(func(tx *store.Tx) error {
+		for _, svc := range []model.StoredService{
+			{Meta: model.Meta{Name: "shop", Labels: map[string]string{"part-of": "shop"}}, Type: "ClusterIP"},
+			{Meta: model.Meta{Name: "debug"}, Type: "ClusterIP"},
+			{Meta: model.Meta{Name: "shop-node-port", Labels: map[string]string{"part-of": "shop"}}, Type: "NodePort"},
+		} {
+			if _, err := tx.Put(model.KindService, "feat-1", svc.Name, svc); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	rec := do(h, "GET", "/api/projects/foo/namespaces/feat-1", "", "")
+	var resp NamespaceResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	want := `"serviceAreas":[{"id":"business","label":"Business","services":["shop"]},{"id":"others","label":"Andere","services":["debug"]}]`
+	if !strings.Contains(rec.Body.String(), want) {
+		t.Fatalf("serviceAreas fehlen oder falsch: %s", rec.Body)
+	}
+	if len(resp.Services) != 3 {
+		t.Fatalf("services müssen unverändert vollständig sein: %d", len(resp.Services))
 	}
 }

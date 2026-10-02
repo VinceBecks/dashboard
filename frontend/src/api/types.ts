@@ -109,11 +109,19 @@ export interface ProjectsResponse {
   projects: Project[];
 }
 
+/** Bereich von Anwendungs-Services; services enthält die Namen aus NamespaceResponse.services. */
+export interface ServiceArea {
+  id: string;
+  label: string;
+  services: string[];
+}
+
 export interface NamespaceResponse {
   namespace: Namespace;
   services: Service[];
   ingresses: Ingress[];
   pods: Pod[];
+  serviceAreas: ServiceArea[];
 }
 
 export interface ActionResult {

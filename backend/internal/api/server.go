@@ -14,6 +14,7 @@ import (
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/model"
+	"feature-dashboard/internal/project"
 	"feature-dashboard/internal/store"
 )
 
@@ -111,6 +112,8 @@ type NamespaceResponse struct {
 	Services  []ServiceDTO `json:"services"`
 	Ingresses []IngressDTO `json:"ingresses"`
 	Pods      []PodDTO     `json:"pods"`
+	// ServiceAreas teilen die Anwendungs-Services in Bereiche auf und referenzieren sie über ihren Namen.
+	ServiceAreas []project.Area `json:"serviceAreas"`
 }
 
 func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
@@ -154,11 +157,13 @@ func (s *Server) handleNamespace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns := view.Namespace
+	projectCfg, _ := s.project(ns.Project)
 	resp := NamespaceResponse{
-		Namespace: NamespaceDTO{ns, s.registry.ActionsFor(storedObject(model.KindNamespace, ns.Name, ns.Name, ns))},
-		Services:  make([]ServiceDTO, 0, len(view.Services)),
-		Ingresses: make([]IngressDTO, 0, len(view.Ingresses)),
-		Pods:      make([]PodDTO, 0, len(view.Pods)),
+		ServiceAreas: project.AssignServiceAreas(projectCfg, view.Services),
+		Namespace:    NamespaceDTO{ns, s.registry.ActionsFor(storedObject(model.KindNamespace, ns.Name, ns.Name, ns))},
+		Services:     make([]ServiceDTO, 0, len(view.Services)),
+		Ingresses:    make([]IngressDTO, 0, len(view.Ingresses)),
+		Pods:         make([]PodDTO, 0, len(view.Pods)),
 	}
 	for _, o := range view.Services {
 		resp.Services = append(resp.Services, ServiceDTO{o, s.registry.ActionsFor(storedObject(model.KindService, ns.Name, o.Name, o))})
@@ -170,6 +175,16 @@ func (s *Server) handleNamespace(w http.ResponseWriter, r *http.Request) {
 		resp.Pods = append(resp.Pods, PodDTO{o, s.registry.ActionsFor(storedObject(model.KindPod, ns.Name, o.Name, o))})
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// project liefert die Konfiguration eines Projekts.
+func (s *Server) project(name string) (config.Project, bool) {
+	for _, p := range s.projects {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return config.Project{Name: name}, false
 }
 
 // ActionRequest ist der Body von PATCH /api/actions/{action}.

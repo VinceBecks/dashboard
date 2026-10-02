@@ -87,3 +87,59 @@ actionHandlers:
 		t.Errorf("HandlerType ohne handler-Feld = %q", got)
 	}
 }
+
+func TestServiceAreas(t *testing.T) {
+	cfg, err := Parse([]byte(`
+projects:
+  - project-name: foo
+    namespace-labels: {a: b}
+    service-areas:
+      - area-name: business
+        area-label: Business
+        label-combinations:
+          - app.kubernetes.io/part-of: shop
+            tier: backend
+          - app.kubernetes.io/part-of: billing
+  - project-name: bar
+    namespace-labels: {a: c}
+    others-area-label: Sonstige
+    service-areas:
+      - area-name: infra
+        area-label: Infrastruktur
+        label-combinations: [{managed: true}]
+  - project-name: baz
+    namespace-labels: {a: d}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	area := cfg.Projects[0].ServiceAreas[0]
+	if area.Name != "business" || len(area.LabelCombinations) != 2 || area.LabelCombinations[0]["tier"] != "backend" {
+		t.Fatalf("area = %+v", area)
+	}
+	if got := cfg.Projects[1].ServiceAreas[0].LabelCombinations[0]["managed"]; got != "true" {
+		t.Errorf("bool-Label = %q", got)
+	}
+	for i, want := range []string{"Andere", "Sonstige", "Anwendungs-Services"} {
+		if got := cfg.Projects[i].OthersLabel(); got != want {
+			t.Errorf("OthersLabel[%d] = %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestServiceAreasValidation(t *testing.T) {
+	cases := map[string]string{
+		"reservierter Name": `[{area-name: others, area-label: X, label-combinations: [{a: b}]}]`,
+		"doppelter Name":    `[{area-name: x, area-label: X, label-combinations: [{a: b}]}, {area-name: x, area-label: Y, label-combinations: [{a: b}]}]`,
+		"Name fehlt":        `[{area-label: X, label-combinations: [{a: b}]}]`,
+		"Label fehlt":       `[{area-name: x, label-combinations: [{a: b}]}]`,
+		"keine Kombination": `[{area-name: x, area-label: X}]`,
+		"leere Kombination": `[{area-name: x, area-label: X, label-combinations: [{}]}]`,
+	}
+	for name, areas := range cases {
+		_, err := Parse([]byte("projects:\n  - project-name: foo\n    namespace-labels: {a: b}\n    service-areas: " + areas + "\n"))
+		if err == nil {
+			t.Errorf("%s: Fehler erwartet", name)
+		}
+	}
+}
