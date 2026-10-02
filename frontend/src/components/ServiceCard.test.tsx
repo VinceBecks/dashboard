@@ -44,9 +44,11 @@ describe('ServiceCard', () => {
     const back = within(screen.getByRole('heading', { name: 'web-1' }).closest<HTMLElement>('.MuiCard-root')!);
     expect(back.getByText('Pod')).toBeInTheDocument();
     expect(back.getByText('Ready')).toBeInTheDocument();
-    expect(back.getByText('nginx')).toBeInTheDocument();
-    expect(back.getByText('nginx:1.27')).toBeInTheDocument();
-    expect(back.getByText('http: 80')).toBeInTheDocument();
+    // Nur der Status, keine zusätzliche Phase.
+    expect(back.queryByText('Running')).not.toBeInTheDocument();
+    // Je Container Schlüssel-Wert-Paare.
+    const keyValues = Array.from(back.getByText('Name').closest('dl')!.children).map((el) => el.textContent);
+    expect(keyValues).toEqual(['Name', 'nginx', 'Image', 'nginx:1.27', 'Ports', 'http: 80']);
     expect(within(screen.getByRole('group', { name: 'Aktionen' })).getByRole('button', { name: 'Pod löschen' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Pod-Logs' })).toHaveAttribute('href', 'https://kibana.example/pod');
     // Die Vorderseite ist verdeckt und für Screenreader ausgeblendet.

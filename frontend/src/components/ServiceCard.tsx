@@ -157,38 +157,31 @@ function PodDetails({ name, pod, object, onBack, onExecuted }: PodDetailsProps) 
         ) : (
           <Stack spacing={1.5}>
             <InfoRow label="Status">
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Box>
                 <PodStatus pod={pod} />
-                {pod.phase && pod.ready && (
-                  <Typography variant="body2" color="text.secondary">
-                    {pod.phase}
-                  </Typography>
-                )}
-              </Stack>
+              </Box>
             </InfoRow>
             <InfoRow label="Container">
-              <Stack spacing={1}>
+              <Stack spacing={1} divider={<Divider flexItem />}>
                 {pod.containers.map((c) => (
-                  <Box key={c.name}>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {c.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
-                      {c.image}
-                    </Typography>
+                  <KeyValueList key={c.name}>
+                    <KeyValue label="Name">{c.name}</KeyValue>
+                    <KeyValue label="Image">{c.image}</KeyValue>
                     {c.ports && c.ports.length > 0 && (
-                      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap', mt: 0.5 }}>
-                        {c.ports.map((p) => (
-                          <Chip
-                            key={`${p.name}-${p.containerPort}`}
-                            size="small"
-                            variant="outlined"
-                            label={`${p.name ? `${p.name}: ` : ''}${p.containerPort}${p.protocol && p.protocol !== 'TCP' ? `/${p.protocol}` : ''}`}
-                          />
-                        ))}
-                      </Stack>
+                      <KeyValue label="Ports">
+                        <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                          {c.ports.map((p) => (
+                            <Chip
+                              key={`${p.name}-${p.containerPort}`}
+                              size="small"
+                              variant="outlined"
+                              label={`${p.name ? `${p.name}: ` : ''}${p.containerPort}${p.protocol && p.protocol !== 'TCP' ? `/${p.protocol}` : ''}`}
+                            />
+                          ))}
+                        </Stack>
+                      </KeyValue>
                     )}
-                  </Box>
+                  </KeyValueList>
                 ))}
               </Stack>
             </InfoRow>
@@ -197,6 +190,28 @@ function PodDetails({ name, pod, object, onBack, onExecuted }: PodDetailsProps) 
           </Stack>
         )}
       </CardContent>
+    </>
+  );
+}
+
+/** Schlüssel-Wert-Paare als Beschreibungsliste: Schlüssel links, Wert rechts. */
+function KeyValueList({ children }: { children: ReactNode }) {
+  return (
+    <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 1.5, rowGap: 0.5, m: 0 }}>
+      {children}
+    </Box>
+  );
+}
+
+function KeyValue({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <Typography component="dt" variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography component="dd" variant="body2" sx={{ m: 0, wordBreak: 'break-all' }}>
+        {children}
+      </Typography>
     </>
   );
 }
