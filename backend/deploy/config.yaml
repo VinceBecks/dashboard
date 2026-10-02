@@ -46,6 +46,8 @@ data:
             area-label: Infrastruktur
             label-combinations:
               - app.kubernetes.io/part-of: database
+        link-variables-overrides:
+          something: isNotHere
     actionHandlers:
       - action-name: delete-pod
         enabled: true
@@ -71,3 +73,19 @@ data:
         lucide-icon-color: orange
     store:
       recreate-store-interval: 5m
+    link-variables:
+      demoUrl: http://localhost:8080
+      something: isHere
+    links:
+      - link-id: test-kibana-logs
+        title: Logs in Kibana
+        lucide-icon: scroll-text
+        lucide-icon-color: "#00bfb3"
+        projects: [ foo-projekt, bar-projekt ]
+        targets:
+          namespace:
+            url: |-
+              {{ .Vars.demoUrl }}/namespaces/{{ .Namespace }}/{{ .Vars.something }}?foo={{ printf "hello" | urlquery }}
+          service: # Logs aller Pods, die der Service selektiert
+            url: |-
+              {{ .Vars.demoUrl }}/namespaces/{{ .Namespace }}/services/{{ .Service }}/{{ .Vars.something }}?foo={{ printf "hello" }}
