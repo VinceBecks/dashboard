@@ -161,3 +161,43 @@ links:
 		t.Fatal("kaputtes Template muss beim Start auffallen")
 	}
 }
+
+func TestEncodeQueryParams(t *testing.T) {
+	r := registry(t, `
+projects: [{project-name: foo, namespace-labels: {a: b}}]
+links:
+  - link-id: encoded
+    title: X
+    targets: {pod: {}}
+    url: "https://grafana.example/d/pod?orgId=1"
+    query-params:
+      var-pod: "{{ .Name }}"
+      filter: "a:b,c/d"
+  - link-id: raw
+    title: X
+    targets: {pod: {}}
+    encode-query-params: false
+    url: "https://tool.example/view?orgId=1"
+    query-params:
+      var-pod: "{{ .Name }}"
+      filter: "a:b,c/d"
+      pre: "%2Fbereits%2Fkodiert"
+  - link-id: raw-invalid
+    title: X
+    targets: {pod: {}}
+    encode-query-params: false
+    url: "https://tool.example/view"
+    query-params:
+      q: "mit Leerzeichen"
+`)
+	links := r.For(ref(model.KindPod, "web-1"), model.StoredPod{}, "foo")
+	if len(links) != 2 {
+		t.Fatalf("raw-invalid muss weggelassen werden: %+v", links)
+	}
+	if want := "https://grafana.example/d/pod?filter=a%3Ab%2Cc%2Fd&orgId=1&var-pod=web-1"; links[0].URL != want {
+		t.Errorf("kodiert:\n got  %s\n want %s", links[0].URL, want)
+	}
+	if want := "https://tool.example/view?orgId=1&filter=a:b,c/d&pre=%2Fbereits%2Fkodiert&var-pod=web-1"; links[1].URL != want {
+		t.Errorf("unkodiert:\n got  %s\n want %s", links[1].URL, want)
+	}
+}

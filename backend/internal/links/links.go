@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strings"
 	"text/template"
 
 	"feature-dashboard/internal/config"
@@ -145,15 +146,46 @@ func (r *Registry) render(c compiled, targetTemplates map[string]*template.Templ
 		return "", fmt.Errorf("nur absolute http(s)-URLs sind erlaubt, erhalten: %q", raw)
 	}
 	if len(c.queryKeys) > 0 {
-		q := u.Query()
-		for _, k := range c.queryKeys {
-			v, err := objecttemplate.Render(c.queryParams[k], data)
-			if err != nil {
-				return "", err
-			}
-			q.Set(k, v)
+		if err := c.appendQueryParams(u, data); err != nil {
+			return "", err
 		}
-		u.RawQuery = q.Encode()
 	}
 	return u.String(), nil
+}
+
+// appendQueryParams rendert die query-params und hängt sie an u an. Mit encode-query-params: false werden Namen
+// und Werte unverändert angehängt, z. B. für Ziele, die bereits kodierte oder eigene Notationen erwarten.
+func (c compiled) appendQueryParams(u *url.URL, data objecttemplate.Data) error {
+	values := make([]string, len(c.queryKeys))
+	for i, k := range c.queryKeys {
+		v, err := objecttemplate.Render(c.queryParams[k], data)
+		if err != nil {
+			return err
+		}
+		values[i] = v
+	}
+
+	if c.cfg.EncodesQueryParams() {
+		q := u.Query()
+		for i, k := range c.queryKeys {
+			q.Set(k, values[i])
+		}
+		u.RawQuery = q.Encode()
+		return nil
+	}
+
+	pairs := make([]string, 0, len(c.queryKeys)+1)
+	if u.RawQuery != "" {
+		pairs = append(pairs, u.RawQuery)
+	}
+	for i, k := range c.queryKeys {
+		pair := k + "=" + values[i]
+		// Diese Zeichen würden die URL zerstören (Fragment-Beginn bzw. ungültige URL).
+		if strings.ContainsAny(pair, "# \t\r\n") {
+			return fmt.Errorf("query-param %q enthält ohne URL-Kodierung unzulässige Zeichen (#, Leerzeichen, Zeilenumbruch)", k)
+		}
+		pairs = append(pairs, pair)
+	}
+	u.RawQuery = strings.Join(pairs, "&")
+	return nil
 }

@@ -264,13 +264,16 @@ links:
     url: |-                           # Zeilenumbrüche samt Einrückung werden entfernt
       {{ .Vars.kibanaUrl }}/app/discover#/?_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
       query:(language:kuery,query:{{ rison .Target.query }}))
-    query-params:                     # optional, werden URL-kodiert angehängt
+    query-params:                     # optional, werden an die URL angehängt
       foo: "{{ .Project }}"
+    encode-query-params: true         # optional, Standard true; false hängt Namen und Werte unverändert an
 ```
 
 - Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars .Target`.
 - Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, …): `rison`, `pathescape`,
   `replace`, `join`.
+- Mit `encode-query-params: false` werden die `query-params` nicht URL-kodiert (z. B. für bereits kodierte Werte
+  oder eigene Notationen). Enthält ein Wert dann `#`, Leerzeichen oder Zeilenumbrüche, wird der Link weggelassen.
 - Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
   (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
 

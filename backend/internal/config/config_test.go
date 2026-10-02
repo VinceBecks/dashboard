@@ -194,3 +194,13 @@ func TestLinksValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestEncodesQueryParams(t *testing.T) {
+	no := false
+	if !(Link{}).EncodesQueryParams() {
+		t.Error("Standard muss true sein")
+	}
+	if (Link{EncodeQueryParams: &no}).EncodesQueryParams() {
+		t.Error("encode-query-params: false wird ignoriert")
+	}
+}

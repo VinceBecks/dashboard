@@ -37,8 +37,15 @@ type Link struct {
 	Targets map[model.Kind]map[string]string `yaml:"targets"`
 	// URL ist ein Go-Template; Zeilenumbrüche samt Einrückung werden vor dem Parsen entfernt.
 	URL string `yaml:"url"`
-	// QueryParams werden gerendert und URL-kodiert an die URL angehängt.
+	// QueryParams werden gerendert und an die URL angehängt; URL-kodiert, außer EncodeQueryParams ist false.
 	QueryParams map[string]string `yaml:"query-params"`
+	// EncodeQueryParams legt fest, ob QueryParams URL-kodiert werden (Standard: true).
+	EncodeQueryParams *bool `yaml:"encode-query-params"`
+}
+
+// EncodesQueryParams meldet, ob die query-params URL-kodiert angehängt werden.
+func (l Link) EncodesQueryParams() bool {
+	return l.EncodeQueryParams == nil || *l.EncodeQueryParams
 }
 
 // Project definiert ein Projekt und die Labels, die ein Namespace tragen muss, um dazuzugehören.
