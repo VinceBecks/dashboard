@@ -236,7 +236,6 @@ func TestActionProjectsValidation(t *testing.T) {
 	invalid := map[string]string{
 		"projects fehlt":      `[{action-name: x}]`,
 		"unbekanntes Projekt": `[{action-name: x, projects: [nope]}]`,
-		"enabled (veraltet)":  `[{action-name: x, enabled: true, projects: [foo]}]`,
 	}
 	for name, actions := range invalid {
 		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err == nil {

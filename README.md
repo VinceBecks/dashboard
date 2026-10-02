@@ -330,8 +330,6 @@ actionHandlers:
 | `projects`              | ja      | Projekte, in denen die Aktion angeboten und ausführbar ist. **`[]` deaktiviert die Aktion**: Ihr Handler wird dann nicht erzeugt. Es wird nur geprüft, ob der Handler-Typ existiert. |
 | `extra-handler-configs` | nein    | Handlerspezifische Einstellungen, siehe unten                                                                                                                                        |
 
-> Ein Feld `enabled` gibt es nicht mehr. Steht es noch in einer Config, bricht der Start mit einem Hinweis ab.
-
 Das Dashboard zeigt Aktionen als Icon-Buttons. Vor dem Ausführen öffnet sich immer ein Bestätigungsdialog. Hat die
 Aktion Formular-Felder, stehen sie in diesem Dialog. Das Ergebnis erscheint als Meldung.
 
@@ -580,7 +578,6 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
 - **Aktionen:**
     - `action-name` ist gesetzt und eindeutig.
     - `projects` ist vorhanden und nennt nur bekannte Projekte.
-    - Es gibt kein veraltetes `enabled`.
     - Der Handler-Typ ist registriert.
     - Die `extra-handler-configs` sind gültig, nur bei aktiven Aktionen. Bei `gitlab-pipeline` gehört dazu auch, dass
       die Token-Variable gesetzt ist.
@@ -772,7 +769,6 @@ Umsetzungspläne in `plans/`.
 | Meldung / Symptom                                                         | Ursache und Lösung                                                                                                                                                     |
 |---------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `actionHandlers[n]: projects fehlt …`                                     | `projects` ist Pflicht. Zum Deaktivieren `projects: []` setzen.                                                                                                        |
-| `actionHandlers[n]: enabled gibt es nicht mehr …`                         | `enabled` entfernen und über `projects` steuern.                                                                                                                       |
 | `aktion "…": umgebungsvariable … mit dem Trigger-Token ist nicht gesetzt` | Token-Variable setzen bzw. Secret `feature-dashboard-gitlab` anlegen, oder die Aktion mit `projects: []` deaktivieren.                                                 |
 | `projects gehört nicht mehr in extra-handler-configs …`                   | `projects` bei `gitlab-pipeline` direkt an die Aktion verschieben.                                                                                                     |
 | `WARN Link konnte nicht erzeugt werden … can't evaluate field X`          | Das Template nutzt ein Feld, das es nicht gibt, siehe [Template-Daten](#templates-in-der-konfiguration).                                                               |

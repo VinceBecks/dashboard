@@ -215,7 +215,7 @@ actionHandlers:
 - `action-name` ist die eindeutige Aktion-ID.
 - `projects` ist Pflicht: die Projekte, in denen die Aktion angeboten und ausführbar ist. `projects: []`
   deaktiviert die Aktion; ihr Handler wird dann nicht erzeugt (es wird nur geprüft, ob der Handler-Typ existiert).
-  Ein Feld `enabled` gibt es nicht mehr. Die Prüfung übernimmt die ActionRegistry vor dem Handler;
+  Die Prüfung übernimmt die ActionRegistry vor dem Handler;
   Handler müssen sich nicht um Projekte kümmern. Das Projekt des Objekts steht ihnen in `StoredObject.Project` zur
   Verfügung.
 - `handler` (optional) ist der Handler-Typ. Fehlt er, gilt `action-name` als Handler-Typ. Ein Handler-Typ kann

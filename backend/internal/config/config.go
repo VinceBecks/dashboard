@@ -104,8 +104,6 @@ type ActionHandlerConfig struct {
 	// Aktion: Ihr Handler wird dann nicht erzeugt.
 	Projects []string       `yaml:"projects"`
 	Extra    map[string]any `yaml:"extra-handler-configs"`
-	// Enabled gibt es nicht mehr; das Feld dient nur dazu, alte Configs mit einem klaren Fehler abzulehnen.
-	Enabled *bool `yaml:"enabled"`
 }
 
 // Active meldet, ob die Aktion in mindestens einem Projekt angeboten wird.
@@ -213,9 +211,6 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("actionHandlers[%d]: action-name %q ist nicht eindeutig", i, a.Name))
 		}
 		actions[a.Name] = true
-		if a.Enabled != nil {
-			errs = append(errs, fmt.Errorf("actionHandlers[%d]: enabled gibt es nicht mehr; deaktivieren mit projects: []", i))
-		}
 		errs = append(errs, validateProjects(fmt.Sprintf("actionHandlers[%d]", i), a.Projects, projects)...)
 	}
 	return errors.Join(errs...)
