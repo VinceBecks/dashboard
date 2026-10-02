@@ -1,5 +1,5 @@
 # Baut Frontend und Backend in ein Image; das Backend liefert das Frontend unter / aus.
-# Build-Kontext ist das Repository-Root (siehe make docker im Ordner backend/).
+# Build-Kontext ist das Repository-Root: make docker
 
 FROM node:22-alpine AS frontend
 WORKDIR /src

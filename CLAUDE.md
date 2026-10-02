@@ -37,28 +37,26 @@ Backend-Pakete (`backend/`):
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
 | `internal/api`                | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI                            |
 
-## Build, Test, Start (Backend)
+## Build, Test, Start
 
-Im Ordner `backend/`:
+Alle Befehle laufen über das `Makefile` im Repository-Root:
 
-- `make build` – Binary nach `bin/dashboard`
-- `make test` – `go test -race ./...`
-- `make vet` – `go vet ./...`
-- `make run` – lokal gegen den Cluster aus `KUBECONFIG` bzw. `~/.kube/config` mit `config.example.yaml`
-  (andere Config: `make run CONFIG=pfad.yaml`)
-- `make run STATIC_DIR=../frontend/dist` – zusätzlich den Frontend-Build ausliefern
-- `make docker` – Image mit Backend + Frontend bauen (Kontext: Repository-Root); Manifeste unter `backend/deploy/`
+| Befehl              | Wirkung                                                                                   |
+|---------------------|-------------------------------------------------------------------------------------------|
+| `make test`         | Backend- und Frontend-Tests (`go test -race`, Vitest)                                     |
+| `make lint`         | `go vet` und ESLint                                                                       |
+| `make build`        | Backend-Binary nach `backend/bin/dashboard`, Frontend-Build nach `frontend/dist/`         |
+| `make run`          | Frontend bauen, Backend lokal starten und das Frontend mit ausliefern (Port 8080)         |
+| `make docker`       | Image mit Backend + Frontend bauen (`IMAGE=...` überschreibbar); Manifeste in `backend/deploy/` |
+| `make backend-run`  | Nur das Backend lokal starten                                                             |
+| `make frontend-dev` | Vite-Dev-Server; `/api` wird an das lokale Backend auf `localhost:8080` weitergeleitet    |
 
-## Build, Test, Start (Frontend)
+Einzelschritte gibt es als `backend-build|test|vet|run` und `frontend-install|dev|build|test|lint`.
+Lokale Starts nutzen den Cluster aus `KUBECONFIG` (Standard `~/.kube/config`) und `backend/config.example.yaml`;
+andere Config mit `make run CONFIG=pfad.yaml` (relativ zum Repository-Root). Für Frontend-Entwickler bleiben die
+npm-Scripts in `frontend/package.json` direkt nutzbar; das Makefile ruft nur sie auf.
 
-Im Ordner `frontend/` (Vite, React 19, MUI, React Router, Lucide):
-
-- `npm ci` – Abhängigkeiten installieren
-- `npm run dev` – Dev-Server; `/api` wird an das lokale Backend auf `localhost:8080` weitergeleitet
-- `npm test` – Vitest + Testing Library
-- `npm run lint` – ESLint
-- `npm run build` – Typprüfung + Production-Build nach `dist/`
-
+Frontend-Stack: Vite, React 19, MUI, React Router, Lucide.
 Frontend-Struktur: `src/api` (Typen gemäß `openapi.yaml`, Client mit ETag), `src/hooks/usePolling.ts`
 (Polling, Intervall in `src/config.ts`), `src/components` (generische Aktions-Buttons/-Dialoge),
 `src/pages` (Übersicht, Namespace-Seite).
