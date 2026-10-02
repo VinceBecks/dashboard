@@ -151,7 +151,7 @@ link-variables:
 projects:
   - project-name: foo
     namespace-labels: {a: b}
-    link-variables:
+    link-variables-overrides:
       dataView: logs-foo
 links:
   - link-id: kibana
@@ -159,48 +159,47 @@ links:
     projects: [foo]
     targets:
       pod:
-        query: 'pod:"{{ .Name }}"'
-      namespace: {}
-    url: "{{ .Vars.kibanaUrl }}/app/discover"
-    query-params:
-      ns: "{{ .Namespace }}"
+        url: "{{ .Vars.kibanaUrl }}/pod/{{ urlquery .Name }}"
+      namespace:
+        url: "{{ .Vars.kibanaUrl }}/ns/{{ .Namespace }}"
+  - link-id: nowhere
+    title: Nirgends
+    projects: []
+    targets:
+      pod:
+        url: "https://x"
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
 	l := cfg.Links[0]
-	if l.Targets["pod"]["query"] != `pod:"{{ .Name }}"` || l.Targets["namespace"] == nil || l.QueryParams["ns"] == "" {
+	if l.Targets["pod"].URL != "{{ .Vars.kibanaUrl }}/pod/{{ urlquery .Name }}" || l.Targets["namespace"].URL == "" {
 		t.Fatalf("link = %+v", l)
 	}
-	if cfg.LinkVariables["kibanaUrl"] != "https://kibana" || cfg.Projects[0].LinkVariables["dataView"] != "logs-foo" {
-		t.Fatalf("link-variables = %v / %v", cfg.LinkVariables, cfg.Projects[0].LinkVariables)
+	if cfg.LinkVariables["kibanaUrl"] != "https://kibana" || cfg.Projects[0].LinkVariablesOverrides["dataView"] != "logs-foo" {
+		t.Fatalf("link-variables = %v / %v", cfg.LinkVariables, cfg.Projects[0].LinkVariablesOverrides)
+	}
+	if cfg.Links[1].Projects == nil || len(cfg.Links[1].Projects) != 0 {
+		t.Fatalf("projects: [] muss als leere Liste ankommen: %#v", cfg.Links[1].Projects)
 	}
 }
 
 func TestLinksValidation(t *testing.T) {
+	const pod = `targets: {pod: {url: "https://x"}}`
 	cases := map[string]string{
-		"id fehlt":          `[{title: T, url: u, targets: {pod: {}}}]`,
-		"doppelte id":       `[{link-id: x, title: T, url: u, targets: {pod: {}}}, {link-id: x, title: T, url: u, targets: {pod: {}}}]`,
-		"title fehlt":       `[{link-id: x, url: u, targets: {pod: {}}}]`,
-		"url fehlt":         `[{link-id: x, title: T, targets: {pod: {}}}]`,
-		"keine targets":     `[{link-id: x, title: T, url: u}]`,
-		"ungültiger Kind":   `[{link-id: x, title: T, url: u, targets: {deployment: {}}}]`,
-		"unbekanntes Proj.": `[{link-id: x, title: T, url: u, targets: {pod: {}}, projects: [nope]}]`,
+		"id fehlt":          `[{title: T, projects: [foo], ` + pod + `}]`,
+		"doppelte id":       `[{link-id: x, title: T, projects: [foo], ` + pod + `}, {link-id: x, title: T, projects: [foo], ` + pod + `}]`,
+		"title fehlt":       `[{link-id: x, projects: [foo], ` + pod + `}]`,
+		"projects fehlt":    `[{link-id: x, title: T, ` + pod + `}]`,
+		"unbekanntes Proj.": `[{link-id: x, title: T, projects: [nope], ` + pod + `}]`,
+		"keine targets":     `[{link-id: x, title: T, projects: [foo]}]`,
+		"ungültiger Kind":   `[{link-id: x, title: T, projects: [foo], targets: {deployment: {url: "https://x"}}}]`,
+		"target ohne url":   `[{link-id: x, title: T, projects: [foo], targets: {service: {}}}]`,
 	}
 	for name, links := range cases {
 		_, err := Parse([]byte("projects:\n  - project-name: foo\n    namespace-labels: {a: b}\nlinks: " + links + "\n"))
 		if err == nil {
 			t.Errorf("%s: Fehler erwartet", name)
 		}
-	}
-}
-
-func TestEncodesQueryParams(t *testing.T) {
-	no := false
-	if !(Link{}).EncodesQueryParams() {
-		t.Error("Standard muss true sein")
-	}
-	if (Link{EncodeQueryParams: &no}).EncodesQueryParams() {
-		t.Error("encode-query-params: false wird ignoriert")
 	}
 }

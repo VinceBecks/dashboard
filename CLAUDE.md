@@ -247,33 +247,35 @@ Beispiel für Links (Absprung z. B. nach Kibana). Das Backend rendert die URLs j
 an jedem Objekt aus; das Frontend zeigt sie als Icon mit Tooltip und öffnet sie in einem neuen Tab:
 
 ```yaml
-link-variables:                       # statische Werte für .Vars; je Projekt per link-variables überschreibbar
-  kibanaUrl: https://kibana.mycomp.de
-  kibanaDataView: logs-k8s
+link-variables:                       # statische Werte für .Vars
+  fooUrl: https://foo.mycomp.de
+projects:
+  - project-name: foo-projekt
+    link-variables-overrides:         # überschreibt/ergänzt link-variables für dieses Projekt
+      fooUrl: https://other.mycomp.de
 links:
-  - link-id: kibana-logs              # eindeutig
-    title: Logs in Kibana
+  - link-id: foo-system               # eindeutig
+    title: Absprung nach Foo
     lucide-icon: scroll-text
     lucide-icon-color: "#00bfb3"
-    projects: [foo-projekt]           # optional
-    targets:                          # nur für diese Objekt-Typen; Werte stehen im Template unter .Target
-      pod:
-        query: 'kubernetes.namespace:"{{ .Namespace }}" and kubernetes.pod.name:"{{ .Name }}"'
+    projects: [foo-projekt]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
+    targets:                          # je Objekt-Typ eine URL; nicht aufgeführte Typen haben den Link nicht
       namespace:
-        query: 'kubernetes.namespace:"{{ .Namespace }}"'
-    url: |-                           # Zeilenumbrüche samt Einrückung werden entfernt
-      {{ .Vars.kibanaUrl }}/app/discover#/?_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
-      query:(language:kuery,query:{{ rison .Target.query }}))
-    query-params:                     # optional, werden an die URL angehängt
-      foo: "{{ .Project }}"
-    encode-query-params: true         # optional, Standard true; false hängt Namen und Werte unverändert an
+        url: "{{ .Vars.fooUrl }}/{{ pathescape .Namespace }}?foo=bar&ns={{ urlquery .Namespace }}"
+      pod:
+        url: |-                       # Zeilenumbrüche samt Einrückung werden entfernt
+          {{ .Vars.fooUrl }}/{{ pathescape .Namespace }}/{{ pathescape .Name }}
+          ?foo=bar&pod={{ urlquery .Name }}
 ```
 
-- Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars .Target`.
-- Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, …): `rison`, `pathescape`,
+- Jedes Target ist genau ein URL-Template. Kodiert wird im Template selbst: `urlquery` für Query-Werte,
+  `pathescape` für Pfadteile, `rison` für Kibana-Parameter; Werte ohne Funktion landen unverändert in der URL.
+- Lange URLs mit dem YAML-Blockstil `|-` umbrechen, nicht mit `>-` (der macht aus Zeilenumbrüchen Leerzeichen).
+- Templates, die mit `{{` beginnen, in Anführungszeichen setzen (sonst liest YAML `{` als Mapping).
+- Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars`.
+- Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, `range`, …): `rison`, `pathescape`,
   `replace`, `join`.
-- Mit `encode-query-params: false` werden die `query-params` nicht URL-kodiert (z. B. für bereits kodierte Werte
-  oder eigene Notationen). Enthält ein Wert dann `#`, Leerzeichen oder Zeilenumbrüche, wird der Link weggelassen.
+- Gemeinsame URL-Teile mehrerer Targets (z. B. die Kibana-Discover-Basis) in `link-variables` auslagern.
 - Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
   (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
 

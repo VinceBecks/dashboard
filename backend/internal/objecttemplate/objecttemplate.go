@@ -23,9 +23,8 @@ type Data struct {
 	Annotations map[string]string
 	// Selector ist nur bei Services gefüllt.
 	Selector map[string]string
-	// Vars und Target werden vom Aufrufer gesetzt (z. B. link-variables und targets bei Links).
-	Vars   map[string]string
-	Target map[string]string
+	// Vars setzt der Aufrufer (z. B. link-variables bei Links).
+	Vars map[string]string
 }
 
 // NewData baut die Template-Daten zu einem Objekt. obj ist ein model.Stored*-Wert.
@@ -43,7 +42,6 @@ func NewData(ref model.ObjectRef, obj any, project string) (Data, error) {
 		Annotations: nonNil(meta.Annotations),
 		Selector:    map[string]string{},
 		Vars:        map[string]string{},
-		Target:      map[string]string{},
 	}
 	if svc, ok := obj.(model.StoredService); ok {
 		d.Selector = nonNil(maps.Clone(svc.Selector))

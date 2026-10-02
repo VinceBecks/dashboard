@@ -73,28 +73,31 @@ actionHandlers:
   #       ACTION: deploy
 
 # Links je Objekt, z. B. Absprung nach Kibana. Auskommentiert, da die URLs Platzhalter sind.
+# Je Objekt-Typ eine URL; gemeinsame Teile stehen in link-variables. Projekte können Werte per
+# link-variables-overrides überschreiben.
 # link-variables:
-#   kibanaUrl: https://kibana.mycomp.de
+#   kibanaDiscover: https://kibana.mycomp.de/app/discover#/?_g=(time:(from:now-1h,to:now))
 #   kibanaDataView: logs-k8s
-#   timeRange: now-1h
 # links:
 #   - link-id: kibana-logs
 #     title: Logs in Kibana
 #     lucide-icon: scroll-text
 #     lucide-icon-color: "#00bfb3"
+#     projects: [foo-projekt, bar-projekt]
 #     targets:
 #       namespace:
-#         query: 'kubernetes.namespace:"{{ .Namespace }}"'
+#         url: |-
+#           {{ .Vars.kibanaDiscover }}&_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
+#           query:(language:kuery,query:{{ rison (printf "kubernetes.namespace:%q" .Namespace) }}))
 #       pod:
-#         query: 'kubernetes.namespace:"{{ .Namespace }}" and kubernetes.pod.name:"{{ .Name }}"'
+#         url: |-
+#           {{ .Vars.kibanaDiscover }}&_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
+#           query:(language:kuery,query:{{ rison (printf "kubernetes.namespace:%q and kubernetes.pod.name:%q" .Namespace .Name) }}))
 #       service:   # Logs aller Pods, die der Service selektiert
-#         query: >-
-#           kubernetes.namespace:"{{ .Namespace }}"
-#           {{- range $k, $v := .Selector }} and kubernetes.labels.{{ replace $k "." "_" }}:"{{ $v }}"{{ end }}
-#     url: |-
-#       {{ .Vars.kibanaUrl }}/app/discover#/?_g=(time:(from:{{ .Vars.timeRange }},to:now))
-#       &_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
-#       query:(language:kuery,query:{{ rison .Target.query }}))
+#         url: |-
+#           {{ .Vars.kibanaDiscover }}&_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
+#           query:(language:kuery,query:'kubernetes.namespace:"{{ .Namespace }}"
+#           {{- range $k, $v := .Selector }} and kubernetes.labels.{{ replace $k "." "_" }}:"{{ $v }}"{{ end }}'))
 
 store:
   recreate-store-interval: 1h

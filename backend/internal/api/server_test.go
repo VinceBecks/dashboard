@@ -202,8 +202,10 @@ links:
   - link-id: logs
     title: Logs
     lucide-icon: scroll-text
-    targets: {namespace: {}, pod: {}}
-    url: "https://kibana.example/{{ .Kind }}/{{ .Name }}"
+    projects: [foo]
+    targets:
+      namespace: {url: "https://kibana.example/{{ .Kind }}/{{ .Name }}"}
+      pod: {url: "https://kibana.example/{{ .Kind }}/{{ .Name }}"}
 `))
 	if err != nil {
 		t.Fatal(err)

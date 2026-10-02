@@ -19,7 +19,8 @@ type Config struct {
 	Projects       []Project             `yaml:"projects"`
 	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
 	Store          StoreConfig           `yaml:"store"`
-	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt überschreibbar.
+	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt per link-variables-overrides
+	// überschreibbar.
 	LinkVariables map[string]string `yaml:"link-variables"`
 	Links         []Link            `yaml:"links"`
 }
@@ -30,22 +31,18 @@ type Link struct {
 	Title           string `yaml:"title"`
 	LucideIcon      string `yaml:"lucide-icon"`
 	LucideIconColor string `yaml:"lucide-icon-color"`
-	// Projects schränkt den Link optional auf Projekte ein.
+	// Projects (Pflicht) sind die Projekte, in denen der Link angeboten wird; leer heißt: in keinem.
 	Projects []string `yaml:"projects"`
-	// Targets: je Objekt-Typ (namespace, service, ingress, pod) typspezifische Werte für .Target.
-	// Nur für die enthaltenen Typen wird der Link angezeigt.
-	Targets map[model.Kind]map[string]string `yaml:"targets"`
-	// URL ist ein Go-Template; Zeilenumbrüche samt Einrückung werden vor dem Parsen entfernt.
-	URL string `yaml:"url"`
-	// QueryParams werden gerendert und an die URL angehängt; URL-kodiert, außer EncodeQueryParams ist false.
-	QueryParams map[string]string `yaml:"query-params"`
-	// EncodeQueryParams legt fest, ob QueryParams URL-kodiert werden (Standard: true).
-	EncodeQueryParams *bool `yaml:"encode-query-params"`
+	// Targets: je Objekt-Typ (namespace, service, ingress, pod) die Ziel-URL. Nur für die enthaltenen Typen wird
+	// der Link angezeigt.
+	Targets map[model.Kind]LinkTarget `yaml:"targets"`
 }
 
-// EncodesQueryParams meldet, ob die query-params URL-kodiert angehängt werden.
-func (l Link) EncodesQueryParams() bool {
-	return l.EncodeQueryParams == nil || *l.EncodeQueryParams
+// LinkTarget ist das Ziel eines Links für einen Objekt-Typ.
+type LinkTarget struct {
+	// URL ist ein Go-Template; Zeilenumbrüche samt Einrückung werden vor dem Parsen entfernt.
+	// Werte kodiert das Template selbst (urlquery, pathescape, rison).
+	URL string `yaml:"url"`
 }
 
 // Project definiert ein Projekt und die Labels, die ein Namespace tragen muss, um dazuzugehören.
@@ -56,8 +53,8 @@ type Project struct {
 	ServiceAreas []ServiceArea `yaml:"service-areas"`
 	// OthersAreaLabel ist das Label des Bereichs für nicht zugeordnete Services (siehe OthersLabel).
 	OthersAreaLabel string `yaml:"others-area-label"`
-	// LinkVariables überschreiben bzw. ergänzen die globalen link-variables für dieses Projekt.
-	LinkVariables map[string]string `yaml:"link-variables"`
+	// LinkVariablesOverrides überschreiben bzw. ergänzen die globalen link-variables für dieses Projekt.
+	LinkVariablesOverrides map[string]string `yaml:"link-variables-overrides"`
 }
 
 // OthersAreaName ist die reservierte ID des Bereichs für Services, die keinem Bereich zugeordnet sind.
@@ -242,15 +239,18 @@ func validateLinks(links []Link, projects map[string]bool) []error {
 		if l.Title == "" {
 			errs = append(errs, fmt.Errorf("%s: title fehlt", at))
 		}
-		if l.URL == "" {
-			errs = append(errs, fmt.Errorf("%s: url fehlt", at))
+		if l.Projects == nil {
+			errs = append(errs, fmt.Errorf("%s: projects fehlt (leere Liste: Link in keinem Projekt)", at))
 		}
 		if len(l.Targets) == 0 {
 			errs = append(errs, fmt.Errorf("%s: targets dürfen nicht leer sein", at))
 		}
-		for kind := range l.Targets {
+		for kind, target := range l.Targets {
 			if !kind.Valid() {
 				errs = append(errs, fmt.Errorf("%s: targets: ungültiger Objekt-Typ %q", at, kind))
+			}
+			if target.URL == "" {
+				errs = append(errs, fmt.Errorf("%s: targets.%s: url fehlt (Typ ohne Link einfach weglassen)", at, kind))
 			}
 		}
 		for _, p := range l.Projects {
