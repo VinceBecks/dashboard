@@ -6,12 +6,8 @@ import {
   CardContent,
   CardHeader,
   Chip,
-  Divider,
   Grid,
   Link as MuiLink,
-  List,
-  ListItem,
-  ListItemText,
   Paper,
   Stack,
   Table,
@@ -25,10 +21,10 @@ import {
 import type { ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client';
-import type { Ingress, NamespaceResponse, ObjectKind, ObjectRef, Pod, Service } from '../api/types';
-import { LinkButtons } from '../components/LinkButtons';
+import type { Ingress, NamespaceResponse, ObjectKind, ObjectRef, Service } from '../api/types';
 import { ObjectButtons } from '../components/ObjectButtons';
 import { ServiceAreaFilter } from '../components/ServiceAreaFilter';
+import { ServiceCard } from '../components/ServiceCard';
 import { Loading, PollError } from '../components/StatusViews';
 import { usePolling } from '../hooks/usePolling';
 
@@ -117,7 +113,7 @@ export function NamespacePage() {
                 <Grid container spacing={2}>
                   {services.map((svc) => (
                     <Grid key={svc.name} size={{ xs: 12, md: 6, xl: 4 }}>
-                      <ServiceCard service={svc} pods={data.pods} object={ref('service', svc.name)} onExecuted={refresh} />
+                      <ServiceCard service={svc} pods={data.pods} namespace={namespace} onExecuted={refresh} />
                     </Grid>
                   ))}
                 </Grid>
@@ -236,50 +232,3 @@ function NodePortSection({
   );
 }
 
-function ServiceCard({ service, pods, object, onExecuted }: ObjectProps & { service: Service; pods: Pod[] }) {
-  const replicas = service.replicas
-    .map((name) => pods.find((p) => p.name === name))
-    .filter((p): p is Pod => p !== undefined);
-  return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardHeader title={service.name} slotProps={{ title: { variant: 'h6' } }} />
-      <CardContent sx={{ pt: 0 }}>
-        <ObjectButtons actions={service.actions} links={service.links} object={object} onExecuted={onExecuted} />
-        <Divider sx={{ my: 1.5 }} />
-        <Typography variant="subtitle2">Replicas ({replicas.length})</Typography>
-        {replicas.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            Keine Replicas
-          </Typography>
-        ) : (
-          <List dense disablePadding>
-            {replicas.map((pod) => (
-              // Pod-Links (z. B. Logs) werden gezeigt, Pod-Aktionen nicht.
-              <ListItem
-                key={pod.name}
-                disableGutters
-                secondaryAction={
-                  <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                    <LinkButtons links={pod.links} />
-                    <PodStatus pod={pod} />
-                  </Stack>
-                }
-              >
-                <ListItemText
-                  primary={pod.name}
-                  secondary={pod.containers.map((c) => c.image).join(', ')}
-                  slotProps={{ secondary: { sx: { wordBreak: 'break-all' } } }}
-                />
-              </ListItem>
-            ))}
-          </List>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PodStatus({ pod }: { pod: Pod }) {
-  const color = pod.ready ? 'success' : pod.phase === 'Failed' ? 'error' : 'warning';
-  return <Chip size="small" color={color} label={pod.ready ? 'Ready' : pod.phase || 'Unbekannt'} />;
-}

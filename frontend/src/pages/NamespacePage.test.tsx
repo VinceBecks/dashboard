@@ -110,7 +110,7 @@ describe('NamespacePage', () => {
     const others = screen.getByRole('heading', { name: 'Andere' }).parentElement!;
     expect(within(others).getByText('web-1')).toBeInTheDocument();
 
-    // Pod-Aktionen werden vorerst nicht angezeigt.
+    // Pod-Aktionen stehen erst auf der Rückseite der Kachel (siehe ServiceCard.test.tsx).
     expect(screen.queryByRole('button', { name: 'Pod löschen' })).not.toBeInTheDocument();
   });
 
@@ -200,7 +200,7 @@ describe('NamespacePage', () => {
     expect(nsLink).toHaveAttribute('target', '_blank');
     expect(nsLink).toHaveAttribute('rel', 'noopener noreferrer');
 
-    // Pod-Links stehen bei den Replicas, Pod-Aktionen weiterhin nicht.
+    // Pod-Links stehen bei den Replicas, Pod-Aktionen erst auf der Rückseite der Kachel.
     const podLinks = screen.getAllByRole('link', { name: 'Pod-Logs' });
     expect(podLinks.length).toBeGreaterThan(0);
     podLinks.forEach((l) => expect(l).toHaveAttribute('href', 'https://kibana.example/pod/web-1'));

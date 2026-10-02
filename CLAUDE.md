@@ -366,11 +366,14 @@ zur Namespace-Seite.
    „others“ zuletzt), darin je Service eine Kachel. Darüber ein Quick-Filter (ab zwei Bereichen) mit einem Chip je
    Bereich; mehrere Bereiche sind gleichzeitig wählbar, ohne Auswahl werden alle gezeigt. Die Auswahl steht in der
    URL (`?area=<id>&area=<id>`).
-    - zuerst die Aktionen des Service-Objekts,
-    - danach die Replicas (Pods), die der Service referenziert.
+    - zuerst die Aktionen und Links des Service-Objekts (Links rechtsbündig, durch einen Trennstrich abgesetzt),
+    - danach die Replicas (Pods), die der Service referenziert, je mit Status und Links.
+    - Klick auf ein Replica dreht die Kachel um (Komponente `ServiceCard`). Die Rückseite zeigt oben links einen
+      Pfeil zurück zum Service, darunter Status und Container (Name, Image, Ports) des Pods, darunter seine Aktionen
+      und Links. Verschwindet der Pod zwischenzeitlich, zeigt die Rückseite einen Hinweis.
 
-Aktionen zu Pods werden vorerst **nicht** angezeigt, auch wenn das Backend sie liefert. Links zu Pods werden bei den
-Replicas angezeigt. Links stehen bei allen anderen Objekten neben deren Aktionen.
+Aktionen zu Pods werden nur auf der Rückseite der Service-Kachel angezeigt. Links stehen bei allen anderen Objekten
+neben deren Aktionen.
 
 ### Datenaktualisierung
 
