@@ -148,16 +148,20 @@ func portKey(p model.ServicePort) string {
 	return strconv.Itoa(int(p.Port))
 }
 
+// portLabel beschreibt einen Service-Port für die Auswahl im Formular:
+//   - benannter Port:   „<Target-Port-Nummer> (<Port-Name>)“, z. B. „80 (http)“;
+//     ist der Target-Port nicht auflösbar, steht statt der Nummer sein Rohwert.
+//   - unbenannter Port: „Service-Port=<Port>, Container-Port=<Target-Port-Nummer oder Rohwert>“.
 func portLabel(p model.ServicePort) string {
-	target := p.TargetPort
-	if p.ResolvedTargetPort != nil && strconv.Itoa(int(*p.ResolvedTargetPort)) != p.TargetPort {
-		target = fmt.Sprintf("%s (%d)", p.TargetPort, *p.ResolvedTargetPort)
-	}
 	var label string
-	if p.Name != "" {
-		label = fmt.Sprintf(" %s (%s)", target, p.Name)
+	if p.ResolvedTargetPort != nil && p.Name != "" {
+		label = fmt.Sprintf("%d (%s)", *p.ResolvedTargetPort, p.Name)
+	} else if p.Name != "" {
+		label = fmt.Sprintf("%s (%s)", p.TargetPort, p.Name)
+	} else if p.ResolvedTargetPort != nil {
+		label = fmt.Sprintf("Service-Port=%d, Container-Port=%d", p.Port, *p.ResolvedTargetPort)
 	} else {
-		label = fmt.Sprintf(" %s", target)
+		label = fmt.Sprintf("Service-Port=%d, Container-Port=%s", p.Port, p.TargetPort)
 	}
 	return label
 }

@@ -101,8 +101,8 @@ func TestFormFields(t *testing.T) {
 		t.Fatalf("FormFields = %+v", fields)
 	}
 	want := []actions.Option{
-		{Value: "http", Label: "http: Target-Port http (8080) (Service-Port 80)"},
-		{Value: "metrics", Label: "metrics: Target-Port 9091 (Service-Port 9090)"},
+		{Value: "http", Label: "8080 (http)"},
+		{Value: "metrics", Label: "9091 (metrics)"},
 	}
 	for i, o := range fields[0].Options {
 		if o != want[i] {
@@ -161,5 +161,28 @@ func TestNumericTargetPort(t *testing.T) {
 	svc, _ := client.CoreV1().Services("feat-1").Get(ctx, "web-node-port", metav1.GetOptions{})
 	if got := svc.Spec.Ports[0].TargetPort; got != intstr.FromInt32(9091) {
 		t.Fatalf("TargetPort = %+v", got)
+	}
+}
+
+func TestPortLabel(t *testing.T) {
+	cases := []struct {
+		port model.ServicePort
+		want string
+	}{
+		// benannter Port, Target-Port aufgelöst
+		{model.ServicePort{Name: "http", Port: 80, TargetPort: "http", ResolvedTargetPort: ptr(80)}, "80 (http)"},
+		// benannter Port, numerischer Target-Port
+		{model.ServicePort{Name: "http", Port: 80, TargetPort: "8080", ResolvedTargetPort: ptr(8080)}, "8080 (http)"},
+		// benannter Port, Target-Port nicht auflösbar
+		{model.ServicePort{Name: "http", Port: 80, TargetPort: "http"}, "http (http)"},
+		// unbenannter Port, Target-Port aufgelöst
+		{model.ServicePort{Port: 80, TargetPort: "8080", ResolvedTargetPort: ptr(8080)}, "Service-Port=80, Container-Port=8080"},
+		// unbenannter Port, Target-Port nicht auflösbar
+		{model.ServicePort{Port: 80, TargetPort: "web"}, "Service-Port=80, Container-Port=web"},
+	}
+	for _, c := range cases {
+		if got := portLabel(c.port); got != c.want {
+			t.Errorf("portLabel(%+v) = %q, want %q", c.port, got, c.want)
+		}
 	}
 }
