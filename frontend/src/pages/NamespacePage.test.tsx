@@ -170,6 +170,28 @@ describe('NamespacePage', () => {
     expect(screen.queryByRole('group', { name: 'Service-Bereiche filtern' })).not.toBeInTheDocument();
   });
 
+  it('trennt Aktionen und Links in der Service-Kachel in eigene Gruppen', async () => {
+    const withLinks: NamespaceResponse = {
+      ...data,
+      services: data.services.map((s) =>
+        s.name === 'web'
+          ? { ...s, links: [link('logs', 'Service-Logs', 'https://kibana.example/svc'), link('wiki', 'Wiki', 'https://wiki.example')] }
+          : s,
+      ),
+    };
+    mockFetch(() => ({ status: 200, body: withLinks, etag: '"1"' }));
+    renderPage();
+    const business = (await screen.findByRole('heading', { name: 'Business' })).parentElement!;
+    const actionGroup = within(business).getByRole('group', { name: 'Aktionen' });
+    // Erste Link-Gruppe gehört zum Service, die zweite zum Pod in der Replica-Liste.
+    const [linkGroup, podLinkGroup] = within(business).getAllByRole('group', { name: 'Links' });
+    expect(within(podLinkGroup).getByRole('link', { name: 'Pod-Logs' })).toBeInTheDocument();
+    expect(within(actionGroup).getByRole('button', { name: 'Service neu starten' })).toBeInTheDocument();
+    expect(within(actionGroup).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(linkGroup).getAllByRole('link').map((l) => l.getAttribute('aria-label'))).toEqual(['Service-Logs', 'Wiki']);
+    expect(actionGroup.contains(linkGroup)).toBe(false);
+  });
+
   it('zeigt Links an Namespace und Pods, die in einem neuen Tab öffnen', async () => {
     mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
     renderPage();

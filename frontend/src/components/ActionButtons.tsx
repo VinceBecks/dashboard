@@ -22,7 +22,7 @@ export function ActionButtons({ actions, object, onExecuted }: Props) {
 
   return (
     <>
-      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }} role="group" aria-label="Aktionen">
         {actions.map((a) => (
           // Nur das Icon; der Titel erscheint als Tooltip und dient als zugänglicher Name.
           <Tooltip key={a.id} title={a.title}>
