@@ -1,0 +1,18 @@
+namespace:
+  name: mydemons
+  labels:
+    environment: demo
+    team: platform
+
+replicaCount: 2
+
+image:
+  repository: nginx
+  tag: "1.27"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources: {}

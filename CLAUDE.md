@@ -3,6 +3,7 @@
 Antworte und dokumentiere auf Deutsch; Code-Bezeichner (Typen, Funktionen, Variablen) bleiben englisch.
 
 Wenn du im Plan-Mode arbeitest, dann erstelle den Plan in einer Datei unter dem Ordner `plans/`.
+In dem Ordner helpers/ liegen helper Dateien, welche nicht mit der Anwendung selber in Zusammenhang stehen. 
 
 ## Projektziel
 
