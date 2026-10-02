@@ -69,3 +69,21 @@ actionHandlers:
 		t.Fatal("Validierungsfehler erwartet")
 	}
 }
+
+func TestHandlerType(t *testing.T) {
+	cfg, err := Parse([]byte(`
+actionHandlers:
+  - action-name: deploy
+    handler: gitlab-pipeline
+  - action-name: delete-pod
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.ActionHandlers[0].HandlerType(); got != "gitlab-pipeline" {
+		t.Errorf("HandlerType = %q", got)
+	}
+	if got := cfg.ActionHandlers[1].HandlerType(); got != "delete-pod" {
+		t.Errorf("HandlerType ohne handler-Feld = %q", got)
+	}
+}

@@ -29,5 +29,25 @@ actionHandlers:
     lucide-icon: trash-2
     lucide-icon-color: red
 
+  # Beispiel für den Handler-Typ gitlab-pipeline: beliebig viele Aktionen können ihn nutzen.
+  # Auskommentiert, weil das Backend ohne gesetzte Token-Variable nicht startet.
+  # - action-name: deploy-feature
+  #   handler: gitlab-pipeline
+  #   enabled: true
+  #   action-title: Feature deployen
+  #   lucide-icon: rocket
+  #   lucide-icon-color: green
+  #   extra-handler-configs:
+  #     gitlab-url: https://gitlab.mycomp.de
+  #     project: team/foo-deploy            # Projekt-ID oder Pfad
+  #     ref: main                           # Template erlaubt, z. B. "feature/{{ .Namespace }}"
+  #     token-env: GITLAB_TRIGGER_TOKEN_FOO # Name der Env-Variable mit dem Pipeline-Trigger-Token
+  #     applies-to: [namespace]             # namespace | service | ingress | pod
+  #     projects: [foo-projekt]             # optional: nur für diese Dashboard-Projekte
+  #     timeout: 15s                        # optional, Standard 10s
+  #     variables:
+  #       NAMESPACE: "{{ .Namespace }}"
+  #       ACTION: deploy
+
 store:
   recreate-store-interval: 1h

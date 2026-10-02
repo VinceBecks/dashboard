@@ -46,21 +46,22 @@ func NewRegistry() *Registry {
 	return &Registry{factories: map[string]Factory{}}
 }
 
-// Register macht eine Handler-Factory unter dem action-name bekannt.
-func (r *Registry) Register(name string, f Factory) {
-	r.factories[name] = f
+// Register macht eine Handler-Factory unter einem Handler-Typ bekannt (siehe config.ActionHandlerConfig.HandlerType).
+func (r *Registry) Register(handlerType string, f Factory) {
+	r.factories[handlerType] = f
 }
 
 // Activate erzeugt und konfiguriert die Handler aller aktivierten Aktionen aus der config.yaml.
+// Je Aktion entsteht eine eigene Handler-Instanz, auch wenn mehrere Aktionen denselben Handler-Typ nutzen.
 func (r *Registry) Activate(cfgs []config.ActionHandlerConfig, deps Deps) error {
 	var errs []error
 	for _, c := range cfgs {
 		if !c.Enabled {
 			continue
 		}
-		f, ok := r.factories[c.Name]
+		f, ok := r.factories[c.HandlerType()]
 		if !ok {
-			errs = append(errs, fmt.Errorf("aktion %q: kein ActionHandler registriert", c.Name))
+			errs = append(errs, fmt.Errorf("aktion %q: kein ActionHandler vom Typ %q registriert", c.Name, c.HandlerType()))
 			continue
 		}
 		h := f(deps)

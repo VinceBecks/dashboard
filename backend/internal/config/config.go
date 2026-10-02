@@ -25,14 +25,25 @@ type Project struct {
 	NamespaceLabels map[string]string `yaml:"namespace-labels"`
 }
 
-// ActionHandlerConfig konfiguriert genau einen ActionHandler.
+// ActionHandlerConfig konfiguriert genau eine Aktion und damit genau eine ActionHandler-Instanz.
 type ActionHandlerConfig struct {
-	Name            string         `yaml:"action-name"`
+	Name string `yaml:"action-name"`
+	// Handler ist der Handler-Typ. Ein Typ kann mehrere Aktionen bedienen (z. B. gitlab-pipeline).
+	// Fehlt er, gilt der action-name als Handler-Typ.
+	Handler         string         `yaml:"handler"`
 	Enabled         bool           `yaml:"enabled"`
 	Title           string         `yaml:"action-title"`
 	LucideIcon      string         `yaml:"lucide-icon"`
 	LucideIconColor string         `yaml:"lucide-icon-color"`
 	Extra           map[string]any `yaml:"extra-handler-configs"`
+}
+
+// HandlerType liefert den Handler-Typ der Aktion.
+func (a ActionHandlerConfig) HandlerType() string {
+	if a.Handler != "" {
+		return a.Handler
+	}
+	return a.Name
 }
 
 // StoreConfig konfiguriert den In-Memory-Store.

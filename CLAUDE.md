@@ -36,6 +36,7 @@ Backend-Pakete (`backend/`):
 | `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
 | `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` |
+| `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen |
 | `internal/api`                | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI                            |
 
 ## Build, Test, Start
@@ -190,8 +191,35 @@ actionHandlers:
 ```
 
 - `action-name` ist die eindeutige Aktion-ID.
+- `handler` (optional) ist der Handler-Typ. Fehlt er, gilt `action-name` als Handler-Typ. Ein Handler-Typ kann
+  mehrere Aktionen bedienen; je Aktion entsteht eine eigene Handler-Instanz mit eigener Konfiguration.
 - `action-title`, `lucide-icon` und `lucide-icon-color` werden unverändert an das Frontend durchgereicht.
 - `extra-handler-configs` ist handler-spezifisch und wird nur vom jeweiligen Handler interpretiert.
+
+Beispiel für den generischen Handler-Typ `gitlab-pipeline` (startet eine Pipeline über die Pipeline-Trigger-API):
+
+```yaml
+  - action-name: deploy-feature
+    handler: gitlab-pipeline
+    enabled: true
+    action-title: Feature deployen
+    lucide-icon: rocket
+    lucide-icon-color: green
+    extra-handler-configs:
+      gitlab-url: https://gitlab.mycomp.de
+      project: team/foo-deploy            # Projekt-ID oder Pfad
+      ref: main                           # Go-Template erlaubt
+      token-env: GITLAB_TRIGGER_TOKEN_FOO # Env-Variable mit dem Trigger-Token
+      applies-to: [namespace]             # namespace | service | ingress | pod
+      projects: [foo-projekt]             # optional: nur für diese Projekte
+      timeout: 15s                        # optional, Standard 10s
+      variables:
+        NAMESPACE: "{{ .Namespace }}"     # verfügbar: .Kind .Name .Namespace .Project .Labels .Annotations
+```
+
+Tokens stehen nie in der `config.yaml`, sondern nur in Umgebungsvariablen. Im Cluster kommen sie aus dem Secret
+`feature-dashboard-gitlab` (siehe `backend/deploy/gitlab-secret.example.yaml`). Ist eine Token-Variable nicht
+gesetzt, startet das Backend nicht.
 
 
 Beispiel für store-konfiguration

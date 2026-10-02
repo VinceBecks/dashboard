@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"feature-dashboard/internal/config"
@@ -63,5 +64,44 @@ func TestRegistry(t *testing.T) {
 	}
 	if res, err := r.Execute(ctx, "scale", svc, map[string]any{"replicas": 3.0, "mode": "a"}); err != nil || !res.Success {
 		t.Fatalf("res = %+v, err = %v", res, err)
+	}
+}
+
+type configuredHandler struct{ target string }
+
+func (c *configuredHandler) Configure(extra map[string]any) error {
+	c.target, _ = extra["target"].(string)
+	return nil
+}
+func (c *configuredHandler) IsApplicable(StoredObject) bool      { return true }
+func (c *configuredHandler) FormFields(StoredObject) []FormField { return nil }
+func (c *configuredHandler) Execute(context.Context, StoredObject, map[string]any) Result {
+	return Result{Success: true, Message: c.target}
+}
+
+func TestHandlerTypeServesMultipleActions(t *testing.T) {
+	r := NewRegistry()
+	r.Register("generic", func(Deps) Handler { return &configuredHandler{} })
+	r.Register("legacy", func(Deps) Handler { return &configuredHandler{} })
+	err := r.Activate([]config.ActionHandlerConfig{
+		{Name: "a", Handler: "generic", Enabled: true, Extra: map[string]any{"target": "A"}},
+		{Name: "b", Handler: "generic", Enabled: true, Extra: map[string]any{"target": "B"}},
+		{Name: "legacy", Enabled: true, Extra: map[string]any{"target": "L"}},
+	}, Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := StoredObject{Ref: model.ObjectRef{Kind: model.KindNamespace, Namespace: "ns", Name: "ns"}}
+	if got := r.ActionsFor(obj); len(got) != 3 || got[0].ID != "a" || got[1].ID != "b" || got[2].ID != "legacy" {
+		t.Fatalf("ActionsFor = %+v", got)
+	}
+	for name, want := range map[string]string{"a": "A", "b": "B", "legacy": "L"} {
+		if res, err := r.Execute(context.Background(), name, obj, nil); err != nil || res.Message != want {
+			t.Errorf("%s: res = %+v, err = %v", name, res, err)
+		}
+	}
+	if err := NewRegistry().Activate([]config.ActionHandlerConfig{{Name: "x", Handler: "missing", Enabled: true}}, Deps{}); err == nil ||
+		!strings.Contains(err.Error(), `"missing"`) {
+		t.Fatalf("Fehler mit Handler-Typ erwartet, got %v", err)
 	}
 }

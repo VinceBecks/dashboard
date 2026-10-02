@@ -20,6 +20,11 @@ spec:
         - name: backend
           image: feature-dashboard-backend:1.0.0
           imagePullPolicy: IfNotPresent
+          # Trigger-Tokens für gitlab-pipeline-Aktionen (token-env in der config.yaml), siehe gitlab-secret.example.yaml.
+          envFrom:
+            - secretRef:
+                name: feature-dashboard-gitlab
+                optional: true
           ports:
             - name: http
               containerPort: 8080
