@@ -9,7 +9,24 @@ dependencies:
     version: 0.1.0
     repository: "file://../demo-app"
     alias: app1
+    condition: app1.enabled
   - name: demo-app
     version: 0.1.0
     repository: "file://../demo-app"
     alias: app2
+    condition: app2.enabled
+  - name: demo-app
+    version: 0.1.0
+    repository: "file://../demo-app"
+    alias: app3
+    condition: app3.enabled
+  - name: demo-app
+    version: 0.1.0
+    repository: "file://../demo-app"
+    alias: app4
+    condition: app4.enabled
+  - name: demo-app
+    version: 0.1.0
+    repository: "file://../demo-app"
+    alias: app5
+    condition: app5.enabled

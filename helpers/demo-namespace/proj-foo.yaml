@@ -1,0 +1,39 @@
+global:
+  namespace:
+    name: foo-some-feature
+
+namespace:
+  labels:
+    mycomp.de/is-feature-environment: true
+    mycomp.de/project-name: foo-projekt
+
+app1:
+  enabled: true
+  name: rabbitmq
+  replicaCount: 2
+  labels:
+    app.kubernetes.io/part-of: rabbitmq
+app2:
+  enabled: true
+  name: database
+  replicaCount: 1
+  labels:
+    app.kubernetes.io/part-of: database
+app3:
+  enabled: true
+  name: business-app-1
+  replicaCount: 1
+  labels:
+    app.kubernetes.io/part-of: foo
+app4:
+  enabled: true
+  name: business-app-2
+  replicaCount: 1
+  labels:
+    app.kubernetes.io/part-of: foo
+app5:
+  enabled: true
+  name: business-app-3
+  replicaCount: 2
+  labels:
+    app.kubernetes.io/part-of: foo

@@ -2,6 +2,8 @@ global:
   namespace:
     name: foo
 
+name: ""
+
 replicaCount: 2
 
 labels: {}

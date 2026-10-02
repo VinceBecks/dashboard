@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-nginx
+  name: {{ .Values.name }}
   namespace: {{ .Values.global.namespace.name }}
   labels:
     {{- toYaml .Values.labels | nindent 4 }}
