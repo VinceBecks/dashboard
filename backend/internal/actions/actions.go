@@ -59,9 +59,16 @@ type Handler interface {
 	Execute(ctx context.Context, obj StoredObject, inputs map[string]any) Result
 }
 
+// ObjectReader liest Stored-Objects als Kopie aus dem Store (siehe store.Store.Get).
+// Handler dürfen den Store nur lesen; Änderungen kommen ausschließlich über die Informer-Events.
+type ObjectReader interface {
+	Get(ref model.ObjectRef, out any) (bool, error)
+}
+
 // Deps sind die Abhängigkeiten, die Handler bei ihrer Erzeugung erhalten.
 type Deps struct {
 	Client kubernetes.Interface
+	Store  ObjectReader
 }
 
 // Factory erzeugt einen Handler.

@@ -14,6 +14,7 @@ import (
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/actions/deletepod"
+	"feature-dashboard/internal/actions/nodeportservice"
 	"feature-dashboard/internal/api"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/kube"
@@ -44,17 +45,19 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 		return err
 	}
 
+	st := store.New()
+
 	registry := actions.NewRegistry()
 	// Neue ActionHandler hier registrieren und in der config.yaml aktivieren.
 	registry.Register("delete-pod", deletepod.New)
-	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client}); err != nil {
+	registry.Register("node-port-service-on-service-base", nodeportservice.New)
+	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: st}); err != nil {
 		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	st := store.New()
 	watcher := kube.NewWatcher(client, st, project.NewMatcher(cfg.Projects), cfg.Store.RecreateInterval.Duration())
 	watcherDone := make(chan struct{})
 	go func() {

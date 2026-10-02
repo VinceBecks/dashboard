@@ -35,6 +35,7 @@ Backend-Pakete (`backend/`):
 | `internal/kube`               | Informer, Event-Verarbeitung (eine Goroutine), periodischer Full-Rebuild  |
 | `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
+| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base`                    |
 | `internal/api`                | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI                            |
 
 ## Build, Test, Start

@@ -10,8 +10,11 @@ metadata:
   name: feature-dashboard
 rules:
   - apiGroups: [""]
-    resources: [namespaces, services]
+    resources: [namespaces]
     verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, list, watch, create] # create: Aktion node-port-service-on-service-base
   - apiGroups: [""]
     resources: [pods]
     verbs: [get, list, watch, delete] # delete: Aktion delete-pod

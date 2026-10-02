@@ -22,5 +22,10 @@ data:
         lucide-icon-color: red
         extra-handler-configs:
           force-delete: true
+      - action-name: node-port-service-on-service-base
+        enabled: true
+        action-title: NodePort-Service erstellen
+        lucide-icon: network
+        lucide-icon-color: blue
     store:
-      recreate-store-interval: 2m
+      recreate-store-interval: 5m
