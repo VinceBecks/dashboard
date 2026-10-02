@@ -1,0 +1,23 @@
+projects:
+  - project-name: foo-projekt
+    namespace-labels:
+      mycomp.de/is-feature-environment: true
+      mycomp.de/project-name: foo-projekt
+      mycomp.de/organization-unit: development
+  - project-name: bar-projekt
+    namespace-labels:
+      mycomp.de/is-feature-environment: true
+      mycomp.de/project-name: bar
+      mycomp.de/organization-unit: operations
+
+actionHandlers:
+  - action-name: delete-pod
+    enabled: true
+    action-title: Pod Löschen
+    lucide-icon: trash
+    lucide-icon-color: red
+    extra-handler-configs:
+      force-delete: true
+
+store:
+  recreate-store-interval: 1h

@@ -1,0 +1,299 @@
+openapi: 3.0.3
+info:
+  title: Feature-Dashboard API
+  version: 1.0.0
+  description: |
+    API des Feature-Environment-Dashboards. Liefert Projekte, deren Feature-Umgebungen (Namespaces)
+    und die darin laufenden Objekte samt ausführbarer Aktionen.
+
+    GET-Endpunkte liefern einen `ETag`. Sendet das Frontend diesen als `If-None-Match` mit und hat sich
+    nichts geändert, antwortet der Server mit `304 Not Modified` ohne Body.
+paths:
+  /api/projects:
+    get:
+      summary: Projekte und ihre Namespaces
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Aktuelle Daten
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectsResponse' }
+        '304': { $ref: '#/components/responses/NotModified' }
+  /api/projects/{project}/namespaces/{namespace}:
+    get:
+      summary: Alle Objekte eines Namespaces (inkl. Namespace selbst)
+      parameters:
+        - { name: project, in: path, required: true, schema: { type: string } }
+        - { name: namespace, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Aktuelle Daten
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NamespaceResponse' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/actions/{action}:
+    patch:
+      summary: Aktion auf einem Objekt ausführen
+      description: |
+        Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die WATCH-API im Store,
+        also mit dem nächsten Abruf der GET-Endpunkte.
+      parameters:
+        - { name: action, in: path, required: true, description: Aktion-ID, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActionRequest' }
+      responses:
+        '200':
+          description: Aktion wurde ausgeführt; `success` zeigt, ob sie erfolgreich war.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActionResult' }
+        '400':
+          description: Ungültiger Request, Aktion nicht anwendbar oder ungültige Eingaben
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Aktion unbekannt/deaktiviert oder Objekt nicht gefunden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /healthz:
+    get:
+      summary: Liveness
+      responses:
+        '200': { description: Prozess läuft }
+  /readyz:
+    get:
+      summary: Readiness
+      responses:
+        '200': { description: Store ist initial befüllt }
+        '503': { description: Store wird noch aufgebaut }
+  /api/openapi.yaml:
+    get:
+      summary: Diese Spezifikation
+      responses:
+        '200': { description: OpenAPI-Spezifikation }
+  /api/swagger:
+    get:
+      summary: Swagger-UI
+      responses:
+        '200': { description: HTML-Seite }
+components:
+  parameters:
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Zuletzt erhaltener ETag
+      schema: { type: string }
+  headers:
+    ETag:
+      description: Zeitstempel der letzten relevanten Änderung
+      schema: { type: string }
+  responses:
+    NotModified:
+      description: Frontend ist bereits auf dem aktuellen Stand
+    Error:
+      description: Fehler
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        problems:
+          type: array
+          items: { type: string }
+          description: Einzelne Validierungsfehler der Formular-Eingaben
+    StringMap:
+      type: object
+      additionalProperties: { type: string }
+    Action:
+      type: object
+      required: [id, title, lucideIcon, lucideIconColor]
+      properties:
+        id: { type: string, description: Eindeutige Aktion-ID }
+        title: { type: string }
+        lucideIcon: { type: string }
+        lucideIconColor: { type: string }
+        formFields:
+          type: array
+          items: { $ref: '#/components/schemas/FormField' }
+    FormField:
+      type: object
+      required: [id, label, type, isRequired]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        type: { type: string, enum: [text, select, multi-select, number] }
+        isRequired: { type: boolean }
+        description: { type: string }
+        options:
+          type: array
+          description: Nur bei select und multi-select
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value: { type: string }
+              label: { type: string }
+    ObjectBase:
+      type: object
+      required: [name, actions]
+      properties:
+        name: { type: string }
+        namespace: { type: string }
+        labels: { $ref: '#/components/schemas/StringMap' }
+        annotations: { $ref: '#/components/schemas/StringMap' }
+        actions:
+          type: array
+          items: { $ref: '#/components/schemas/Action' }
+    Namespace:
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+        - type: object
+          required: [project]
+          properties:
+            project: { type: string }
+    Pod:
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+        - type: object
+          required: [phase, ready, containers]
+          properties:
+            phase: { type: string, example: Running }
+            ready: { type: boolean }
+            containers:
+              type: array
+              items:
+                type: object
+                required: [name, image]
+                properties:
+                  name: { type: string }
+                  image: { type: string }
+                  ports:
+                    type: array
+                    items:
+                      type: object
+                      required: [containerPort]
+                      properties:
+                        name: { type: string }
+                        containerPort: { type: integer, format: int32 }
+                        protocol: { type: string }
+    Service:
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+        - type: object
+          required: [type, ports, replicas]
+          properties:
+            type: { type: string, example: ClusterIP }
+            selector: { $ref: '#/components/schemas/StringMap' }
+            replicas:
+              type: array
+              description: Namen der Pods, die der Service referenziert
+              items: { type: string }
+            ports:
+              type: array
+              items:
+                type: object
+                required: [port, targetPort]
+                properties:
+                  name: { type: string }
+                  protocol: { type: string }
+                  port: { type: integer, format: int32 }
+                  targetPort: { type: string, description: Rohwert (Name oder Zahl) }
+                  resolvedTargetPort: { type: integer, format: int32, description: Aufgelöste Port-Nummer }
+                  nodePort: { type: integer, format: int32 }
+    Ingress:
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+        - type: object
+          required: [rules]
+          properties:
+            rules:
+              type: array
+              items:
+                type: object
+                required: [host, paths]
+                properties:
+                  host: { type: string }
+                  paths:
+                    type: array
+                    items:
+                      type: object
+                      required: [pathType, path, backend]
+                      properties:
+                        pathType: { type: string }
+                        path: { type: string }
+                        backend:
+                          type: object
+                          required: [serviceName]
+                          properties:
+                            serviceName: { type: string }
+                            servicePortName: { type: string }
+                            servicePortNumber: { type: integer, format: int32 }
+                            resolvedServicePortNumber: { type: integer, format: int32 }
+    ProjectsResponse:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            type: object
+            required: [name, namespaces]
+            properties:
+              name: { type: string }
+              namespaces:
+                type: array
+                items: { $ref: '#/components/schemas/Namespace' }
+    NamespaceResponse:
+      type: object
+      required: [namespace, services, ingresses, pods]
+      properties:
+        namespace: { $ref: '#/components/schemas/Namespace' }
+        services:
+          type: array
+          items: { $ref: '#/components/schemas/Service' }
+        ingresses:
+          type: array
+          items: { $ref: '#/components/schemas/Ingress' }
+        pods:
+          type: array
+          items: { $ref: '#/components/schemas/Pod' }
+    ActionRequest:
+      type: object
+      required: [object]
+      properties:
+        object:
+          type: object
+          required: [kind, name]
+          properties:
+            kind: { type: string, enum: [namespace, service, ingress, pod] }
+            namespace: { type: string, description: Bei kind=namespace optional }
+            name: { type: string }
+        inputs:
+          type: object
+          description: Werte der Formular-Felder, Schlüssel = Feld-ID
+          additionalProperties: true
+    ActionResult:
+      type: object
+      required: [success, message]
+      properties:
+        success: { type: boolean }
+        message: { type: string }

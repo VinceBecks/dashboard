@@ -18,7 +18,33 @@ hochgefahren haben und welche Services darin laufen.
 - Keine Authentifizierung im Dashboard
 
 ## Aktueller Stand
-Es ist ein leeres Projekt. Es existiert bis jetzt nur ein leeres go-module unter dem Ordner backend/
+Das Backend ist implementiert (Plan: `plans/backend-implementierung.md`). Das Frontend existiert noch nicht.
+
+Backend-Pakete (`backend/`):
+
+| Paket                         | Aufgabe                                                                   |
+|-------------------------------|---------------------------------------------------------------------------|
+| `cmd/dashboard`               | Startup, Wiring, Registrierung der ActionHandler                          |
+| `internal/config`             | `config.yaml` laden/validieren                                            |
+| `internal/model`              | Stored-Object-Structs                                                     |
+| `internal/project`            | Namespace-Labels → Projekt                                                |
+| `internal/store`              | In-Memory-Store (`json.RawMessage`), Transaktionen, Timestamps            |
+| `internal/converter`          | k8s-Objekt → Stored-Object, Referenzauflösung inkl. abhängiger Objekte    |
+| `internal/kube`               | Informer, Event-Verarbeitung (eine Goroutine), periodischer Full-Rebuild  |
+| `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
+| `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
+| `internal/api`                | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI                            |
+
+## Build, Test, Start (Backend)
+
+Im Ordner `backend/`:
+
+- `make build` – Binary nach `bin/dashboard`
+- `make test` – `go test -race ./...`
+- `make vet` – `go vet ./...`
+- `make run` – lokal gegen den Cluster aus `KUBECONFIG` bzw. `~/.kube/config` mit `config.example.yaml`
+  (andere Config: `make run CONFIG=pfad.yaml`)
+- `make docker` – Container-Image bauen; Manifeste unter `backend/deploy/`
 
 ## Fachliche Begriffe
 
@@ -118,12 +144,12 @@ Beispiel für Projekte:
 
 ```yaml
 projects:
-  - projekt-name: foo-projekt
+  - project-name: foo-projekt
     namespace-labels:
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: foo-projekt
       mycomp.de/organization-unit: development
-  - projekt-name: bar-projekt
+  - project-name: bar-projekt
     namespace-labels:
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: bar

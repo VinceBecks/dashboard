@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-dashboard-backend
+  namespace: feature-dashboard
+spec:
+  replicas: 1 # Der Store ist in-memory: immer genau ein Replica.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: feature-dashboard-backend
+  template:
+    metadata:
+      labels:
+        app: feature-dashboard-backend
+    spec:
+      serviceAccountName: feature-dashboard
+      containers:
+        - name: backend
+          image: feature-dashboard-backend:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dashboard
+      volumes:
+        - name: config
+          configMap:
+            name: feature-dashboard-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: feature-dashboard-backend
+  namespace: feature-dashboard
+spec:
+  selector:
+    app: feature-dashboard-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
