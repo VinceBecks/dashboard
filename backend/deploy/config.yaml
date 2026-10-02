@@ -56,6 +56,7 @@ data:
         action-title: Pod Löschen
         lucide-icon: trash
         lucide-icon-color: red
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
         extra-handler-configs:
           force-delete: true
       - action-name: node-port-service-on-service-base
@@ -63,16 +64,19 @@ data:
         action-title: NodePort-Service erstellen
         lucide-icon: network
         lucide-icon-color: blue
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
       - action-name: delete-node-port-service
         enabled: true
         action-title: NodePort-Service löschen
         lucide-icon: trash-2
         lucide-icon-color: red
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
       - action-name: restart-service-replicas
         enabled: true
         action-title: Alle Replika löschen (Neustart)
         lucide-icon: rotate-ccw
         lucide-icon-color: orange
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
     store:
       recreate-store-interval: 5m
     link-variables:

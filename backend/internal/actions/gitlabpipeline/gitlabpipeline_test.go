@@ -11,7 +11,6 @@ import (
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/model"
-	"feature-dashboard/internal/store"
 )
 
 const token = "glptt-secret-token"
@@ -36,18 +35,6 @@ func fakeGitLab(t *testing.T, status int, body string) (*httptest.Server, *reque
 	return srv, last
 }
 
-func newStore(t *testing.T) *store.Store {
-	t.Helper()
-	st := store.New()
-	err := st.Update(func(tx *store.Tx) error {
-		return tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "foo-projekt"})
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return st
-}
-
 func configured(t *testing.T, gitlabURL string, extra map[string]any) actions.Handler {
 	t.Helper()
 	t.Setenv("GITLAB_TOKEN_TEST", token)
@@ -69,7 +56,7 @@ func configured(t *testing.T, gitlabURL string, extra map[string]any) actions.Ha
 	for k, v := range extra {
 		cfg[k] = v
 	}
-	h := New(actions.Deps{Store: newStore(t)})
+	h := New(actions.Deps{})
 	if err := h.Configure(cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -78,12 +65,12 @@ func configured(t *testing.T, gitlabURL string, extra map[string]any) actions.Ha
 
 func service(name string) actions.StoredObject {
 	svc := model.StoredService{Meta: model.Meta{Name: name, Namespace: "feat-1", Labels: map[string]string{"app": "web"}}, Type: "ClusterIP"}
-	return actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindService, Namespace: "feat-1", Name: name}, Object: svc}
+	return actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindService, Namespace: "feat-1", Name: name}, Object: svc, Project: "foo-projekt"}
 }
 
 func namespace() actions.StoredObject {
 	ns := model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "foo-projekt"}
-	return actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1"}, Object: ns}
+	return actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1"}, Object: ns, Project: "foo-projekt"}
 }
 
 func TestExecuteTriggersPipeline(t *testing.T) {
@@ -158,15 +145,6 @@ func TestApplicability(t *testing.T) {
 	if h.IsApplicable(pod) {
 		t.Fatal("Pod darf nicht applicable sein")
 	}
-
-	h = configured(t, "https://gitlab.example", map[string]any{"projects": []any{"bar-projekt"}})
-	if h.IsApplicable(namespace()) || h.IsApplicable(service("web")) {
-		t.Fatal("Objekte anderer Projekte dürfen nicht applicable sein")
-	}
-	h = configured(t, "https://gitlab.example", map[string]any{"projects": []any{"foo-projekt"}})
-	if !h.IsApplicable(namespace()) || !h.IsApplicable(service("web")) {
-		t.Fatal("Objekte des Projekts müssen applicable sein")
-	}
 }
 
 func TestConfigureErrors(t *testing.T) {
@@ -189,6 +167,7 @@ func TestConfigureErrors(t *testing.T) {
 		"project fehlt":       func(m map[string]any) { delete(m, "project") },
 		"kaputtes Template":   func(m map[string]any) { m["variables"] = map[string]any{"X": "{{ .Name "} },
 		"ungültiger Timeout":  func(m map[string]any) { m["timeout"] = "bald" },
+		"projects (veraltet)": func(m map[string]any) { m["projects"] = []any{"foo-projekt"} },
 	}
 	for name, mutate := range cases {
 		cfg := valid()

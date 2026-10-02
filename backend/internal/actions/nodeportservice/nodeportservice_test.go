@@ -33,7 +33,7 @@ func baseService() model.StoredService {
 }
 
 func obj(svc model.StoredService) actions.StoredObject {
-	return actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindService, Namespace: "feat-1", Name: svc.Name}, Object: svc}
+	return actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindService, Namespace: "feat-1", Name: svc.Name}, Object: svc, Project: "foo"}
 }
 
 func setup(t *testing.T, services ...model.StoredService) (*actions.Registry, *fake.Clientset) {
@@ -56,7 +56,7 @@ func setup(t *testing.T, services ...model.StoredService) (*actions.Registry, *f
 	client := fake.NewClientset()
 	reg := actions.NewRegistry()
 	reg.Register(actionName, New)
-	if err := reg.Activate([]config.ActionHandlerConfig{{Name: actionName, Enabled: true}}, actions.Deps{Client: client, Store: st}); err != nil {
+	if err := reg.Activate([]config.ActionHandlerConfig{{Name: actionName, Enabled: true, Projects: []string{"foo"}}}, actions.Deps{Client: client, Store: st}); err != nil {
 		t.Fatal(err)
 	}
 	return reg, client
@@ -82,7 +82,7 @@ func TestApplicability(t *testing.T) {
 		t.Fatal("keine Aktion für Services ohne Selector erwartet")
 	}
 
-	pod := actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindPod, Namespace: "feat-1", Name: "web"}, Object: model.StoredPod{}}
+	pod := actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindPod, Namespace: "feat-1", Name: "web"}, Object: model.StoredPod{}, Project: "foo"}
 	if got := reg.ActionsFor(pod); len(got) != 0 {
 		t.Fatal("keine Aktion für Pods erwartet")
 	}

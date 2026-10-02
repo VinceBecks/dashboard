@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 
 	"feature-dashboard/internal/config"
@@ -64,6 +65,9 @@ func (r *Registry) Activate(cfgs []config.ActionHandlerConfig, deps Deps) error 
 			errs = append(errs, fmt.Errorf("aktion %q: kein ActionHandler vom Typ %q registriert", c.Name, c.HandlerType()))
 			continue
 		}
+		if len(c.Projects) == 0 {
+			slog.Warn("Aktion ist in keinem Projekt verfügbar (projects ist leer)", "action", c.Name)
+		}
 		h := f(deps)
 		if err := h.Configure(c.Extra); err != nil {
 			errs = append(errs, fmt.Errorf("aktion %q: %w", c.Name, err))
@@ -78,7 +82,7 @@ func (r *Registry) Activate(cfgs []config.ActionHandlerConfig, deps Deps) error 
 func (r *Registry) ActionsFor(obj StoredObject) []Action {
 	result := []Action{}
 	for _, a := range r.active {
-		if !a.handler.IsApplicable(obj) {
+		if !a.applicable(obj) {
 			continue
 		}
 		result = append(result, Action{
@@ -104,13 +108,18 @@ func (r *Registry) Execute(ctx context.Context, name string, obj StoredObject, i
 	if !ok {
 		return Result{}, ErrUnknownAction
 	}
-	if !a.handler.IsApplicable(obj) {
+	if !a.applicable(obj) {
 		return Result{}, ErrNotApplicable
 	}
 	if err := validate(a.handler.FormFields(obj), inputs); err != nil {
 		return Result{}, err
 	}
 	return a.handler.Execute(ctx, obj, inputs), nil
+}
+
+// applicable prüft zuerst das Projekt (projects aus der config.yaml), dann die Entscheidung des Handlers.
+func (a activeAction) applicable(obj StoredObject) bool {
+	return slices.Contains(a.cfg.Projects, obj.Project) && a.handler.IsApplicable(obj)
 }
 
 func (r *Registry) find(name string) (activeAction, bool) {

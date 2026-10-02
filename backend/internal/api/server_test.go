@@ -46,7 +46,7 @@ func setup(t *testing.T) (*store.Store, http.Handler, *podAction) {
 	action := &podAction{}
 	reg := actions.NewRegistry()
 	reg.Register("restart", func(actions.Deps) actions.Handler { return action })
-	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Enabled: true, Title: "Neustart", LucideIcon: "rotate-ccw"}}, actions.Deps{}); err != nil {
+	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Enabled: true, Title: "Neustart", LucideIcon: "rotate-ccw", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
 		t.Fatal(err)
 	}
 	projects := []config.Project{
@@ -252,5 +252,29 @@ func TestCluster(t *testing.T) {
 	_, plain, _ := setup(t)
 	if body := do(plain, "GET", "/api/cluster", "", "").Body.String(); strings.TrimSpace(body) != `{"dnsName":""}` {
 		t.Fatalf("body %s", body)
+	}
+}
+
+func TestActionsRespectProjects(t *testing.T) {
+	st, h, action := setup(t)
+	// Namespace in Projekt bar; die Aktion "restart" ist nur für foo freigegeben.
+	_ = st.Update(func(tx *store.Tx) error {
+		if err := tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "bar-1"}, Project: "bar"}); err != nil {
+			return err
+		}
+		_, err := tx.Put(model.KindPod, "bar-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "bar-1"}})
+		return err
+	})
+	var resp NamespaceResponse
+	_ = json.Unmarshal(do(h, "GET", "/api/projects/bar/namespaces/bar-1", "", "").Body.Bytes(), &resp)
+	if len(resp.Pods) != 1 || len(resp.Pods[0].Actions) != 0 {
+		t.Fatalf("keine Aktionen in Projekt bar erwartet: %+v", resp.Pods)
+	}
+	body := `{"object":{"kind":"pod","namespace":"bar-1","name":"web-1"},"inputs":{"reason":"x"}}`
+	if rec := do(h, "PATCH", "/api/actions/restart", body, ""); rec.Code != 400 {
+		t.Fatalf("400 erwartet, got %d: %s", rec.Code, rec.Body)
+	}
+	if action.calls != 0 {
+		t.Fatal("Aktion darf in fremdem Projekt nicht ausgeführt werden")
 	}
 }

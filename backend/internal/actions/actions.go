@@ -22,6 +22,8 @@ const (
 type StoredObject struct {
 	Ref    model.ObjectRef
 	Object any
+	// Project ist das Dashboard-Projekt des Namespaces, in dem das Objekt liegt.
+	Project string
 }
 
 // FormField beschreibt eine zusätzliche Eingabe, die eine Aktion vom Nutzer benötigt.

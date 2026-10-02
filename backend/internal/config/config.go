@@ -96,12 +96,14 @@ type ActionHandlerConfig struct {
 	Name string `yaml:"action-name"`
 	// Handler ist der Handler-Typ. Ein Typ kann mehrere Aktionen bedienen (z. B. gitlab-pipeline).
 	// Fehlt er, gilt der action-name als Handler-Typ.
-	Handler         string         `yaml:"handler"`
-	Enabled         bool           `yaml:"enabled"`
-	Title           string         `yaml:"action-title"`
-	LucideIcon      string         `yaml:"lucide-icon"`
-	LucideIconColor string         `yaml:"lucide-icon-color"`
-	Extra           map[string]any `yaml:"extra-handler-configs"`
+	Handler         string `yaml:"handler"`
+	Enabled         bool   `yaml:"enabled"`
+	Title           string `yaml:"action-title"`
+	LucideIcon      string `yaml:"lucide-icon"`
+	LucideIconColor string `yaml:"lucide-icon-color"`
+	// Projects (Pflicht bei enabled: true) sind die Projekte, in denen die Aktion angeboten wird; leer heißt: in keinem.
+	Projects []string       `yaml:"projects"`
+	Extra    map[string]any `yaml:"extra-handler-configs"`
 }
 
 // HandlerType liefert den Handler-Typ der Aktion.
@@ -204,6 +206,9 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("actionHandlers[%d]: action-name %q ist nicht eindeutig", i, a.Name))
 		}
 		actions[a.Name] = true
+		if a.Enabled {
+			errs = append(errs, validateProjects(fmt.Sprintf("actionHandlers[%d]", i), a.Projects, projects)...)
+		}
 	}
 	return errors.Join(errs...)
 }
@@ -252,9 +257,7 @@ func validateLinks(links []Link, projects map[string]bool) []error {
 		if l.Title == "" {
 			errs = append(errs, fmt.Errorf("%s: title fehlt", at))
 		}
-		if l.Projects == nil {
-			errs = append(errs, fmt.Errorf("%s: projects fehlt (leere Liste: Link in keinem Projekt)", at))
-		}
+		errs = append(errs, validateProjects(at, l.Projects, projects)...)
 		if len(l.Targets) == 0 {
 			errs = append(errs, fmt.Errorf("%s: targets dürfen nicht leer sein", at))
 		}
@@ -266,10 +269,20 @@ func validateLinks(links []Link, projects map[string]bool) []error {
 				errs = append(errs, fmt.Errorf("%s: targets.%s: url fehlt (Typ ohne Link einfach weglassen)", at, kind))
 			}
 		}
-		for _, p := range l.Projects {
-			if !projects[p] {
-				errs = append(errs, fmt.Errorf("%s: unbekanntes Projekt %q", at, p))
-			}
+	}
+	return errs
+}
+
+// validateProjects prüft das Pflichtfeld projects von Links und Aktionen: Es muss gesetzt sein (eine leere Liste
+// ist erlaubt und bedeutet „in keinem Projekt“) und darf nur bekannte Projekte enthalten.
+func validateProjects(at string, projects []string, known map[string]bool) []error {
+	if projects == nil {
+		return []error{fmt.Errorf("%s: projects fehlt (leere Liste [] heißt: in keinem Projekt)", at)}
+	}
+	var errs []error
+	for _, p := range projects {
+		if !known[p] {
+			errs = append(errs, fmt.Errorf("%s: unbekanntes Projekt %q", at, p))
 		}
 	}
 	return errs

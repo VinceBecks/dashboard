@@ -215,8 +215,12 @@ func (s *Server) handleNamespace(w http.ResponseWriter, r *http.Request) {
 // extras liefert Aktionen und Links eines Objekts. obj ist ein model.Stored*-Wert.
 func (s *Server) extras(kind model.Kind, namespace, name string, obj any, project string) ObjectExtras {
 	return ObjectExtras{
-		Actions: s.registry.ActionsFor(storedObject(kind, namespace, name, obj)),
-		Links:   s.links.For(model.ObjectRef{Kind: kind, Namespace: namespace, Name: name}, obj, project),
+		Actions: s.registry.ActionsFor(actions.StoredObject{
+			Ref:     model.ObjectRef{Kind: kind, Namespace: namespace, Name: name},
+			Object:  obj,
+			Project: project,
+		}),
+		Links: s.links.For(model.ObjectRef{Kind: kind, Namespace: namespace, Name: name}, obj, project),
 	}
 }
 
@@ -297,7 +301,12 @@ func (s *Server) load(ref model.ObjectRef) (actions.StoredObject, bool, error) {
 	if err != nil || !found {
 		return actions.StoredObject{}, found, err
 	}
-	return actions.StoredObject{Ref: ref, Object: deref(obj)}, true, nil
+	var ns model.StoredNamespace
+	nsRef := model.ObjectRef{Kind: model.KindNamespace, Namespace: ref.Namespace, Name: ref.Namespace}
+	if found, err := s.store.Get(nsRef, &ns); err != nil || !found {
+		return actions.StoredObject{}, found, err
+	}
+	return actions.StoredObject{Ref: ref, Object: deref(obj), Project: ns.Project}, true, nil
 }
 
 func deref(obj any) any {
@@ -312,10 +321,6 @@ func deref(obj any) any {
 		return *o
 	}
 	return obj
-}
-
-func storedObject(kind model.Kind, namespace, name string, obj any) actions.StoredObject {
-	return actions.StoredObject{Ref: model.ObjectRef{Kind: kind, Namespace: namespace, Name: name}, Object: obj}
 }
 
 // notModified setzt den ETag und beantwortet die Anfrage mit 304, wenn das Frontend aktuell ist.

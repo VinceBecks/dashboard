@@ -208,11 +208,16 @@ actionHandlers:
     action-title: Pod Löschen
     lucide-icon: trash
     lucide-icon-color: red
+    projects: [foo-projekt, bar-projekt]
     extra-handler-configs:
       force-delete: true
 ```
 
 - `action-name` ist die eindeutige Aktion-ID.
+- `projects` ist Pflicht (bei `enabled: true`): die Projekte, in denen die Aktion angeboten und ausführbar ist.
+  `[]` heißt „in keinem Projekt“ (Warnung beim Start). Die Prüfung übernimmt die ActionRegistry vor dem Handler;
+  Handler müssen sich nicht um Projekte kümmern. Das Projekt des Objekts steht ihnen in `StoredObject.Project` zur
+  Verfügung.
 - `handler` (optional) ist der Handler-Typ. Fehlt er, gilt `action-name` als Handler-Typ. Ein Handler-Typ kann
   mehrere Aktionen bedienen; je Aktion entsteht eine eigene Handler-Instanz mit eigener Konfiguration.
 - `action-title`, `lucide-icon` und `lucide-icon-color` werden unverändert an das Frontend durchgereicht.
@@ -227,13 +232,13 @@ Beispiel für den generischen Handler-Typ `gitlab-pipeline` (startet eine Pipeli
     action-title: Feature deployen
     lucide-icon: rocket
     lucide-icon-color: green
+    projects: [foo-projekt]
     extra-handler-configs:
       gitlab-url: https://gitlab.mycomp.de
       project: team/foo-deploy            # Projekt-ID oder Pfad
       ref: main                           # Go-Template erlaubt
       token-env: GITLAB_TRIGGER_TOKEN_FOO # Env-Variable mit dem Trigger-Token
       applies-to: [namespace]             # namespace | service | ingress | pod
-      projects: [foo-projekt]             # optional: nur für diese Projekte
       timeout: 15s                        # optional, Standard 10s
       variables:
         NAMESPACE: "{{ .Namespace }}"     # verfügbar: .Kind .Name .Namespace .Project .Labels .Annotations

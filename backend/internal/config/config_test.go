@@ -17,6 +17,7 @@ actionHandlers:
     action-title: Pod Löschen
     lucide-icon: trash
     lucide-icon-color: red
+    projects: [foo-projekt]
     extra-handler-configs:
       force-delete: true
 store:
@@ -32,7 +33,7 @@ func TestParse(t *testing.T) {
 		t.Errorf("bool-Label als String erwartet, got %q", got)
 	}
 	a := cfg.ActionHandlers[0]
-	if !a.Enabled || a.Title != "Pod Löschen" || a.Extra["force-delete"] != true {
+	if !a.Enabled || a.Title != "Pod Löschen" || a.Extra["force-delete"] != true || len(a.Projects) != 1 || a.Projects[0] != "foo-projekt" {
 		t.Errorf("unerwarteter ActionHandler: %+v", a)
 	}
 	if cfg.Store.RecreateInterval.Duration() != 48*time.Hour {
@@ -216,6 +217,29 @@ func TestClusterDNSName(t *testing.T) {
 	for _, invalid := range []string{"https://nodes.mycomp.de", "nodes.mycomp.de:30000", "nodes mycomp"} {
 		if _, err := Parse([]byte("cluster:\n  dns-name: \"" + invalid + "\"\n")); err == nil {
 			t.Errorf("%q: Fehler erwartet", invalid)
+		}
+	}
+}
+
+func TestActionProjectsValidation(t *testing.T) {
+	const projects = "projects:\n  - project-name: foo\n    namespace-labels: {a: b}\n"
+	valid := map[string]string{
+		"Projekt gesetzt":           `[{action-name: x, enabled: true, projects: [foo]}]`,
+		"leere Liste":               `[{action-name: x, enabled: true, projects: []}]`,
+		"deaktiviert ohne projects": `[{action-name: x, enabled: false}]`,
+	}
+	for name, actions := range valid {
+		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	invalid := map[string]string{
+		"projects fehlt":      `[{action-name: x, enabled: true}]`,
+		"unbekanntes Projekt": `[{action-name: x, enabled: true, projects: [nope]}]`,
+	}
+	for name, actions := range invalid {
+		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err == nil {
+			t.Errorf("%s: Fehler erwartet", name)
 		}
 	}
 }

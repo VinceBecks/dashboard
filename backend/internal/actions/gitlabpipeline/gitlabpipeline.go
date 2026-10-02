@@ -35,11 +35,12 @@ const (
 
 // settings sind die extra-handler-configs einer Aktion.
 type settings struct {
-	GitLabURL string            `yaml:"gitlab-url"`
-	Project   string            `yaml:"project"`
-	Ref       string            `yaml:"ref"`
-	TokenEnv  string            `yaml:"token-env"`
-	AppliesTo []model.Kind      `yaml:"applies-to"`
+	GitLabURL string       `yaml:"gitlab-url"`
+	Project   string       `yaml:"project"`
+	Ref       string       `yaml:"ref"`
+	TokenEnv  string       `yaml:"token-env"`
+	AppliesTo []model.Kind `yaml:"applies-to"`
+	// Projects gibt es nur noch als allgemeines Feld der Aktion; hier nur, um alte Configs zu erkennen.
 	Projects  []string          `yaml:"projects"`
 	Timeout   string            `yaml:"timeout"`
 	Variables map[string]string `yaml:"variables"`
@@ -47,19 +48,17 @@ type settings struct {
 
 // Handler startet eine GitLab-Pipeline.
 type Handler struct {
-	store      actions.ObjectReader
 	client     *http.Client
 	triggerURL string
 	token      string
 	appliesTo  []model.Kind
-	projects   []string
 	ref        *template.Template
 	variables  map[string]*template.Template
 }
 
 // New ist die Factory für die Registry.
 func New(deps actions.Deps) actions.Handler {
-	return &Handler{store: deps.Store}
+	return &Handler{}
 }
 
 // Configure liest und prüft die extra-handler-configs. Fehler brechen den Start des Backends ab.
@@ -97,7 +96,9 @@ func (h *Handler) Configure(extra map[string]any) error {
 		}
 	}
 	h.appliesTo = s.AppliesTo
-	h.projects = s.Projects
+	if s.Projects != nil {
+		errs = append(errs, errors.New("projects gehört nicht mehr in extra-handler-configs, sondern direkt an die Aktion (projects: [...])"))
+	}
 
 	timeout := defaultTimeout
 	if s.Timeout != "" {
@@ -124,16 +125,9 @@ func (h *Handler) Configure(extra map[string]any) error {
 	return errors.Join(errs...)
 }
 
-// IsApplicable prüft Objekt-Typ (applies-to) und, falls konfiguriert, das Dashboard-Projekt (projects).
+// IsApplicable prüft den Objekt-Typ (applies-to). Die Projekte prüft bereits die Registry (projects der Aktion).
 func (h *Handler) IsApplicable(obj actions.StoredObject) bool {
-	if !slices.Contains(h.appliesTo, obj.Ref.Kind) {
-		return false
-	}
-	if len(h.projects) == 0 {
-		return true
-	}
-	project, ok := h.projectOf(obj)
-	return ok && slices.Contains(h.projects, project)
+	return slices.Contains(h.appliesTo, obj.Ref.Kind)
 }
 
 // FormFields: keine Eingaben; das Frontend fragt nur die Bestätigung ab.
@@ -187,21 +181,7 @@ func (h *Handler) Execute(ctx context.Context, obj actions.StoredObject, _ map[s
 }
 
 func (h *Handler) templateData(obj actions.StoredObject) (objecttemplate.Data, error) {
-	project, _ := h.projectOf(obj)
-	return objecttemplate.NewData(obj.Ref, obj.Object, project)
-}
-
-// projectOf ermittelt das Dashboard-Projekt eines Objekts über seinen Namespace.
-func (h *Handler) projectOf(obj actions.StoredObject) (string, bool) {
-	if ns, ok := obj.Object.(model.StoredNamespace); ok {
-		return ns.Project, true
-	}
-	var ns model.StoredNamespace
-	ref := model.ObjectRef{Kind: model.KindNamespace, Namespace: obj.Ref.Namespace, Name: obj.Ref.Namespace}
-	if found, err := h.store.Get(ref, &ns); err != nil || !found {
-		return "", false
-	}
-	return ns.Project, true
+	return objecttemplate.NewData(obj.Ref, obj.Object, obj.Project)
 }
 
 // gitlabMessage liest das Feld "message" einer GitLab-Fehlerantwort, sonst den gekürzten Body.
