@@ -85,7 +85,7 @@ data:
         targets:
           namespace:
             url: |-
-              {{ .Vars.demoUrl }}/namespaces/{{ .Name }}/{{ .Vars.something }}?foo={{ printf "hello" | urlquery }}
+              {{ .Vars.demoUrl }}/namespaces/{{ .Name }}/{{ .Vars.something }}?foo={{ printf "hello world // bro" | urlquery }}
           service: # Logs aller Pods, die der Service selektiert
             url: |-
               {{ .Vars.demoUrl }}/namespaces/{{ .Namespace }}/services/{{ .Name }}/{{ .Vars.something }}?foo={{ printf "hello" }}
