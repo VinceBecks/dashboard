@@ -23,6 +23,11 @@ actionHandlers:
     action-title: NodePort-Service erstellen
     lucide-icon: network
     lucide-icon-color: blue
+  - action-name: delete-node-port-service
+    enabled: true
+    action-title: NodePort-Service löschen
+    lucide-icon: trash-2
+    lucide-icon-color: red
 
 store:
   recreate-store-interval: 1h

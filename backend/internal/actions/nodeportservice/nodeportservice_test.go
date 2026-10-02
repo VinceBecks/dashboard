@@ -16,7 +16,7 @@ import (
 	"feature-dashboard/internal/store"
 )
 
-const actionName = "node-port-service-on-service-base"
+const actionName = CreateActionName
 
 func ptr(v int32) *int32 { return &v }
 
@@ -139,7 +139,8 @@ func TestExecute(t *testing.T) {
 	if len(svc.Spec.Ports) != 1 || svc.Spec.Ports[0] != wantPorts[0] {
 		t.Fatalf("Ports = %+v", svc.Spec.Ports)
 	}
-	if svc.Annotations[annotationBaseOfSvc] != "web" || svc.Labels[labelManagedBy] != managedByValue {
+	if svc.Annotations[AnnotationBaseService] != "web" || svc.Labels[labelManagedBy] != managedByValue ||
+		svc.Labels[LabelCreatedByAction] != CreateActionName {
 		t.Fatalf("Metadaten = %+v %+v", svc.Labels, svc.Annotations)
 	}
 

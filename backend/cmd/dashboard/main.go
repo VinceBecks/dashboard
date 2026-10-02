@@ -50,7 +50,8 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	registry := actions.NewRegistry()
 	// Neue ActionHandler hier registrieren und in der config.yaml aktivieren.
 	registry.Register("delete-pod", deletepod.New)
-	registry.Register("node-port-service-on-service-base", nodeportservice.New)
+	registry.Register(nodeportservice.CreateActionName, nodeportservice.New)
+	registry.Register(nodeportservice.DeleteActionName, nodeportservice.NewDelete)
 	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: st}); err != nil {
 		return err
 	}

@@ -19,14 +19,24 @@ import (
 )
 
 const (
+	// CreateActionName ist der action-name des Handlers, der NodePort-Services erstellt.
+	CreateActionName = "node-port-service-on-service-base"
+	// DeleteActionName ist der action-name des Handlers, der sie wieder löscht.
+	DeleteActionName = "delete-node-port-service"
+
 	// NameSuffix wird an den Namen des Basis-Services angehängt.
 	NameSuffix = "-node-port"
 	// FieldPorts ist die Feld-ID der Port-Auswahl im Formular.
 	FieldPorts = "ports"
 
-	labelManagedBy      = "app.kubernetes.io/managed-by"
-	managedByValue      = "feature-dashboard"
-	annotationBaseOfSvc = "feature-dashboard/base-service"
+	// LabelCreatedByAction markiert Services, die eine Dashboard-Aktion erstellt hat; Wert ist der action-name.
+	// Nur Services mit LabelCreatedByAction = CreateActionName darf DeleteHandler löschen.
+	LabelCreatedByAction = "feature-dashboard/created-by-action"
+	// AnnotationBaseService enthält den Namen des ClusterIP-Services, auf dem der NodePort-Service basiert.
+	AnnotationBaseService = "feature-dashboard/base-service"
+
+	labelManagedBy = "app.kubernetes.io/managed-by"
+	managedByValue = "feature-dashboard"
 )
 
 // Handler erstellt zu einem ClusterIP-Service einen NodePort-Service „<name>-node-port“ mit demselben Selector
@@ -98,8 +108,8 @@ func (h *Handler) Execute(ctx context.Context, obj actions.StoredObject, inputs 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        base.Name + NameSuffix,
 			Namespace:   obj.Ref.Namespace,
-			Labels:      map[string]string{labelManagedBy: managedByValue},
-			Annotations: map[string]string{annotationBaseOfSvc: base.Name},
+			Labels:      map[string]string{labelManagedBy: managedByValue, LabelCreatedByAction: CreateActionName},
+			Annotations: map[string]string{AnnotationBaseService: base.Name},
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeNodePort,

@@ -14,7 +14,8 @@ rules:
     verbs: [get, list, watch]
   - apiGroups: [""]
     resources: [services]
-    verbs: [get, list, watch, create] # create: Aktion node-port-service-on-service-base
+    # create: Aktion node-port-service-on-service-base, delete: Aktion delete-node-port-service
+    verbs: [get, list, watch, create, delete]
   - apiGroups: [""]
     resources: [pods]
     verbs: [get, list, watch, delete] # delete: Aktion delete-pod
