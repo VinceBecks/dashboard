@@ -64,5 +64,10 @@ data:
         action-title: NodePort-Service löschen
         lucide-icon: trash-2
         lucide-icon-color: red
+      - action-name: restart-service-replicas
+        enabled: true
+        action-title: Alle Replika löschen (Neustart)
+        lucide-icon: rotate-ccw
+        lucide-icon-color: orange
     store:
       recreate-store-interval: 5m
