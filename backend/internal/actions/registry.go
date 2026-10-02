@@ -52,21 +52,20 @@ func (r *Registry) Register(handlerType string, f Factory) {
 	r.factories[handlerType] = f
 }
 
-// Activate erzeugt und konfiguriert die Handler aller aktivierten Aktionen aus der config.yaml.
-// Je Aktion entsteht eine eigene Handler-Instanz, auch wenn mehrere Aktionen denselben Handler-Typ nutzen.
+// Activate erzeugt und konfiguriert die Handler aller Aktionen aus der config.yaml, die in mindestens einem
+// Projekt angeboten werden. Je Aktion entsteht eine eigene Handler-Instanz, auch wenn mehrere Aktionen denselben
+// Handler-Typ nutzen. Bei Aktionen mit projects: [] wird nur geprüft, ob der Handler-Typ existiert.
 func (r *Registry) Activate(cfgs []config.ActionHandlerConfig, deps Deps) error {
 	var errs []error
 	for _, c := range cfgs {
-		if !c.Enabled {
-			continue
-		}
 		f, ok := r.factories[c.HandlerType()]
 		if !ok {
 			errs = append(errs, fmt.Errorf("aktion %q: kein ActionHandler vom Typ %q registriert", c.Name, c.HandlerType()))
 			continue
 		}
-		if len(c.Projects) == 0 {
-			slog.Warn("Aktion ist in keinem Projekt verfügbar (projects ist leer)", "action", c.Name)
+		if !c.Active() {
+			slog.Info("Aktion ist deaktiviert (projects ist leer)", "action", c.Name)
+			continue
 		}
 		h := f(deps)
 		if err := h.Configure(c.Extra); err != nil {

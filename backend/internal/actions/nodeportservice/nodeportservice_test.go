@@ -56,7 +56,7 @@ func setup(t *testing.T, services ...model.StoredService) (*actions.Registry, *f
 	client := fake.NewClientset()
 	reg := actions.NewRegistry()
 	reg.Register(actionName, New)
-	if err := reg.Activate([]config.ActionHandlerConfig{{Name: actionName, Enabled: true, Projects: []string{"foo"}}}, actions.Deps{Client: client, Store: st}); err != nil {
+	if err := reg.Activate([]config.ActionHandlerConfig{{Name: actionName, Projects: []string{"foo"}}}, actions.Deps{Client: client, Store: st}); err != nil {
 		t.Fatal(err)
 	}
 	return reg, client

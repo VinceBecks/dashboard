@@ -46,7 +46,7 @@ func setup(t *testing.T) (*store.Store, http.Handler, *podAction) {
 	action := &podAction{}
 	reg := actions.NewRegistry()
 	reg.Register("restart", func(actions.Deps) actions.Handler { return action })
-	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Enabled: true, Title: "Neustart", LucideIcon: "rotate-ccw", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
+	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Title: "Neustart", LucideIcon: "rotate-ccw", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
 		t.Fatal(err)
 	}
 	projects := []config.Project{

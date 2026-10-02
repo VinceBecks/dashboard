@@ -204,7 +204,6 @@ Beispiel für ActionHandler:
 ```yaml
 actionHandlers:
   - action-name: delete-pod
-    enabled: true
     action-title: Pod Löschen
     lucide-icon: trash
     lucide-icon-color: red
@@ -214,8 +213,9 @@ actionHandlers:
 ```
 
 - `action-name` ist die eindeutige Aktion-ID.
-- `projects` ist Pflicht (bei `enabled: true`): die Projekte, in denen die Aktion angeboten und ausführbar ist.
-  `[]` heißt „in keinem Projekt“ (Warnung beim Start). Die Prüfung übernimmt die ActionRegistry vor dem Handler;
+- `projects` ist Pflicht: die Projekte, in denen die Aktion angeboten und ausführbar ist. `projects: []`
+  deaktiviert die Aktion; ihr Handler wird dann nicht erzeugt (es wird nur geprüft, ob der Handler-Typ existiert).
+  Ein Feld `enabled` gibt es nicht mehr. Die Prüfung übernimmt die ActionRegistry vor dem Handler;
   Handler müssen sich nicht um Projekte kümmern. Das Projekt des Objekts steht ihnen in `StoredObject.Project` zur
   Verfügung.
 - `handler` (optional) ist der Handler-Typ. Fehlt er, gilt `action-name` als Handler-Typ. Ein Handler-Typ kann
@@ -228,7 +228,6 @@ Beispiel für den generischen Handler-Typ `gitlab-pipeline` (startet eine Pipeli
 ```yaml
   - action-name: deploy-feature
     handler: gitlab-pipeline
-    enabled: true
     action-title: Feature deployen
     lucide-icon: rocket
     lucide-icon-color: green
@@ -306,8 +305,8 @@ store:
 ### Aktionen
 
 - Je aktivierter Aktion gibt es genau einen **ActionHandler**.
-- Jeder ActionHandler registriert sich beim Startup in der **ActionRegistry**. Nur Handler, die in der `config.yaml`
-  `enabled: true` haben, sind aktiv.
+- Jeder ActionHandler registriert sich beim Startup in der **ActionRegistry**. Nur Aktionen, die in der `config.yaml`
+  mindestens ein Projekt in `projects` haben, sind aktiv.
 - Der ActionHandler entscheidet selbst:
     1. ob er für ein konkretes Objekt *applicable* ist,
     2. ob er zum Ausführen zusätzliche Eingaben vom Nutzer braucht, und wenn ja, welche Formular-Felder.

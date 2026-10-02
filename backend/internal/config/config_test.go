@@ -13,7 +13,6 @@ projects:
       mycomp.de/project-name: foo-projekt
 actionHandlers:
   - action-name: delete-pod
-    enabled: true
     action-title: Pod Löschen
     lucide-icon: trash
     lucide-icon-color: red
@@ -33,7 +32,7 @@ func TestParse(t *testing.T) {
 		t.Errorf("bool-Label als String erwartet, got %q", got)
 	}
 	a := cfg.ActionHandlers[0]
-	if !a.Enabled || a.Title != "Pod Löschen" || a.Extra["force-delete"] != true || len(a.Projects) != 1 || a.Projects[0] != "foo-projekt" {
+	if a.Title != "Pod Löschen" || a.Extra["force-delete"] != true || len(a.Projects) != 1 || a.Projects[0] != "foo-projekt" {
 		t.Errorf("unerwarteter ActionHandler: %+v", a)
 	}
 	if cfg.Store.RecreateInterval.Duration() != 48*time.Hour {
@@ -76,7 +75,9 @@ func TestHandlerType(t *testing.T) {
 actionHandlers:
   - action-name: deploy
     handler: gitlab-pipeline
+    projects: []
   - action-name: delete-pod
+    projects: []
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -224,9 +225,8 @@ func TestClusterDNSName(t *testing.T) {
 func TestActionProjectsValidation(t *testing.T) {
 	const projects = "projects:\n  - project-name: foo\n    namespace-labels: {a: b}\n"
 	valid := map[string]string{
-		"Projekt gesetzt":           `[{action-name: x, enabled: true, projects: [foo]}]`,
-		"leere Liste":               `[{action-name: x, enabled: true, projects: []}]`,
-		"deaktiviert ohne projects": `[{action-name: x, enabled: false}]`,
+		"Projekt gesetzt":           `[{action-name: x, projects: [foo]}]`,
+		"leere Liste (deaktiviert)": `[{action-name: x, projects: []}]`,
 	}
 	for name, actions := range valid {
 		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err != nil {
@@ -234,8 +234,9 @@ func TestActionProjectsValidation(t *testing.T) {
 		}
 	}
 	invalid := map[string]string{
-		"projects fehlt":      `[{action-name: x, enabled: true}]`,
-		"unbekanntes Projekt": `[{action-name: x, enabled: true, projects: [nope]}]`,
+		"projects fehlt":      `[{action-name: x}]`,
+		"unbekanntes Projekt": `[{action-name: x, projects: [nope]}]`,
+		"enabled (veraltet)":  `[{action-name: x, enabled: true, projects: [foo]}]`,
 	}
 	for name, actions := range invalid {
 		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err == nil {

@@ -32,13 +32,13 @@ func TestRegistry(t *testing.T) {
 	r := NewRegistry()
 	r.Register("scale", func(Deps) Handler { return stub })
 	err := r.Activate([]config.ActionHandlerConfig{
-		{Name: "scale", Enabled: true, Title: "Skalieren", LucideIcon: "scale", Projects: []string{"foo"}},
-		{Name: "unknown-disabled", Enabled: false},
+		{Name: "scale", Title: "Skalieren", LucideIcon: "scale", Projects: []string{"foo"}},
+		{Name: "scale-disabled", Handler: "scale", Projects: []string{}},
 	}, Deps{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := NewRegistry().Activate([]config.ActionHandlerConfig{{Name: "x", Enabled: true}}, Deps{}); err == nil {
+	if err := NewRegistry().Activate([]config.ActionHandlerConfig{{Name: "x", Projects: []string{"foo"}}}, Deps{}); err == nil {
 		t.Fatal("unbekannter aktivierter Handler muss Fehler liefern")
 	}
 
@@ -84,9 +84,9 @@ func TestHandlerTypeServesMultipleActions(t *testing.T) {
 	r.Register("generic", func(Deps) Handler { return &configuredHandler{} })
 	r.Register("legacy", func(Deps) Handler { return &configuredHandler{} })
 	err := r.Activate([]config.ActionHandlerConfig{
-		{Name: "a", Handler: "generic", Enabled: true, Projects: []string{"foo"}, Extra: map[string]any{"target": "A"}},
-		{Name: "b", Handler: "generic", Enabled: true, Projects: []string{"foo"}, Extra: map[string]any{"target": "B"}},
-		{Name: "legacy", Enabled: true, Projects: []string{"foo"}, Extra: map[string]any{"target": "L"}},
+		{Name: "a", Handler: "generic", Projects: []string{"foo"}, Extra: map[string]any{"target": "A"}},
+		{Name: "b", Handler: "generic", Projects: []string{"foo"}, Extra: map[string]any{"target": "B"}},
+		{Name: "legacy", Projects: []string{"foo"}, Extra: map[string]any{"target": "L"}},
 	}, Deps{})
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestHandlerTypeServesMultipleActions(t *testing.T) {
 			t.Errorf("%s: res = %+v, err = %v", name, res, err)
 		}
 	}
-	if err := NewRegistry().Activate([]config.ActionHandlerConfig{{Name: "x", Handler: "missing", Enabled: true}}, Deps{}); err == nil ||
+	if err := NewRegistry().Activate([]config.ActionHandlerConfig{{Name: "x", Handler: "missing", Projects: []string{"foo"}}}, Deps{}); err == nil ||
 		!strings.Contains(err.Error(), `"missing"`) {
 		t.Fatalf("Fehler mit Handler-Typ erwartet, got %v", err)
 	}
@@ -110,9 +110,9 @@ func TestActionProjects(t *testing.T) {
 	r := NewRegistry()
 	r.Register("generic", func(Deps) Handler { return &configuredHandler{} })
 	err := r.Activate([]config.ActionHandlerConfig{
-		{Name: "foo-only", Handler: "generic", Enabled: true, Projects: []string{"foo"}},
-		{Name: "both", Handler: "generic", Enabled: true, Projects: []string{"foo", "bar"}},
-		{Name: "nowhere", Handler: "generic", Enabled: true, Projects: []string{}},
+		{Name: "foo-only", Handler: "generic", Projects: []string{"foo"}},
+		{Name: "both", Handler: "generic", Projects: []string{"foo", "bar"}},
+		{Name: "nowhere", Handler: "generic", Projects: []string{}},
 	}, Deps{})
 	if err != nil {
 		t.Fatal(err)
@@ -141,5 +141,27 @@ func TestActionProjects(t *testing.T) {
 	}
 	if _, err := r.Execute(ctx, "both", barPod, nil); err != nil {
 		t.Errorf("Ausführung im erlaubten Projekt: err = %v", err)
+	}
+}
+
+type failingConfigure struct{ configuredHandler }
+
+func (failingConfigure) Configure(map[string]any) error {
+	return errors.New("darf nicht aufgerufen werden")
+}
+
+func TestDisabledActions(t *testing.T) {
+	r := NewRegistry()
+	r.Register("failing", func(Deps) Handler { return &failingConfigure{} })
+	// projects: [] deaktiviert die Aktion: Der Handler wird nicht erzeugt, Configure nicht aufgerufen.
+	if err := r.Activate([]config.ActionHandlerConfig{{Name: "off", Handler: "failing", Projects: []string{}}}, Deps{}); err != nil {
+		t.Fatalf("deaktivierte Aktion darf nicht konfiguriert werden: %v", err)
+	}
+	if r.Has("off") {
+		t.Fatal("deaktivierte Aktion darf nicht aktiv sein")
+	}
+	// Ein unbekannter Handler-Typ fällt auch bei deaktivierten Aktionen auf.
+	if err := NewRegistry().Activate([]config.ActionHandlerConfig{{Name: "typo", Handler: "gibts-nicht", Projects: []string{}}}, Deps{}); err == nil {
+		t.Fatal("unbekannter Handler-Typ muss auch bei deaktivierter Aktion auffallen")
 	}
 }

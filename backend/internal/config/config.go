@@ -97,13 +97,20 @@ type ActionHandlerConfig struct {
 	// Handler ist der Handler-Typ. Ein Typ kann mehrere Aktionen bedienen (z. B. gitlab-pipeline).
 	// Fehlt er, gilt der action-name als Handler-Typ.
 	Handler         string `yaml:"handler"`
-	Enabled         bool   `yaml:"enabled"`
 	Title           string `yaml:"action-title"`
 	LucideIcon      string `yaml:"lucide-icon"`
 	LucideIconColor string `yaml:"lucide-icon-color"`
-	// Projects (Pflicht bei enabled: true) sind die Projekte, in denen die Aktion angeboten wird; leer heißt: in keinem.
+	// Projects (Pflicht) sind die Projekte, in denen die Aktion angeboten wird. Eine leere Liste deaktiviert die
+	// Aktion: Ihr Handler wird dann nicht erzeugt.
 	Projects []string       `yaml:"projects"`
 	Extra    map[string]any `yaml:"extra-handler-configs"`
+	// Enabled gibt es nicht mehr; das Feld dient nur dazu, alte Configs mit einem klaren Fehler abzulehnen.
+	Enabled *bool `yaml:"enabled"`
+}
+
+// Active meldet, ob die Aktion in mindestens einem Projekt angeboten wird.
+func (a ActionHandlerConfig) Active() bool {
+	return len(a.Projects) > 0
 }
 
 // HandlerType liefert den Handler-Typ der Aktion.
@@ -206,9 +213,10 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("actionHandlers[%d]: action-name %q ist nicht eindeutig", i, a.Name))
 		}
 		actions[a.Name] = true
-		if a.Enabled {
-			errs = append(errs, validateProjects(fmt.Sprintf("actionHandlers[%d]", i), a.Projects, projects)...)
+		if a.Enabled != nil {
+			errs = append(errs, fmt.Errorf("actionHandlers[%d]: enabled gibt es nicht mehr; deaktivieren mit projects: []", i))
 		}
+		errs = append(errs, validateProjects(fmt.Sprintf("actionHandlers[%d]", i), a.Projects, projects)...)
 	}
 	return errors.Join(errs...)
 }
