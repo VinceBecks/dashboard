@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feature-dashboard
+  namespace: feature-dashboard
+data:
+  config.yaml: |
+    projects:
+      - project-name: foo-projekt
+        namespace-labels:
+          mycomp.de/is-feature-environment: true
+          mycomp.de/project-name: foo-projekt
+      - project-name: bar-projekt
+        namespace-labels:
+          mycomp.de/is-feature-environment: true
+          mycomp.de/project-name: bar
+    actionHandlers:
+      - action-name: delete-pod
+        enabled: true
+        action-title: Pod Löschen
+        lucide-icon: trash
+        lucide-icon-color: red
+        extra-handler-configs:
+          force-delete: true
+    store:
+      recreate-store-interval: 2m
