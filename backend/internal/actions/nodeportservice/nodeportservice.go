@@ -153,9 +153,11 @@ func portLabel(p model.ServicePort) string {
 	if p.ResolvedTargetPort != nil && strconv.Itoa(int(*p.ResolvedTargetPort)) != p.TargetPort {
 		target = fmt.Sprintf("%s (%d)", p.TargetPort, *p.ResolvedTargetPort)
 	}
-	label := fmt.Sprintf("Target-Port %s (Service-Port %d)", target, p.Port)
+	var label string
 	if p.Name != "" {
-		label = p.Name + ": " + label
+		label = fmt.Sprintf(" %s (%s)", target, p.Name)
+	} else {
+		label = fmt.Sprintf(" %s", target)
 	}
 	return label
 }
