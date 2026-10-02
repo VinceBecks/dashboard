@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Action, NamespaceResponse } from '../api/types';
+import type { Action, Link, NamespaceResponse } from '../api/types';
 import { mockFetch } from '../test/fetchMock';
 import { NamespacePage } from './NamespacePage';
 
@@ -10,12 +10,20 @@ afterEach(() => vi.unstubAllGlobals());
 
 const action = (id: string, title: string): Action => ({ id, title, lucideIcon: 'trash', lucideIconColor: 'red' });
 
+const link = (id: string, title: string, url: string): Link => ({ id, title, url, lucideIcon: 'scroll-text', lucideIconColor: 'teal' });
+
 const data: NamespaceResponse = {
-  namespace: { name: 'feat-1', project: 'foo', actions: [action('ns-action', 'Namespace löschen')] },
+  namespace: {
+    name: 'feat-1',
+    project: 'foo',
+    actions: [action('ns-action', 'Namespace löschen')],
+    links: [link('logs', 'Namespace-Logs', 'https://kibana.example/ns')],
+  },
   ingresses: [
     {
       name: 'web',
       actions: [],
+      links: [],
       rules: [
         {
           host: 'web.example',
@@ -31,6 +39,7 @@ const data: NamespaceResponse = {
       ports: [{ name: 'http', port: 80, targetPort: 'http', resolvedTargetPort: 8080 }],
       replicas: ['web-1'],
       actions: [action('svc-action', 'Service neu starten')],
+      links: [],
     },
     {
       name: 'debug',
@@ -38,6 +47,7 @@ const data: NamespaceResponse = {
       ports: [{ port: 80, targetPort: '80', nodePort: 30080 }],
       replicas: [],
       actions: [],
+      links: [],
     },
   ],
   serviceAreas: [
@@ -52,6 +62,7 @@ const data: NamespaceResponse = {
       ready: true,
       containers: [{ name: 'web', image: 'nginx:1.27' }],
       actions: [action('delete-pod', 'Pod löschen')],
+      links: [link('logs', 'Pod-Logs', 'https://kibana.example/pod/web-1')],
     },
   ],
 };
@@ -157,6 +168,21 @@ describe('NamespacePage', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Anwendungs-Services' });
     expect(screen.queryByRole('group', { name: 'Service-Bereiche filtern' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt Links an Namespace und Pods, die in einem neuen Tab öffnen', async () => {
+    mockFetch(() => ({ status: 200, body: data, etag: '"1"' }));
+    renderPage();
+    const nsLink = await screen.findByRole('link', { name: 'Namespace-Logs' });
+    expect(nsLink).toHaveAttribute('href', 'https://kibana.example/ns');
+    expect(nsLink).toHaveAttribute('target', '_blank');
+    expect(nsLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // Pod-Links stehen bei den Replicas, Pod-Aktionen weiterhin nicht.
+    const podLinks = screen.getAllByRole('link', { name: 'Pod-Logs' });
+    expect(podLinks.length).toBeGreaterThan(0);
+    podLinks.forEach((l) => expect(l).toHaveAttribute('href', 'https://kibana.example/pod/web-1'));
+    expect(screen.queryByRole('button', { name: 'Pod löschen' })).not.toBeInTheDocument();
   });
 
   it('meldet einen nicht (mehr) existierenden Namespace', async () => {

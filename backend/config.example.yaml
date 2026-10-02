@@ -72,5 +72,29 @@ actionHandlers:
   #       NAMESPACE: "{{ .Namespace }}"
   #       ACTION: deploy
 
+# Links je Objekt, z. B. Absprung nach Kibana. Auskommentiert, da die URLs Platzhalter sind.
+# link-variables:
+#   kibanaUrl: https://kibana.mycomp.de
+#   kibanaDataView: logs-k8s
+#   timeRange: now-1h
+# links:
+#   - link-id: kibana-logs
+#     title: Logs in Kibana
+#     lucide-icon: scroll-text
+#     lucide-icon-color: "#00bfb3"
+#     targets:
+#       namespace:
+#         query: 'kubernetes.namespace:"{{ .Namespace }}"'
+#       pod:
+#         query: 'kubernetes.namespace:"{{ .Namespace }}" and kubernetes.pod.name:"{{ .Name }}"'
+#       service:   # Logs aller Pods, die der Service selektiert
+#         query: >-
+#           kubernetes.namespace:"{{ .Namespace }}"
+#           {{- range $k, $v := .Selector }} and kubernetes.labels.{{ replace $k "." "_" }}:"{{ $v }}"{{ end }}
+#     url: |-
+#       {{ .Vars.kibanaUrl }}/app/discover#/?_g=(time:(from:{{ .Vars.timeRange }},to:now))
+#       &_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
+#       query:(language:kuery,query:{{ rison .Target.query }}))
+
 store:
   recreate-store-interval: 1h

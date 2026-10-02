@@ -13,6 +13,7 @@ import (
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
+	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/project"
 	"feature-dashboard/internal/store"
@@ -28,6 +29,7 @@ type Server struct {
 	projects  []config.Project
 	ready     func() bool
 	staticDir string
+	links     *links.Registry
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
@@ -38,6 +40,12 @@ func NewServer(st *store.Store, registry *actions.Registry, projects []config.Pr
 // WithStaticDir lässt den Server zusätzlich den Frontend-Build aus dir ausliefern.
 func (s *Server) WithStaticDir(dir string) *Server {
 	s.staticDir = dir
+	return s
+}
+
+// WithLinks lässt den Server an jedem Objekt die konfigurierten Links ausliefern.
+func (s *Server) WithLinks(r *links.Registry) *Server {
+	s.links = r
 	return s
 }
 
@@ -82,28 +90,34 @@ type ProjectDTO struct {
 	Namespaces []NamespaceDTO `json:"namespaces"`
 }
 
-// NamespaceDTO ist ein Namespace mit seinen Aktionen.
+// ObjectExtras sind die Aktionen und Links, die jedes Objekt in der Response trägt.
+type ObjectExtras struct {
+	Actions []actions.Action `json:"actions"`
+	Links   []links.Link     `json:"links"`
+}
+
+// NamespaceDTO ist ein Namespace mit seinen Aktionen und Links.
 type NamespaceDTO struct {
 	model.StoredNamespace
-	Actions []actions.Action `json:"actions"`
+	ObjectExtras
 }
 
-// ServiceDTO ist ein Service mit seinen Aktionen.
+// ServiceDTO ist ein Service mit seinen Aktionen und Links.
 type ServiceDTO struct {
 	model.StoredService
-	Actions []actions.Action `json:"actions"`
+	ObjectExtras
 }
 
-// IngressDTO ist ein Ingress mit seinen Aktionen.
+// IngressDTO ist ein Ingress mit seinen Aktionen und Links.
 type IngressDTO struct {
 	model.StoredIngress
-	Actions []actions.Action `json:"actions"`
+	ObjectExtras
 }
 
-// PodDTO ist ein Pod mit seinen Aktionen.
+// PodDTO ist ein Pod mit seinen Aktionen und Links.
 type PodDTO struct {
 	model.StoredPod
-	Actions []actions.Action `json:"actions"`
+	ObjectExtras
 }
 
 // NamespaceResponse ist die Antwort von GET /api/projects/{project}/namespaces/{namespace}.
@@ -127,10 +141,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	byProject := map[string][]NamespaceDTO{}
 	for _, ns := range namespaces {
-		byProject[ns.Project] = append(byProject[ns.Project], NamespaceDTO{
-			StoredNamespace: ns,
-			Actions:         s.registry.ActionsFor(storedObject(model.KindNamespace, ns.Name, ns.Name, ns)),
-		})
+		byProject[ns.Project] = append(byProject[ns.Project], NamespaceDTO{ns, s.extras(model.KindNamespace, ns.Name, ns.Name, ns, ns.Project)})
 	}
 	resp := ProjectsResponse{Projects: make([]ProjectDTO, 0, len(s.projects))}
 	for _, p := range s.projects {
@@ -160,21 +171,29 @@ func (s *Server) handleNamespace(w http.ResponseWriter, r *http.Request) {
 	projectCfg, _ := s.project(ns.Project)
 	resp := NamespaceResponse{
 		ServiceAreas: project.AssignServiceAreas(projectCfg, view.Services),
-		Namespace:    NamespaceDTO{ns, s.registry.ActionsFor(storedObject(model.KindNamespace, ns.Name, ns.Name, ns))},
+		Namespace:    NamespaceDTO{ns, s.extras(model.KindNamespace, ns.Name, ns.Name, ns, ns.Project)},
 		Services:     make([]ServiceDTO, 0, len(view.Services)),
 		Ingresses:    make([]IngressDTO, 0, len(view.Ingresses)),
 		Pods:         make([]PodDTO, 0, len(view.Pods)),
 	}
 	for _, o := range view.Services {
-		resp.Services = append(resp.Services, ServiceDTO{o, s.registry.ActionsFor(storedObject(model.KindService, ns.Name, o.Name, o))})
+		resp.Services = append(resp.Services, ServiceDTO{o, s.extras(model.KindService, ns.Name, o.Name, o, ns.Project)})
 	}
 	for _, o := range view.Ingresses {
-		resp.Ingresses = append(resp.Ingresses, IngressDTO{o, s.registry.ActionsFor(storedObject(model.KindIngress, ns.Name, o.Name, o))})
+		resp.Ingresses = append(resp.Ingresses, IngressDTO{o, s.extras(model.KindIngress, ns.Name, o.Name, o, ns.Project)})
 	}
 	for _, o := range view.Pods {
-		resp.Pods = append(resp.Pods, PodDTO{o, s.registry.ActionsFor(storedObject(model.KindPod, ns.Name, o.Name, o))})
+		resp.Pods = append(resp.Pods, PodDTO{o, s.extras(model.KindPod, ns.Name, o.Name, o, ns.Project)})
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// extras liefert Aktionen und Links eines Objekts. obj ist ein model.Stored*-Wert.
+func (s *Server) extras(kind model.Kind, namespace, name string, obj any, project string) ObjectExtras {
+	return ObjectExtras{
+		Actions: s.registry.ActionsFor(storedObject(kind, namespace, name, obj)),
+		Links:   s.links.For(model.ObjectRef{Kind: kind, Namespace: namespace, Name: name}, obj, project),
+	}
 }
 
 // project liefert die Konfiguration eines Projekts.

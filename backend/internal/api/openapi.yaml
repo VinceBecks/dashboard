@@ -152,9 +152,19 @@ components:
             properties:
               value: { type: string }
               label: { type: string }
+    Link:
+      type: object
+      description: Konfigurierter Absprung (links in der config.yaml); die URL rendert das Backend je Objekt.
+      required: [id, title, lucideIcon, lucideIconColor, url]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        lucideIcon: { type: string }
+        lucideIconColor: { type: string }
+        url: { type: string, format: uri, description: Absolute http(s)-URL }
     ObjectBase:
       type: object
-      required: [name, actions]
+      required: [name, actions, links]
       properties:
         name: { type: string }
         namespace: { type: string }
@@ -163,6 +173,9 @@ components:
         actions:
           type: array
           items: { $ref: '#/components/schemas/Action' }
+        links:
+          type: array
+          items: { $ref: '#/components/schemas/Link' }
     Namespace:
       allOf:
         - $ref: '#/components/schemas/ObjectBase'

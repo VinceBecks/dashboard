@@ -21,6 +21,7 @@ import (
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/model"
+	"feature-dashboard/internal/objecttemplate"
 )
 
 // HandlerType ist der Wert für `handler:` in der config.yaml.
@@ -59,17 +60,6 @@ type Handler struct {
 // New ist die Factory für die Registry.
 func New(deps actions.Deps) actions.Handler {
 	return &Handler{store: deps.Store}
-}
-
-// TemplateData sind die Werte, die in ref und variables per Go-Template verwendet werden können,
-// z. B. "{{ .Namespace }}" oder `{{ index .Labels "app" }}`.
-type TemplateData struct {
-	Kind        model.Kind
-	Name        string
-	Namespace   string
-	Project     string
-	Labels      map[string]string
-	Annotations map[string]string
 }
 
 // Configure liest und prüft die extra-handler-configs. Fehler brechen den Start des Backends ab.
@@ -119,12 +109,12 @@ func (h *Handler) Configure(extra map[string]any) error {
 
 	if s.Ref == "" {
 		errs = append(errs, errors.New("ref fehlt"))
-	} else if h.ref, err = parseTemplate("ref", s.Ref); err != nil {
+	} else if h.ref, err = objecttemplate.Parse("ref", s.Ref); err != nil {
 		errs = append(errs, err)
 	}
 	h.variables = make(map[string]*template.Template, len(s.Variables))
 	for key, value := range s.Variables {
-		t, err := parseTemplate("variables."+key, value)
+		t, err := objecttemplate.Parse("variables."+key, value)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -132,14 +122,6 @@ func (h *Handler) Configure(extra map[string]any) error {
 		h.variables[key] = t
 	}
 	return errors.Join(errs...)
-}
-
-func parseTemplate(name, text string) (*template.Template, error) {
-	t, err := template.New(name).Option("missingkey=error").Parse(text)
-	if err != nil {
-		return nil, fmt.Errorf("template %s: %w", name, err)
-	}
-	return t, nil
 }
 
 // IsApplicable prüft Objekt-Typ (applies-to) und, falls konfiguriert, das Dashboard-Projekt (projects).
@@ -165,13 +147,13 @@ func (h *Handler) Execute(ctx context.Context, obj actions.StoredObject, _ map[s
 	}
 	form := url.Values{}
 	form.Set("token", h.token)
-	ref, err := render(h.ref, data)
+	ref, err := objecttemplate.Render(h.ref, data)
 	if err != nil {
 		return failure("%v", err)
 	}
 	form.Set("ref", ref)
 	for key, t := range h.variables {
-		value, err := render(t, data)
+		value, err := objecttemplate.Render(t, data)
 		if err != nil {
 			return failure("%v", err)
 		}
@@ -204,20 +186,9 @@ func (h *Handler) Execute(ctx context.Context, obj actions.StoredObject, _ map[s
 	return actions.Result{Success: true, Message: fmt.Sprintf("Pipeline #%d gestartet: %s", pipeline.ID, pipeline.WebURL)}
 }
 
-func (h *Handler) templateData(obj actions.StoredObject) (TemplateData, error) {
-	meta, ok := metaOf(obj.Object)
-	if !ok {
-		return TemplateData{}, fmt.Errorf("unbekannter Objekt-Typ %T", obj.Object)
-	}
+func (h *Handler) templateData(obj actions.StoredObject) (objecttemplate.Data, error) {
 	project, _ := h.projectOf(obj)
-	return TemplateData{
-		Kind:        obj.Ref.Kind,
-		Name:        obj.Ref.Name,
-		Namespace:   obj.Ref.Namespace,
-		Project:     project,
-		Labels:      nonNil(meta.Labels),
-		Annotations: nonNil(meta.Annotations),
-	}, nil
+	return objecttemplate.NewData(obj.Ref, obj.Object, project)
 }
 
 // projectOf ermittelt das Dashboard-Projekt eines Objekts über seinen Namespace.
@@ -231,28 +202,6 @@ func (h *Handler) projectOf(obj actions.StoredObject) (string, bool) {
 		return "", false
 	}
 	return ns.Project, true
-}
-
-func metaOf(obj any) (model.Meta, bool) {
-	switch o := obj.(type) {
-	case model.StoredNamespace:
-		return o.Meta, true
-	case model.StoredService:
-		return o.Meta, true
-	case model.StoredIngress:
-		return o.Meta, true
-	case model.StoredPod:
-		return o.Meta, true
-	}
-	return model.Meta{}, false
-}
-
-func render(t *template.Template, data TemplateData) (string, error) {
-	var sb strings.Builder
-	if err := t.Execute(&sb, data); err != nil {
-		return "", fmt.Errorf("template %s: %w", t.Name(), err)
-	}
-	return sb.String(), nil
 }
 
 // gitlabMessage liest das Feld "message" einer GitLab-Fehlerantwort, sonst den gekürzten Body.
@@ -277,11 +226,4 @@ func gitlabMessage(body []byte) string {
 
 func failure(format string, args ...any) actions.Result {
 	return actions.Result{Success: false, Message: fmt.Sprintf(format, args...)}
-}
-
-func nonNil(m map[string]string) map[string]string {
-	if m == nil {
-		return map[string]string{}
-	}
-	return m
 }

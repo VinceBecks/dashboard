@@ -38,6 +38,8 @@ Backend-Pakete (`backend/`):
 | `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` |
 | `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
 | `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen |
+| `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
+| `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
 | `internal/api`                | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI                            |
 
 ## Build, Test, Start
@@ -241,6 +243,37 @@ Tokens stehen nie in der `config.yaml`, sondern nur in Umgebungsvariablen. Im Cl
 gesetzt, startet das Backend nicht.
 
 
+Beispiel für Links (Absprung z. B. nach Kibana). Das Backend rendert die URLs je Objekt und liefert sie als `links`
+an jedem Objekt aus; das Frontend zeigt sie als Icon mit Tooltip und öffnet sie in einem neuen Tab:
+
+```yaml
+link-variables:                       # statische Werte für .Vars; je Projekt per link-variables überschreibbar
+  kibanaUrl: https://kibana.mycomp.de
+  kibanaDataView: logs-k8s
+links:
+  - link-id: kibana-logs              # eindeutig
+    title: Logs in Kibana
+    lucide-icon: scroll-text
+    lucide-icon-color: "#00bfb3"
+    projects: [foo-projekt]           # optional
+    targets:                          # nur für diese Objekt-Typen; Werte stehen im Template unter .Target
+      pod:
+        query: 'kubernetes.namespace:"{{ .Namespace }}" and kubernetes.pod.name:"{{ .Name }}"'
+      namespace:
+        query: 'kubernetes.namespace:"{{ .Namespace }}"'
+    url: |-                           # Zeilenumbrüche samt Einrückung werden entfernt
+      {{ .Vars.kibanaUrl }}/app/discover#/?_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
+      query:(language:kuery,query:{{ rison .Target.query }}))
+    query-params:                     # optional, werden URL-kodiert angehängt
+      foo: "{{ .Project }}"
+```
+
+- Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars .Target`.
+- Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, …): `rison`, `pathescape`,
+  `replace`, `join`.
+- Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
+  (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
+
 Beispiel für store-konfiguration
 ```yaml
 store:
@@ -331,7 +364,8 @@ zur Namespace-Seite.
     - zuerst die Aktionen des Service-Objekts,
     - danach die Replicas (Pods), die der Service referenziert.
 
-Aktionen zu Pods werden vorerst **nicht** angezeigt, auch wenn das Backend sie liefert.
+Aktionen zu Pods werden vorerst **nicht** angezeigt, auch wenn das Backend sie liefert. Links zu Pods werden bei den
+Replicas angezeigt. Links stehen bei allen anderen Objekten neben deren Aktionen.
 
 ### Datenaktualisierung
 

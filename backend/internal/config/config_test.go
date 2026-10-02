@@ -143,3 +143,54 @@ func TestServiceAreasValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestLinks(t *testing.T) {
+	cfg, err := Parse([]byte(`
+link-variables:
+  kibanaUrl: https://kibana
+projects:
+  - project-name: foo
+    namespace-labels: {a: b}
+    link-variables:
+      dataView: logs-foo
+links:
+  - link-id: kibana
+    title: Logs
+    projects: [foo]
+    targets:
+      pod:
+        query: 'pod:"{{ .Name }}"'
+      namespace: {}
+    url: "{{ .Vars.kibanaUrl }}/app/discover"
+    query-params:
+      ns: "{{ .Namespace }}"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := cfg.Links[0]
+	if l.Targets["pod"]["query"] != `pod:"{{ .Name }}"` || l.Targets["namespace"] == nil || l.QueryParams["ns"] == "" {
+		t.Fatalf("link = %+v", l)
+	}
+	if cfg.LinkVariables["kibanaUrl"] != "https://kibana" || cfg.Projects[0].LinkVariables["dataView"] != "logs-foo" {
+		t.Fatalf("link-variables = %v / %v", cfg.LinkVariables, cfg.Projects[0].LinkVariables)
+	}
+}
+
+func TestLinksValidation(t *testing.T) {
+	cases := map[string]string{
+		"id fehlt":          `[{title: T, url: u, targets: {pod: {}}}]`,
+		"doppelte id":       `[{link-id: x, title: T, url: u, targets: {pod: {}}}, {link-id: x, title: T, url: u, targets: {pod: {}}}]`,
+		"title fehlt":       `[{link-id: x, url: u, targets: {pod: {}}}]`,
+		"url fehlt":         `[{link-id: x, title: T, targets: {pod: {}}}]`,
+		"keine targets":     `[{link-id: x, title: T, url: u}]`,
+		"ungültiger Kind":   `[{link-id: x, title: T, url: u, targets: {deployment: {}}}]`,
+		"unbekanntes Proj.": `[{link-id: x, title: T, url: u, targets: {pod: {}}, projects: [nope]}]`,
+	}
+	for name, links := range cases {
+		_, err := Parse([]byte("projects:\n  - project-name: foo\n    namespace-labels: {a: b}\nlinks: " + links + "\n"))
+		if err == nil {
+			t.Errorf("%s: Fehler erwartet", name)
+		}
+	}
+}

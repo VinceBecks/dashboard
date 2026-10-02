@@ -24,6 +24,15 @@ export interface Action {
   formFields?: FormField[];
 }
 
+/** Konfigurierter Link; die URL ist vom Backend fertig gerendert. */
+export interface Link {
+  id: string;
+  title: string;
+  lucideIcon: string;
+  lucideIconColor: string;
+  url: string;
+}
+
 export type ObjectKind = 'namespace' | 'service' | 'ingress' | 'pod';
 
 export interface ObjectRef {
@@ -38,6 +47,7 @@ interface ObjectBase {
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   actions: Action[];
+  links: Link[];
 }
 
 export interface Namespace extends ObjectBase {

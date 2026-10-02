@@ -10,6 +10,7 @@ import (
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
+	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/store"
 )
@@ -190,5 +191,45 @@ func TestNamespaceServiceAreas(t *testing.T) {
 	}
 	if len(resp.Services) != 3 {
 		t.Fatalf("services müssen unverändert vollständig sein: %d", len(resp.Services))
+	}
+}
+
+func TestLinks(t *testing.T) {
+	st, _, _ := setup(t)
+	cfg, err := config.Parse([]byte(`
+projects: [{project-name: foo, namespace-labels: {a: b}}]
+links:
+  - link-id: logs
+    title: Logs
+    lucide-icon: scroll-text
+    targets: {namespace: {}, pod: {}}
+    url: "https://kibana.example/{{ .Kind }}/{{ .Name }}"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := links.NewRegistry(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewServer(st, actions.NewRegistry(), cfg.Projects, func() bool { return true }).WithLinks(reg).Handler()
+
+	body := do(h, "GET", "/api/projects/foo/namespaces/feat-1", "", "").Body.String()
+	for _, want := range []string{
+		`"links":[{"id":"logs","title":"Logs","lucideIcon":"scroll-text","lucideIconColor":"","url":"https://kibana.example/namespace/feat-1"}]`,
+		`"url":"https://kibana.example/pod/web-1"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s fehlt in %s", want, body)
+		}
+	}
+	if body := do(h, "GET", "/api/projects", "", "").Body.String(); !strings.Contains(body, `"url":"https://kibana.example/namespace/feat-1"`) {
+		t.Errorf("Namespace-Link fehlt in /api/projects: %s", body)
+	}
+
+	// Ohne Link-Registry ist links immer eine leere Liste.
+	_, plain, _ := setup(t)
+	if body := do(plain, "GET", "/api/projects/foo/namespaces/feat-1", "", "").Body.String(); !strings.Contains(body, `"links":[]`) {
+		t.Errorf("leere links erwartet: %s", body)
 	}
 }

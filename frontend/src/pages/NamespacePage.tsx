@@ -26,7 +26,8 @@ import type { ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client';
 import type { Ingress, NamespaceResponse, ObjectKind, ObjectRef, Pod, Service } from '../api/types';
-import { ActionButtons } from '../components/ActionButtons';
+import { LinkButtons } from '../components/LinkButtons';
+import { ObjectButtons } from '../components/ObjectButtons';
 import { ServiceAreaFilter } from '../components/ServiceAreaFilter';
 import { Loading, PollError } from '../components/StatusViews';
 import { usePolling } from '../hooks/usePolling';
@@ -85,7 +86,12 @@ export function NamespacePage() {
             <Typography variant="h4" component="h1" gutterBottom>
               {data.namespace.name}
             </Typography>
-            <ActionButtons actions={data.namespace.actions} object={ref('namespace', data.namespace.name)} onExecuted={refresh} />
+            <ObjectButtons
+              actions={data.namespace.actions}
+              links={data.namespace.links}
+              object={ref('namespace', data.namespace.name)}
+              onExecuted={refresh}
+            />
           </Box>
 
           <Section title="Ingresses" empty={data.ingresses.length === 0}>
@@ -146,7 +152,7 @@ function IngressCard({ ingress, object, onExecuted }: ObjectProps & { ingress: I
     <Card variant="outlined">
       <CardHeader title={ingress.name} slotProps={{ title: { variant: 'h6' } }} />
       <CardContent sx={{ pt: 0 }}>
-        <ActionButtons actions={ingress.actions} object={object} onExecuted={onExecuted} />
+        <ObjectButtons actions={ingress.actions} links={ingress.links} object={object} onExecuted={onExecuted} />
         <TableContainer sx={{ mt: 1 }}>
           <Table size="small">
             <TableHead>
@@ -219,7 +225,7 @@ function NodePortSection({
                   ))}
                 </TableCell>
                 <TableCell>
-                  <ActionButtons actions={s.actions} object={objectRef('service', s.name)} onExecuted={onExecuted} />
+                  <ObjectButtons actions={s.actions} links={s.links} object={objectRef('service', s.name)} onExecuted={onExecuted} />
                 </TableCell>
               </TableRow>
             ))}
@@ -238,7 +244,7 @@ function ServiceCard({ service, pods, object, onExecuted }: ObjectProps & { serv
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardHeader title={service.name} slotProps={{ title: { variant: 'h6' } }} />
       <CardContent sx={{ pt: 0 }}>
-        <ActionButtons actions={service.actions} object={object} onExecuted={onExecuted} />
+        <ObjectButtons actions={service.actions} links={service.links} object={object} onExecuted={onExecuted} />
         <Divider sx={{ my: 1.5 }} />
         <Typography variant="subtitle2">Replicas ({replicas.length})</Typography>
         {replicas.length === 0 ? (
@@ -248,8 +254,17 @@ function ServiceCard({ service, pods, object, onExecuted }: ObjectProps & { serv
         ) : (
           <List dense disablePadding>
             {replicas.map((pod) => (
-              // Aktionen auf Pods werden bewusst (noch) nicht angezeigt.
-              <ListItem key={pod.name} disableGutters secondaryAction={<PodStatus pod={pod} />}>
+              // Pod-Links (z. B. Logs) werden gezeigt, Pod-Aktionen nicht.
+              <ListItem
+                key={pod.name}
+                disableGutters
+                secondaryAction={
+                  <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                    <LinkButtons links={pod.links} />
+                    <PodStatus pod={pod} />
+                  </Stack>
+                }
+              >
                 <ListItemText
                   primary={pod.name}
                   secondary={pod.containers.map((c) => c.image).join(', ')}

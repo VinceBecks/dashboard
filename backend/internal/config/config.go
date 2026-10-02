@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"feature-dashboard/internal/model"
 )
 
 // Config ist die beim Startup eingelesene Konfiguration.
@@ -17,6 +19,26 @@ type Config struct {
 	Projects       []Project             `yaml:"projects"`
 	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
 	Store          StoreConfig           `yaml:"store"`
+	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt überschreibbar.
+	LinkVariables map[string]string `yaml:"link-variables"`
+	Links         []Link            `yaml:"links"`
+}
+
+// Link ist ein konfigurierbarer Absprung (z. B. nach Kibana), den das Dashboard an Objekten anzeigt.
+type Link struct {
+	ID              string `yaml:"link-id"`
+	Title           string `yaml:"title"`
+	LucideIcon      string `yaml:"lucide-icon"`
+	LucideIconColor string `yaml:"lucide-icon-color"`
+	// Projects schränkt den Link optional auf Projekte ein.
+	Projects []string `yaml:"projects"`
+	// Targets: je Objekt-Typ (namespace, service, ingress, pod) typspezifische Werte für .Target.
+	// Nur für die enthaltenen Typen wird der Link angezeigt.
+	Targets map[model.Kind]map[string]string `yaml:"targets"`
+	// URL ist ein Go-Template; Zeilenumbrüche samt Einrückung werden vor dem Parsen entfernt.
+	URL string `yaml:"url"`
+	// QueryParams werden gerendert und URL-kodiert an die URL angehängt.
+	QueryParams map[string]string `yaml:"query-params"`
 }
 
 // Project definiert ein Projekt und die Labels, die ein Namespace tragen muss, um dazuzugehören.
@@ -27,6 +49,8 @@ type Project struct {
 	ServiceAreas []ServiceArea `yaml:"service-areas"`
 	// OthersAreaLabel ist das Label des Bereichs für nicht zugeordnete Services (siehe OthersLabel).
 	OthersAreaLabel string `yaml:"others-area-label"`
+	// LinkVariables überschreiben bzw. ergänzen die globalen link-variables für dieses Projekt.
+	LinkVariables map[string]string `yaml:"link-variables"`
 }
 
 // OthersAreaName ist die reservierte ID des Bereichs für Services, die keinem Bereich zugeordnet sind.
@@ -154,6 +178,7 @@ func (c *Config) Validate() error {
 		}
 		errs = append(errs, validateServiceAreas(fmt.Sprintf("projects[%d]", i), p.ServiceAreas)...)
 	}
+	errs = append(errs, validateLinks(c.Links, projects)...)
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
 		if a.Name == "" {
@@ -189,6 +214,41 @@ func validateServiceAreas(prefix string, areas []ServiceArea) []error {
 		for j, c := range a.LabelCombinations {
 			if len(c) == 0 {
 				errs = append(errs, fmt.Errorf("%s.label-combinations[%d]: leere Kombination würde alle Services treffen", at, j))
+			}
+		}
+	}
+	return errs
+}
+
+func validateLinks(links []Link, projects map[string]bool) []error {
+	var errs []error
+	ids := map[string]bool{}
+	for i, l := range links {
+		at := fmt.Sprintf("links[%d]", i)
+		switch {
+		case l.ID == "":
+			errs = append(errs, fmt.Errorf("%s: link-id fehlt", at))
+		case ids[l.ID]:
+			errs = append(errs, fmt.Errorf("%s: link-id %q ist nicht eindeutig", at, l.ID))
+		}
+		ids[l.ID] = true
+		if l.Title == "" {
+			errs = append(errs, fmt.Errorf("%s: title fehlt", at))
+		}
+		if l.URL == "" {
+			errs = append(errs, fmt.Errorf("%s: url fehlt", at))
+		}
+		if len(l.Targets) == 0 {
+			errs = append(errs, fmt.Errorf("%s: targets dürfen nicht leer sein", at))
+		}
+		for kind := range l.Targets {
+			if !kind.Valid() {
+				errs = append(errs, fmt.Errorf("%s: targets: ungültiger Objekt-Typ %q", at, kind))
+			}
+		}
+		for _, p := range l.Projects {
+			if !projects[p] {
+				errs = append(errs, fmt.Errorf("%s: unbekanntes Projekt %q", at, p))
 			}
 		}
 	}

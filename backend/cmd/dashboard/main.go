@@ -20,6 +20,7 @@ import (
 	"feature-dashboard/internal/api"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/kube"
+	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/project"
 	"feature-dashboard/internal/store"
 )
@@ -47,6 +48,10 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 		return err
 	}
 
+	linkRegistry, err := links.NewRegistry(cfg)
+	if err != nil {
+		return err
+	}
 	st := store.New()
 
 	registry := actions.NewRegistry()
@@ -72,7 +77,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).Handler(),
+		Handler:           api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	serverErr := make(chan error, 1)
