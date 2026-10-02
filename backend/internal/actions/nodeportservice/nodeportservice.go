@@ -1,0 +1,162 @@
+// Package nodeportservice implementiert die Aktion „NodePort-Service auf Basis eines ClusterIP-Services erstellen“.
+package nodeportservice
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"maps"
+	"strconv"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/client-go/kubernetes"
+
+	"feature-dashboard/internal/actions"
+	"feature-dashboard/internal/model"
+)
+
+const (
+	// NameSuffix wird an den Namen des Basis-Services angehängt.
+	NameSuffix = "-node-port"
+	// FieldPorts ist die Feld-ID der Port-Auswahl im Formular.
+	FieldPorts = "ports"
+
+	labelManagedBy      = "app.kubernetes.io/managed-by"
+	managedByValue      = "feature-dashboard"
+	annotationBaseOfSvc = "feature-dashboard/base-service"
+)
+
+// Handler erstellt zu einem ClusterIP-Service einen NodePort-Service „<name>-node-port“ mit demselben Selector
+// und den im Formular ausgewählten Port-Mappings. Die NodePorts vergibt Kubernetes zufällig.
+type Handler struct {
+	client kubernetes.Interface
+	store  actions.ObjectReader
+}
+
+// New ist die Factory für die Registry.
+func New(deps actions.Deps) actions.Handler {
+	return &Handler{client: deps.Client, store: deps.Store}
+}
+
+// Configure: keine extra-handler-configs.
+func (h *Handler) Configure(map[string]any) error { return nil }
+
+// IsApplicable gilt für ClusterIP-Services mit Selector und Ports, zu denen es noch keinen NodePort-Service gibt.
+func (h *Handler) IsApplicable(obj actions.StoredObject) bool {
+	svc, ok := obj.Object.(model.StoredService)
+	if !ok || svc.Type != string(corev1.ServiceTypeClusterIP) || len(svc.Selector) == 0 || len(svc.Ports) == 0 {
+		return false
+	}
+	name := svc.Name + NameSuffix
+	if len(validation.IsDNS1035Label(name)) > 0 {
+		return false
+	}
+	exists, err := h.store.Get(model.ObjectRef{Kind: model.KindService, Namespace: obj.Ref.Namespace, Name: name}, &model.StoredService{})
+	if err != nil {
+		slog.Warn("Prüfung auf vorhandenen NodePort-Service fehlgeschlagen", "service", obj.Ref, "error", err)
+		return false
+	}
+	return !exists
+}
+
+// FormFields: Auswahl der Target-Ports des Basis-Services, zu denen ein Port-Mapping erstellt wird.
+func (h *Handler) FormFields(obj actions.StoredObject) []actions.FormField {
+	svc, _ := obj.Object.(model.StoredService)
+	options := make([]actions.Option, 0, len(svc.Ports))
+	for _, p := range svc.Ports {
+		options = append(options, actions.Option{Value: portKey(p), Label: portLabel(p)})
+	}
+	return []actions.FormField{{
+		ID:          FieldPorts,
+		Label:       "Target-Ports",
+		Type:        actions.FieldMultiSelect,
+		IsRequired:  true,
+		Description: "Target-Ports, für die der NodePort-Service ein Port-Mapping erhält. Die NodePorts werden zufällig vergeben.",
+		Options:     options,
+	}}
+}
+
+// Execute erstellt den NodePort-Service. inputs[FieldPorts] ist durch die Registry bereits validiert.
+func (h *Handler) Execute(ctx context.Context, obj actions.StoredObject, inputs map[string]any) actions.Result {
+	base, ok := obj.Object.(model.StoredService)
+	if !ok {
+		return actions.Result{Success: false, Message: "Objekt ist kein Service"}
+	}
+	selected := map[string]bool{}
+	if list, ok := inputs[FieldPorts].([]any); ok {
+		for _, v := range list {
+			if s, ok := v.(string); ok {
+				selected[s] = true
+			}
+		}
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        base.Name + NameSuffix,
+			Namespace:   obj.Ref.Namespace,
+			Labels:      map[string]string{labelManagedBy: managedByValue},
+			Annotations: map[string]string{annotationBaseOfSvc: base.Name},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeNodePort,
+			Selector: maps.Clone(base.Selector),
+		},
+	}
+	for _, p := range base.Ports {
+		if !selected[portKey(p)] {
+			continue
+		}
+		svc.Spec.Ports = append(svc.Spec.Ports, corev1.ServicePort{
+			Name:       p.Name,
+			Protocol:   corev1.Protocol(p.Protocol),
+			Port:       p.Port,
+			TargetPort: intstr.Parse(p.TargetPort),
+			// NodePort 0: Kubernetes vergibt einen zufälligen freien Port.
+		})
+	}
+	if len(svc.Spec.Ports) == 0 {
+		return actions.Result{Success: false, Message: "Keine gültigen Ports ausgewählt"}
+	}
+
+	created, err := h.client.CoreV1().Services(obj.Ref.Namespace).Create(ctx, svc, metav1.CreateOptions{})
+	if err != nil {
+		return actions.Result{Success: false, Message: fmt.Sprintf("NodePort-Service %s konnte nicht erstellt werden: %v", svc.Name, err)}
+	}
+	return actions.Result{Success: true, Message: fmt.Sprintf("NodePort-Service %s erstellt (%s)", created.Name, nodePorts(created))}
+}
+
+// portKey identifiziert einen Service-Port eindeutig: Namen sind bei mehreren Ports Pflicht und eindeutig,
+// ein einzelner Port darf unbenannt sein.
+func portKey(p model.ServicePort) string {
+	if p.Name != "" {
+		return p.Name
+	}
+	return strconv.Itoa(int(p.Port))
+}
+
+func portLabel(p model.ServicePort) string {
+	target := p.TargetPort
+	if p.ResolvedTargetPort != nil && strconv.Itoa(int(*p.ResolvedTargetPort)) != p.TargetPort {
+		target = fmt.Sprintf("%s (%d)", p.TargetPort, *p.ResolvedTargetPort)
+	}
+	label := fmt.Sprintf("Target-Port %s (Service-Port %d)", target, p.Port)
+	if p.Name != "" {
+		label = p.Name + ": " + label
+	}
+	return label
+}
+
+func nodePorts(svc *corev1.Service) string {
+	result := ""
+	for i, p := range svc.Spec.Ports {
+		if i > 0 {
+			result += ", "
+		}
+		result += fmt.Sprintf("%d → NodePort %d", p.Port, p.NodePort)
+	}
+	return result
+}
