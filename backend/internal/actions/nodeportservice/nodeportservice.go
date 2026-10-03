@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -41,6 +42,8 @@ const (
 
 // Handler erstellt zu einem ClusterIP-Service einen NodePort-Service „<name>-node-port“ mit demselben Selector
 // und den im Formular ausgewählten Port-Mappings. Die NodePorts vergibt Kubernetes zufällig.
+// Der NodePort-Service erhält eine ownerReference auf den Basis-Service; wird dieser gelöscht, löscht der
+// Garbage-Collector von Kubernetes auch den NodePort-Service.
 type Handler struct {
 	client kubernetes.Interface
 	store  actions.ObjectReader
@@ -104,12 +107,32 @@ func (h *Handler) Execute(ctx context.Context, obj actions.StoredObject, inputs 
 		}
 	}
 
+	// Der Basis-Service wird frisch gelesen: Die ownerReference braucht seine UID, und der Store-Stand kann
+	// veraltet sein.
+	current, err := h.client.CoreV1().Services(obj.Ref.Namespace).Get(ctx, base.Name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return actions.Result{Success: false, Message: fmt.Sprintf("Service %s existiert nicht mehr", base.Name)}
+	} else if err != nil {
+		return actions.Result{Success: false, Message: fmt.Sprintf("Service %s konnte nicht gelesen werden: %v", base.Name, err)}
+	}
+	if current.Spec.Type != corev1.ServiceTypeClusterIP {
+		return actions.Result{Success: false, Message: fmt.Sprintf("Service %s ist nicht mehr vom Typ ClusterIP", base.Name)}
+	}
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        base.Name + NameSuffix,
 			Namespace:   obj.Ref.Namespace,
 			Labels:      map[string]string{labelManagedBy: managedByValue, LabelCreatedByAction: CreateActionName},
 			Annotations: map[string]string{AnnotationBaseService: base.Name},
+			// Ohne Controller/BlockOwnerDeletion: dafür bräuchte das Backend zusätzlich update auf
+			// services/finalizers. Für das Löschen durch den Garbage-Collector genügt die Referenz.
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "v1",
+				Kind:       "Service",
+				Name:       current.Name,
+				UID:        current.UID,
+			}},
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeNodePort,

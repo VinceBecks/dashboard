@@ -3,18 +3,11 @@ projects:
     namespace-labels:
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: foo-projekt
-      mycomp.de/organization-unit: development
-    # Aufteilung der Anwendungs-Services im Dashboard. Ein Service gehört zu einem Bereich, wenn er alle Labels
-    # mindestens einer label-combination trägt. Nicht zugeordnete Services landen im Bereich "others".
-    others-area-label: Andere  # optional, Standard "Andere"
     service-areas:
-      - &business-area
-        area-name: business-services
+      - area-name: business-services
         area-label: Business
         label-combinations:
-          - app.kubernetes.io/part-of: shop
-            app.kubernetes.io/component: backend
-          - app.kubernetes.io/part-of: billing
+          - app.kubernetes.io/part-of: foo
       - area-name: infrastructure-services
         area-label: Infrastruktur
         label-combinations:
@@ -24,83 +17,74 @@ projects:
     namespace-labels:
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: bar
-      mycomp.de/organization-unit: operations
     service-areas:
-      - *business-area  # YAML-Anker: gleicher Bereich wie bei foo-projekt
-
+      - area-name: business-services
+        area-label: Business
+        label-combinations:
+          - app.kubernetes.io/part-of: bar
+      - area-name: infrastructure-services
+        area-label: Infrastruktur
+        label-combinations:
+          - app.kubernetes.io/part-of: database
+  - project-name: foobar-projekt
+    namespace-labels:
+      mycomp.de/is-feature-environment: true
+      mycomp.de/project-name: foobar
+    service-areas:
+      - area-name: business-services
+        area-label: Business
+        label-combinations:
+          - app.kubernetes.io/part-of: foobar
+      - area-name: infrastructure-services
+        area-label: Infrastruktur
+        label-combinations:
+          - app.kubernetes.io/part-of: database
+    link-variables-overrides:
+      something: isNotHere
 actionHandlers:
   - action-name: delete-pod
     action-title: Pod Löschen
     lucide-icon: trash
     lucide-icon-color: red
-    projects: [foo-projekt, bar-projekt]
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
     extra-handler-configs:
       force-delete: true
   - action-name: node-port-service-on-service-base
     action-title: NodePort-Service erstellen
     lucide-icon: network
     lucide-icon-color: blue
-    projects: [foo-projekt, bar-projekt]
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
   - action-name: delete-node-port-service
     action-title: NodePort-Service löschen
     lucide-icon: trash-2
     lucide-icon-color: red
-    projects: [foo-projekt, bar-projekt]
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
   - action-name: restart-service-replicas
     action-title: Alle Replika löschen (Neustart)
     lucide-icon: rotate-ccw
     lucide-icon-color: orange
-    projects: [foo-projekt, bar-projekt]
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
 
-  # Beispiel für den Handler-Typ gitlab-pipeline: beliebig viele Aktionen können ihn nutzen.
-  # Auskommentiert, weil das Backend ohne gesetzte Token-Variable nicht startet.
-  # - action-name: deploy-feature
-  #   handler: gitlab-pipeline
-  #   action-title: Feature deployen
-  #   lucide-icon: rocket
-  #   lucide-icon-color: green
-  #   projects: [foo-projekt, bar-projekt]
-  #   extra-handler-configs:
-  #     gitlab-url: https://gitlab.mycomp.de
-  #     project: team/foo-deploy            # Projekt-ID oder Pfad
-  #     ref: main                           # Template erlaubt, z. B. "feature/{{ .Namespace }}"
-  #     token-env: GITLAB_TRIGGER_TOKEN_FOO # Name der Env-Variable mit dem Pipeline-Trigger-Token
-  #     applies-to: [namespace]             # namespace | service | ingress | pod
-  #     timeout: 15s                        # optional, Standard 10s
-  #     variables:
-  #       NAMESPACE: "{{ .Namespace }}"
-  #       ACTION: deploy
+link-variables:
+  demoUrl: http://localhost:8080
+  something: isHere
+links:
+  - link-id: test-kibana-logs
+    title: Logs in Kibana
+    lucide-icon: scroll-text
+    lucide-icon-color: "#00bfb3"
+    projects: [ foo-projekt, bar-projekt ]
+    targets:
+      namespace:
+        url: |-
+          {{ .Vars.demoUrl }}/namespaces/{{ .Name }}/{{ .Vars.something }}?foo={{ printf "hello world // bro" | urlquery }}
+      service: # Logs aller Pods, die der Service selektiert
+        url: |-
+          {{ .Vars.demoUrl }}/namespaces/{{ .Namespace }}/services/{{ .Name }}/{{ .Vars.something }}?foo={{ printf "hello" }}
 
-# Links je Objekt, z. B. Absprung nach Kibana. Auskommentiert, da die URLs Platzhalter sind.
-# Je Objekt-Typ eine URL; gemeinsame Teile stehen in link-variables. Projekte können Werte per
-# link-variables-overrides überschreiben.
-# link-variables:
-#   kibanaDiscover: https://kibana.mycomp.de/app/discover#/?_g=(time:(from:now-1h,to:now))
-#   kibanaDataView: logs-k8s
-# links:
-#   - link-id: kibana-logs
-#     title: Logs in Kibana
-#     lucide-icon: scroll-text
-#     lucide-icon-color: "#00bfb3"
-#     projects: [foo-projekt, bar-projekt]
-#     targets:
-#       namespace:
-#         url: |-
-#           {{ .Vars.kibanaDiscover }}&_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
-#           query:(language:kuery,query:{{ rison (printf "kubernetes.namespace:%q" .Namespace) }}))
-#       pod:
-#         url: |-
-#           {{ .Vars.kibanaDiscover }}&_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
-#           query:(language:kuery,query:{{ rison (printf "kubernetes.namespace:%q and kubernetes.pod.name:%q" .Namespace .Name) }}))
-#       service:   # Logs aller Pods, die der Service selektiert
-#         url: |-
-#           {{ .Vars.kibanaDiscover }}&_a=(dataSource:(dataViewId:{{ rison .Vars.kibanaDataView }},type:dataView),
-#           query:(language:kuery,query:'kubernetes.namespace:"{{ .Namespace }}"
-#           {{- range $k, $v := .Selector }} and kubernetes.labels.{{ replace $k "." "_" }}:"{{ $v }}"{{ end }}'))
 
-# DNS-Name (oder IP) der Nodes, unter dem alle NodePort-Services erreichbar sind: <dns-name>:<node-port>.
 cluster:
-  dns-name: k8s-nodes.mycomp.de
+  dns-name: demo-cluster-control-plane
 
 store:
   recreate-store-interval: 1h

@@ -35,7 +35,7 @@ Backend-Pakete (`backend/`):
 | `internal/kube`               | Informer, Event-Verarbeitung (eine Goroutine), periodischer Full-Rebuild  |
 | `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
-| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` |
+| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht) |
 | `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
 | `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen |
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |

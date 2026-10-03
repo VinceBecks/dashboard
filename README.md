@@ -365,9 +365,15 @@ Erstellt zu einem ClusterIP-Service einen Service vom Typ `NodePort` mit dem Nam
 - **Erstellt** wird ein Service mit:
     - demselben Selector,
     - den ausgewählten Port-Mappings (Name, Protokoll, Port, Target-Port),
-    - zufällig vergebenen NodePorts.
+    - zufällig vergebenen NodePorts,
+    - einer `ownerReference` auf den Basis-Service.
 - **Kennzeichnung:** Label `feature-dashboard/created-by-action: node-port-service-on-service-base`, Label
   `app.kubernetes.io/managed-by: feature-dashboard` und Annotation `feature-dashboard/base-service: <service>`.
+- **Erneute Prüfung:** Vor dem Erstellen liest die Aktion den Basis-Service frisch aus dem Cluster. Fehlt er oder ist
+  er nicht mehr vom Typ `ClusterIP`, schlägt die Aktion fehl.
+- **Lebensdauer:** Wird der Basis-Service gelöscht, löscht Kubernetes (Garbage-Collector) über die `ownerReference`
+  auch den NodePort-Service. NodePort-Services, die vor Einführung der `ownerReference` erstellt wurden, bleiben
+  dabei erhalten und müssen über `delete-node-port-service` oder manuell gelöscht werden.
 
 Keine `extra-handler-configs`.
 

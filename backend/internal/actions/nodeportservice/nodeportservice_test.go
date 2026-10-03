@@ -16,7 +16,10 @@ import (
 	"feature-dashboard/internal/store"
 )
 
-const actionName = CreateActionName
+const (
+	actionName = CreateActionName
+	baseUID    = "base-uid"
+)
 
 func ptr(v int32) *int32 { return &v }
 
@@ -53,7 +56,20 @@ func setup(t *testing.T, services ...model.StoredService) (*actions.Registry, *f
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Execute liest den Basis-Service aus dem Cluster; ClusterIP-Services liegen deshalb auch im Fake-Client.
 	client := fake.NewClientset()
+	for _, s := range services {
+		if s.Type != string(corev1.ServiceTypeClusterIP) {
+			continue
+		}
+		cs := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: s.Name, Namespace: "feat-1", UID: baseUID},
+			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+		}
+		if _, err := client.CoreV1().Services("feat-1").Create(context.Background(), cs, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	reg := actions.NewRegistry()
 	reg.Register(actionName, New)
 	if err := reg.Activate([]config.ActionHandlerConfig{{Name: actionName, Projects: []string{"foo"}}}, actions.Deps{Client: client, Store: st}); err != nil {
@@ -143,10 +159,46 @@ func TestExecute(t *testing.T) {
 		svc.Labels[LabelCreatedByAction] != CreateActionName {
 		t.Fatalf("Metadaten = %+v %+v", svc.Labels, svc.Annotations)
 	}
+	want := metav1.OwnerReference{APIVersion: "v1", Kind: "Service", Name: "web", UID: baseUID}
+	if len(svc.OwnerReferences) != 1 || svc.OwnerReferences[0] != want {
+		t.Fatalf("OwnerReferences = %+v", svc.OwnerReferences)
+	}
 
 	// Existiert der Service im Cluster schon (Store noch nicht aktualisiert), meldet die Aktion einen Fehler.
 	res, err = reg.Execute(ctx, actionName, obj(base), map[string]any{FieldPorts: []any{"metrics"}})
 	if err != nil || res.Success {
+		t.Fatalf("Fehlschlag erwartet, res = %+v, err = %v", res, err)
+	}
+}
+
+func TestExecuteStaleBase(t *testing.T) {
+	base := baseService()
+	ctx := context.Background()
+	inputs := map[string]any{FieldPorts: []any{"http"}}
+
+	// Basis-Service ist im Cluster bereits gelöscht.
+	reg, client := setup(t, base)
+	if err := client.CoreV1().Services("feat-1").Delete(ctx, "web", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := reg.Execute(ctx, actionName, obj(base), inputs); err != nil || res.Success {
+		t.Fatalf("Fehlschlag erwartet, res = %+v, err = %v", res, err)
+	}
+	if _, err := client.CoreV1().Services("feat-1").Get(ctx, "web-node-port", metav1.GetOptions{}); err == nil {
+		t.Fatal("ohne Basis-Service darf kein NodePort-Service entstehen")
+	}
+
+	// Basis-Service ist im Cluster inzwischen kein ClusterIP-Service mehr.
+	reg, client = setup(t, base)
+	current, err := client.CoreV1().Services("feat-1").Get(ctx, "web", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.Spec.Type = corev1.ServiceTypeNodePort
+	if _, err := client.CoreV1().Services("feat-1").Update(ctx, current, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := reg.Execute(ctx, actionName, obj(base), inputs); err != nil || res.Success {
 		t.Fatalf("Fehlschlag erwartet, res = %+v, err = %v", res, err)
 	}
 }
