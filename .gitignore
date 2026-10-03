@@ -3,3 +3,5 @@
 backend/bin/
 Chart.lock
 **/*.tgz
+kind-admin*-config
+commands-f-dashboard.md
