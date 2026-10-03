@@ -255,6 +255,31 @@ func TestCluster(t *testing.T) {
 	}
 }
 
+func TestPolling(t *testing.T) {
+	st, _, _ := setup(t)
+	f := config.FrontendConfig{
+		PollingIntervals:       []config.Duration{config.NewDuration("0s"), config.NewDuration("1m")},
+		DefaultPollingInterval: config.NewDuration("1m"),
+		ManualRefreshCooldown:  config.NewDuration("2s"),
+	}
+	h := NewServer(st, actions.NewRegistry(), nil, func() bool { return true }).WithFrontend(f).Handler()
+	rec := do(h, "GET", "/api/polling", "", "")
+	want := `{"intervals":[{"value":"0s","milliseconds":0},{"value":"1m","milliseconds":60000}],` +
+		`"defaultInterval":"1m","manualRefreshCooldownMilliseconds":2000}`
+	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != want {
+		t.Fatalf("status %d, body %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "GET", "/api/polling", "", rec.Header().Get("ETag")); rec.Code != 304 {
+		t.Fatalf("304 erwartet, got %d", rec.Code)
+	}
+
+	// Ohne Konfiguration: Vorgaben.
+	_, plain, _ := setup(t)
+	if body := do(plain, "GET", "/api/polling", "", "").Body.String(); !strings.Contains(body, `"defaultInterval":"10s"`) {
+		t.Fatalf("body %s", body)
+	}
+}
+
 func TestActionsRespectProjects(t *testing.T) {
 	st, h, action := setup(t)
 	// Namespace in Projekt bar; die Aktion "restart" ist nur für foo freigegeben.

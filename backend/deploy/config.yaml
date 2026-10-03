@@ -75,6 +75,10 @@ data:
         projects: [foo-projekt, bar-projekt, foobar-projekt]
     store:
       recreate-store-interval: 5m
+    frontend:
+      polling-intervals: [0s, 15s, 30s, 1m]
+      default-polling-interval: 0s
+      manual-refresh-cooldown: 3s
     link-variables:
       demoUrl: http://localhost:8080
       something: isHere

@@ -121,6 +121,23 @@ export interface ClusterResponse {
   dnsName: string;
 }
 
+/** Wählbares Abfrage-Intervall aus GET /api/polling. */
+export interface PollingInterval {
+  /** Wert aus der config.yaml, z. B. „10s“; Anzeige und ID. */
+  value: string;
+  /** 0 heißt: nicht automatisch abfragen, nur per Aktualisieren-Button. */
+  milliseconds: number;
+}
+
+/** Antwort von GET /api/polling. */
+export interface PollingResponse {
+  intervals: PollingInterval[];
+  /** value des Intervalls, das nach dem Laden gilt. */
+  defaultInterval: string;
+  /** So lange ist der Aktualisieren-Button nach einem Klick gesperrt. */
+  manualRefreshCooldownMilliseconds: number;
+}
+
 export interface ProjectsResponse {
   projects: Project[];
 }

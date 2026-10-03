@@ -88,3 +88,9 @@ cluster:
 
 store:
   recreate-store-interval: 1h
+
+# Optional; ohne Angabe gelten die hier gezeigten Werte.
+frontend:
+  polling-intervals: [0s, 15s, 30s, 1m]   # 0s = nur manuell über den Aktualisieren-Button
+  default-polling-interval: 0s
+  manual-refresh-cooldown: 3s

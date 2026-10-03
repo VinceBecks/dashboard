@@ -243,3 +243,47 @@ func TestActionProjectsValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestFrontendDefaults(t *testing.T) {
+	cfg, err := Parse([]byte(sample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := cfg.Frontend
+	if len(f.PollingIntervals) != 5 || f.PollingIntervals[0].Value != 0 || f.PollingIntervals[4].Text != "1m" ||
+		f.DefaultPollingInterval.Value != 10*time.Second || f.ManualRefreshCooldown.Value != 3*time.Second {
+		t.Fatalf("Defaults = %+v", f)
+	}
+}
+
+func TestFrontend(t *testing.T) {
+	cfg, err := Parse([]byte("frontend:\n  polling-intervals: [0s, 15s, 2m]\n  default-polling-interval: 2m\n  manual-refresh-cooldown: 5s\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := cfg.Frontend
+	if len(f.PollingIntervals) != 3 || f.PollingIntervals[2].Text != "2m" || f.PollingIntervals[2].Value != 2*time.Minute ||
+		f.DefaultPollingInterval.Text != "2m" || f.ManualRefreshCooldown.Value != 5*time.Second {
+		t.Fatalf("Frontend = %+v", f)
+	}
+	// Nur die Liste gesetzt: Default und Sperrzeit kommen aus den Vorgaben.
+	if _, err := Parse([]byte("frontend:\n  polling-intervals: [10s, 1m]\n")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFrontendValidation(t *testing.T) {
+	invalid := map[string]string{
+		"leere Liste":            "polling-intervals: []\n",
+		"Default nicht in Liste": "polling-intervals: [0s, 30s]\n  default-polling-interval: 10s\n",
+		"Duplikat":               "polling-intervals: [10s, 10000ms]\n",
+		"negativ":                "polling-intervals: [-5s, 10s]\n",
+		"ungültige Dauer":        "polling-intervals: [10x]\n",
+		"Sperrzeit zu kurz":      "manual-refresh-cooldown: 500ms\n",
+	}
+	for name, frontend := range invalid {
+		if _, err := Parse([]byte("frontend:\n  " + frontend)); err == nil {
+			t.Errorf("%s: Fehler erwartet", name)
+		}
+	}
+}

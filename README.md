@@ -33,6 +33,7 @@ Replica.
     - [Templates in der Konfiguration](#templates-in-der-konfiguration)
     - [`cluster`](#cluster)
     - [`store`](#store)
+    - [`frontend`](#frontend)
     - [Prüfungen beim Start](#prüfungen-beim-start)
     - [Vollständiges Beispiel](#vollständiges-beispiel)
 6. [HTTP-API](#http-api)
@@ -245,6 +246,7 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 | `link-variables` | nein    | Statische Variablen für Link-Templates                               |
 | `cluster`        | nein    | Angaben zum Cluster, z. B. der DNS-Name der Nodes                    |
 | `store`          | nein    | Verhalten des In-Memory-Stores                                       |
+| `frontend`       | nein    | Wählbare Abfrage-Intervalle des Frontends, Default und Sperrzeit     |
 
 > **YAML-Hinweise**
 > - Unquotierte Werte wie `true` oder `8080` werden bei Labels und Variablen als Text gelesen. `true` passt also
@@ -572,6 +574,26 @@ store:
 |---------------------------|----------|----------------------------------------------------------------------------------------------------------------------------|
 | `recreate-store-interval` | `0`      | Abstand des periodischen Neuaufbaus. `0` schaltet ihn ab. Erlaubt sind `<n>m`, `<n>h` und `<n>d`, z. B. `30m`, `2h`, `1d`. |
 
+### `frontend`
+
+```yaml
+frontend:
+  polling-intervals: [0s, 5s, 10s, 30s, 1m]
+  default-polling-interval: 10s
+  manual-refresh-cooldown: 3s
+```
+
+| Feld                       | Standard                  | Bedeutung                                                                                       |
+|----------------------------|---------------------------|-------------------------------------------------------------------------------------------------|
+| `polling-intervals`        | `[0s, 5s, 10s, 30s, 1m]`  | Im Dropdown oben rechts wählbare Abfrage-Intervalle (Go-Dauern, z. B. `5s`, `1m`, `1m30s`).      |
+| `default-polling-interval` | `10s`                     | Intervall nach dem Laden des Frontends; muss in `polling-intervals` stehen.                     |
+| `manual-refresh-cooldown`  | `3s`                      | So lange ist der Aktualisieren-Button nach einem Klick gesperrt; mindestens `1s`.               |
+
+Der Wert `0s` ist speziell und erscheint im Dropdown als „Manuell“: Das Frontend fragt dann nicht automatisch ab,
+sondern zeigt ein Aktualisieren-Icon. Nur ein Klick darauf lädt die Daten der Seite neu. Danach ist das Icon für
+`manual-refresh-cooldown` gesperrt. Die Auswahl im Dropdown wird nicht gespeichert; nach dem Neuladen gilt wieder
+`default-polling-interval`. Das Frontend lädt die Werte über `GET /api/polling`.
+
 ### Prüfungen beim Start
 
 Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit einer Liste aller Probleme ab**:
@@ -594,6 +616,8 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
     - Alle Templates sind syntaktisch korrekt.
 - **Cluster:** `dns-name` ist ein gültiger DNS-Name oder eine IP.
 - **Store:** `recreate-store-interval` hat ein gültiges Format.
+- **Frontend:** `polling-intervals` ist nicht leer, ohne negative Werte und ohne Duplikate,
+  `default-polling-interval` steht darin, `manual-refresh-cooldown` ist mindestens `1s`.
 
 ### Vollständiges Beispiel
 
@@ -615,6 +639,7 @@ Internetzugang.
 | GET     | `/api/projects/{project}/namespaces/{namespace}` | Namespace mit Services, Ingresses, Pods und Service-Bereichen    |
 | PATCH   | `/api/actions/{action-name}`                     | Aktion auf einem Objekt ausführen                                |
 | GET     | `/api/cluster`                                   | Statische Cluster-Angaben, z. B. `dnsName`                       |
+| GET     | `/api/polling`                                   | Wählbare Abfrage-Intervalle, Default und Sperrzeit fürs Frontend |
 | GET     | `/api/openapi.yaml`, `/api/swagger`              | API-Beschreibung                                                 |
 | GET     | `/healthz`                                       | Liveness, immer `200`                                            |
 | GET     | `/readyz`                                        | Readiness: `200` nach dem ersten Aufbau des Stores, vorher `503` |
@@ -624,7 +649,7 @@ Titel, Icon, Farbe, `url`).
 
 ### ETag und `304 Not Modified`
 
-Die Daten-Endpunkte `/api/projects`, `/api/projects/{project}/namespaces/{namespace}` und `/api/cluster` liefern
+Die Daten-Endpunkte `/api/projects`, `/api/projects/{project}/namespaces/{namespace}`, `/api/cluster` und `/api/polling` liefern
 einen `ETag`. Schickt der Client ihn als `If-None-Match` zurück und hat sich
 nichts geändert, antwortet das Backend mit `304` ohne Body.
 
@@ -632,14 +657,15 @@ nichts geändert, antwortet das Backend mit `304` ohne Body.
 |----------------------------------|---------------------------------------------------------------------|
 | `/api/projects`                  | letzter Änderung an Namespaces von Projekten                        |
 | `/api/projects/.../namespaces/…` | letzter Änderung im Namespace (Objekte darin oder Namespace selbst) |
-| `/api/cluster`                   | Startzeitpunkt des Backends                                         |
+| `/api/cluster`, `/api/polling`   | Startzeitpunkt des Backends                                         |
 
 ```sh
 curl -i localhost:8080/api/projects                              # 200 + ETag: "1759...123"
 curl -i -H 'If-None-Match: "1759...123"' localhost:8080/api/projects   # 304
 ```
 
-Das Frontend fragt die Daten der aktuellen Seite alle 10 Sekunden ab, die Cluster-Angaben alle 5 Minuten.
+Das Frontend fragt die Daten der aktuellen Seite im gewählten Intervall ab (siehe [`frontend`](#frontend)), die
+Cluster-Angaben alle 5 Minuten. `/api/polling` lädt es einmal beim Start.
 
 ### Aktion ausführen
 

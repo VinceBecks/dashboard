@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockFetch } from '../test/fetchMock';
+import { PollingSettingsProvider, usePollingSettings } from './PollingSettings';
 import { usePolling } from './usePolling';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -42,5 +44,25 @@ describe('usePolling', () => {
     act(() => result.current.refresh());
     await waitFor(() => expect(result.current.data).toEqual({ v: 2 }));
     expect(result.current.error).toBeUndefined();
+  });
+
+  it('fragt beim Intervall 0 nicht automatisch ab, sondern nur bei refreshAll()', async () => {
+    let calls = 0;
+    mockFetch((url) => {
+      if (url === '/api/polling') {
+        return { status: 200, body: { intervals: [{ value: '0s', milliseconds: 0 }], defaultInterval: '0s', manualRefreshCooldownMilliseconds: 1000 } };
+      }
+      calls++;
+      return { status: 200, body: { v: calls } };
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => <PollingSettingsProvider>{children}</PollingSettingsProvider>;
+
+    const { result } = renderHook(() => ({ poll: usePolling<{ v: number }>('/api/x'), settings: usePollingSettings() }), { wrapper });
+    await waitFor(() => expect(result.current.poll.data).toEqual({ v: 1 }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toBe(1);
+
+    act(() => result.current.settings.refreshAll());
+    await waitFor(() => expect(result.current.poll.data).toEqual({ v: 2 }));
   });
 });

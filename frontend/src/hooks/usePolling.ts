@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getConditional } from '../api/client';
-import { POLL_INTERVAL_MS } from '../config';
+import { usePollingSettings } from './PollingSettings';
 
 export interface PollingState<T> {
   data: T | undefined;
@@ -13,8 +13,14 @@ export interface PollingState<T> {
 /**
  * Fragt url regelmäßig ab. Bei 304 bleibt der Zustand unverändert, bei 200 wird er ersetzt.
  * Wechselt die url, beginnt die Abfrage ohne ETag und ohne alte Daten.
+ *
+ * Ohne intervalMs gilt das im Dropdown gewählte Intervall (PollingSettings); dann fragt der Hook auch bei
+ * refreshAll() neu ab. Ein Intervall von 0 heißt: nicht automatisch abfragen.
  */
-export function usePolling<T>(url: string, intervalMs: number = POLL_INTERVAL_MS): PollingState<T> {
+export function usePolling<T>(url: string, intervalMs?: number): PollingState<T> {
+  const settings = usePollingSettings();
+  const effectiveIntervalMs = intervalMs ?? settings.intervalMs;
+  const refreshToken = intervalMs === undefined ? settings.refreshToken : 0;
   const [state, setState] = useState<{ url: string; data?: T; error?: Error }>({ url });
   const etag = useRef<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -49,8 +55,8 @@ export function usePolling<T>(url: string, intervalMs: number = POLL_INTERVAL_MS
         etag.current = null;
         setState((s) => ({ url, data: s.url === url ? s.data : undefined, error: e as Error }));
       }
-      if (!controller.signal.aborted) {
-        timer = setTimeout(poll, intervalMs);
+      if (!controller.signal.aborted && effectiveIntervalMs > 0) {
+        timer = setTimeout(poll, effectiveIntervalMs);
       }
     };
     void poll();
@@ -59,7 +65,7 @@ export function usePolling<T>(url: string, intervalMs: number = POLL_INTERVAL_MS
       controller.abort();
       clearTimeout(timer);
     };
-  }, [url, intervalMs, tick]);
+  }, [url, effectiveIntervalMs, tick, refreshToken]);
 
   const current = state.url === url ? state : { data: undefined, error: undefined };
   return {

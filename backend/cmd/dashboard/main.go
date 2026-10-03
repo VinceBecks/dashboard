@@ -77,7 +77,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).WithCluster(cfg.Cluster).Handler(),
+		Handler:           api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).WithCluster(cfg.Cluster).WithFrontend(cfg.Frontend).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	serverErr := make(chan error, 1)

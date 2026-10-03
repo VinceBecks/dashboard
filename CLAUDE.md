@@ -63,7 +63,8 @@ npm-Scripts in `frontend/package.json` direkt nutzbar; das Makefile ruft nur sie
 
 Frontend-Stack: Vite, React 19, MUI, React Router, Lucide.
 Frontend-Struktur: `src/api` (Typen gemäß `openapi.yaml`, Client mit ETag), `src/hooks/usePolling.ts`
-(Polling, Intervall in `src/config.ts`), `src/components` (generische Aktions-Buttons/-Dialoge),
+(Polling im gewählten Intervall), `src/hooks/PollingSettings.tsx` (lädt `GET /api/polling`, hält das gewählte
+Intervall), `src/components` (generische Aktions-Buttons/-Dialoge, `PollingControl` oben rechts),
 `src/pages` (Übersicht, Namespace-Seite).
 
 ## Fachliche Begriffe
@@ -161,6 +162,7 @@ Wird beim Startup einmal eingelesen. Enthält:
 2. Die ActionHandler und ob sie aktiviert sind.
 3. Store konfiguration
 4. Cluster-Angaben (optional)
+5. Abfrage-Vorgaben fürs Frontend (optional)
 
 Beispiel für Projekte:
 
@@ -300,6 +302,16 @@ store:
   recreate-store-interval: 1h
 ```
 
+Beispiel für Abfrage-Vorgaben fürs Frontend (alle Felder optional, gezeigt sind die Standardwerte):
+```yaml
+frontend:
+  polling-intervals: [0s, 5s, 10s, 30s, 1m]   # Go-Dauern; 0s = nur manuell
+  default-polling-interval: 10s               # muss in polling-intervals stehen
+  manual-refresh-cooldown: 3s                 # Sperrzeit des Aktualisieren-Buttons, mindestens 1s
+```
+
+- Das Frontend lädt die Werte über `GET /api/polling` und bietet die Intervalle in einem Dropdown oben rechts an.
+
 - `recreate-store-interval` häufigkeit in der, der komplette store erneuert wird. Möglich ist auch eine '0' einzutragen, um das Verhalten zu disablen. Ansonsten sind möglich Minuten, Stunden oder Tage anzugeben
 
 ### Aktionen
@@ -322,6 +334,8 @@ Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Regis
 Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachliche Endpunkte:
 
 - `GET /api/cluster` liefert statische Cluster-Angaben aus der `config.yaml` (z. B. den DNS-Namen der Nodes)
+- `GET /api/polling` liefert die wählbaren Abfrage-Intervalle, den Default und die Sperrzeit des
+  Aktualisieren-Buttons (Abschnitt `frontend` der `config.yaml`)
 - `GET /api/projects` liefert eine Liste der Projekte und deren Namespaces
 - `GET /api/projects/{project-name}/namespaces/{namespace-name}` zum Laden der Objekte des Namespaces (inkl. dem
   namespace selber)
@@ -397,6 +411,11 @@ neben deren Aktionen.
 Das Frontend fragt das Backend regelmäßig ab, abhängig von der Seite, auf der sich der Nutzer befindet (nur die Daten,
 die diese Seite braucht). Bei `304` bleibt der bestehende Zustand unverändert, bei `200` wird er ersetzt.
 
+Das Intervall wählt der User im Dropdown oben rechts aus der Liste von `GET /api/polling`; Startwert ist der Default
+aus dem Backend, die Auswahl wird nicht gespeichert. Der Wert `0s` („Manuell“) schaltet das automatische Abfragen ab;
+dann gibt es ein Aktualisieren-Icon, das die Daten der Seite neu lädt und nach einem Klick für die Sperrzeit aus dem
+Backend gesperrt ist.
+
 ## Leitplanken für Änderungen
 
 - Nur Namespace, Service, Ingress und Pod beobachten; nur Kern-Informationen speichern.
@@ -410,7 +429,8 @@ die diese Seite braucht). Bei `304` bleibt der bestehende Zustand unverändert, 
 - Backend: `k8s.io/client-go` v0.33.x mit Informern, HTTP mit stdlib `net/http`, YAML mit `gopkg.in/yaml.v3`.
 - Build/Test: Makefile + `go test`, Dockerfile (distroless).
 - Frontend: Vite, React Router; Auslieferung durch das Backend (`--static-dir`, SPA-Fallback auf `index.html`);
-  Polling alle 10 Sekunden.
+  Polling-Intervall im Frontend wählbar; Liste, Default und Sperrzeit für manuelles Aktualisieren kommen aus der
+  `config.yaml` (`GET /api/polling`), die Auswahl wird nicht gespeichert.
 - Aktionen werden im Frontend immer über einen Dialog bestätigt; Formular-Felder erscheinen darin, falls vorhanden.
 - Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit ETags)
   ändern sich nur, wenn sich das gespeicherte JSON tatsächlich ändert.

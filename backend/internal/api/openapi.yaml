@@ -24,6 +24,24 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ClusterResponse' }
         '304': { $ref: '#/components/responses/NotModified' }
+  /api/polling:
+    get:
+      summary: Abfrage-Vorgaben für das Frontend
+      description: |
+        Wählbare Abfrage-Intervalle, Default und Sperrzeit des Aktualisieren-Buttons aus der config.yaml (Abschnitt
+        frontend); sie ändern sich erst mit einem Neustart des Backends. Ein Intervall mit 0 Millisekunden heißt:
+        nicht automatisch abfragen, nur per Aktualisieren-Button.
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Aktuelle Daten
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PollingResponse' }
+        '304': { $ref: '#/components/responses/NotModified' }
   /api/projects:
     get:
       summary: Projekte und ihre Namespaces
@@ -283,6 +301,36 @@ components:
         dnsName:
           type: string
           description: DNS-Name (oder IP) der Nodes für alle NodePort-Services (<dnsName>:<nodePort>); leer, wenn nicht konfiguriert.
+    PollingResponse:
+      type: object
+      required: [intervals, defaultInterval, manualRefreshCooldownMilliseconds]
+      properties:
+        intervals:
+          type: array
+          description: Im Frontend wählbare Abfrage-Intervalle in der Reihenfolge der config.yaml.
+          items: { $ref: '#/components/schemas/PollingInterval' }
+        defaultInterval:
+          type: string
+          description: value des Intervalls, das nach dem Laden des Frontends gilt.
+          example: 10s
+        manualRefreshCooldownMilliseconds:
+          type: integer
+          format: int64
+          description: So lange ist der Aktualisieren-Button nach einem Klick gesperrt.
+          example: 3000
+    PollingInterval:
+      type: object
+      required: [value, milliseconds]
+      properties:
+        value:
+          type: string
+          description: Wert aus der config.yaml (Go-Dauer), dient als Anzeige und ID.
+          example: 10s
+        milliseconds:
+          type: integer
+          format: int64
+          description: Intervall in Millisekunden; 0 heißt nur manuell aktualisieren.
+          example: 10000
     ProjectsResponse:
       type: object
       required: [projects]

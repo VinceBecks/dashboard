@@ -31,12 +31,14 @@ type Server struct {
 	staticDir string
 	links     *links.Registry
 	cluster   config.ClusterConfig
+	frontend  config.FrontendConfig
 	startedAt time.Time
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
 func NewServer(st *store.Store, registry *actions.Registry, projects []config.Project, ready func() bool) *Server {
-	return &Server{store: st, registry: registry, projects: projects, ready: ready, startedAt: time.Now()}
+	return &Server{store: st, registry: registry, projects: projects, ready: ready,
+		frontend: config.DefaultFrontendConfig(), startedAt: time.Now()}
 }
 
 // WithStaticDir lässt den Server zusätzlich den Frontend-Build aus dir ausliefern.
@@ -48,6 +50,12 @@ func (s *Server) WithStaticDir(dir string) *Server {
 // WithCluster setzt die Cluster-Angaben für GET /api/cluster.
 func (s *Server) WithCluster(c config.ClusterConfig) *Server {
 	s.cluster = c
+	return s
+}
+
+// WithFrontend setzt die Vorgaben für das Frontend (GET /api/polling).
+func (s *Server) WithFrontend(f config.FrontendConfig) *Server {
+	s.frontend = f
 	return s
 }
 
@@ -63,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("GET /api/cluster", s.handleCluster)
+	mux.HandleFunc("GET /api/polling", s.handlePolling)
 	mux.HandleFunc("GET /api/projects", s.handleProjects)
 	mux.HandleFunc("GET /api/projects/{project}/namespaces/{namespace}", s.handleNamespace)
 	mux.HandleFunc("PATCH /api/actions/{action}", s.handleAction)
@@ -101,6 +110,40 @@ func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ClusterResponse{DNSName: s.cluster.DNSName})
+}
+
+// PollingResponse ist die Antwort von GET /api/polling.
+type PollingResponse struct {
+	// Intervals sind die im Frontend wählbaren Abfrage-Intervalle; 0 Millisekunden heißt: nur manuell.
+	Intervals []PollingInterval `json:"intervals"`
+	// DefaultInterval ist der value des Intervalls, das nach dem Laden gilt.
+	DefaultInterval string `json:"defaultInterval"`
+	// ManualRefreshCooldownMilliseconds sperrt den Aktualisieren-Button nach einem Klick.
+	ManualRefreshCooldownMilliseconds int64 `json:"manualRefreshCooldownMilliseconds"`
+}
+
+// PollingInterval ist ein wählbares Abfrage-Intervall.
+type PollingInterval struct {
+	// Value ist der Wert aus der config.yaml, z. B. "10s"; dient als Anzeige und ID.
+	Value        string `json:"value"`
+	Milliseconds int64  `json:"milliseconds"`
+}
+
+// handlePolling liefert die Abfrage-Vorgaben aus der config.yaml. Wie bei handleCluster dient der Startzeitpunkt
+// als ETag.
+func (s *Server) handlePolling(w http.ResponseWriter, r *http.Request) {
+	if notModified(w, r, s.startedAt) {
+		return
+	}
+	res := PollingResponse{
+		Intervals:                         make([]PollingInterval, 0, len(s.frontend.PollingIntervals)),
+		DefaultInterval:                   s.frontend.DefaultPollingInterval.Text,
+		ManualRefreshCooldownMilliseconds: s.frontend.ManualRefreshCooldown.Value.Milliseconds(),
+	}
+	for _, d := range s.frontend.PollingIntervals {
+		res.Intervals = append(res.Intervals, PollingInterval{Value: d.Text, Milliseconds: d.Value.Milliseconds()})
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // ProjectsResponse ist die Antwort von GET /api/projects.
