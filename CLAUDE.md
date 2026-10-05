@@ -37,7 +37,8 @@ Backend-Pakete (`backend/`):
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
 | `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht) |
 | `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
-| `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen |
+| `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar |
+| `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
 | `internal/api`                | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI                            |
@@ -245,6 +246,27 @@ Beispiel für den generischen Handler-Typ `gitlab-pipeline` (startet eine Pipeli
         NAMESPACE: "{{ .Namespace }}"     # verfügbar: .Kind .Name .Namespace .Project .Labels .Annotations
 ```
 
+Beispiel für den Handler-Typ `deploy-missing-services` (nur Namespaces; gleiche GitLab-Felder wie `gitlab-pipeline`,
+ohne `applies-to`). Fehlt nichts, bleibt die Aktion sichtbar, das Dropdown ist leer und die Ausführung wird abgelehnt:
+
+```yaml
+  - action-name: deploy-missing-services
+    action-title: Fehlende Services deployen
+    lucide-icon: package-plus
+    lucide-icon-color: green
+    projects: [foo-projekt]
+    extra-handler-configs:
+      services:                           # Abgleich per Service-Name; label optional
+        - name: foo-backend
+          label: Foo Backend
+      gitlab-url: https://gitlab.mycomp.de
+      project: team/foo-deploy
+      ref: main
+      token-env: GITLAB_TRIGGER_TOKEN_FOO
+      variables:
+        SERVICES: '{{ join .Services "," }}'  # .Services = gewählte Services
+```
+
 Tokens stehen nie in der `config.yaml`, sondern nur in Umgebungsvariablen. Im Cluster kommen sie aus dem Secret
 `feature-dashboard-gitlab` (siehe `backend/deploy/gitlab-secret.example.yaml`). Ist eine Token-Variable nicht
 gesetzt, startet das Backend nicht.
@@ -279,7 +301,8 @@ links:
   `pathescape` für Pfadteile, `rison` für Kibana-Parameter; Werte ohne Funktion landen unverändert in der URL.
 - Lange URLs mit dem YAML-Blockstil `|-` umbrechen, nicht mit `>-` (der macht aus Zeilenumbrüchen Leerzeichen).
 - Templates, die mit `{{` beginnen, in Anführungszeichen setzen (sonst liest YAML `{` als Mapping).
-- Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars`.
+- Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars`
+  `.Services` (nur bei `deploy-missing-services` gefüllt).
 - Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, `range`, …): `rison`, `pathescape`,
   `replace`, `join`.
 - Gemeinsame URL-Teile mehrerer Targets (z. B. die Kibana-Discover-Basis) in `link-variables` auslagern.

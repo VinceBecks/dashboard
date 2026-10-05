@@ -93,3 +93,18 @@ func (s *Store) Get(ref model.ObjectRef, out any) (bool, error) {
 	}
 	return true, json.Unmarshal(raw, out)
 }
+
+// Services liefert eine Kopie aller Services des Namespaces, sortiert nach Name; leer, wenn er unbekannt ist.
+func (s *Store) Services(namespace string) ([]model.StoredService, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := []model.StoredService{}
+	b, ok := s.namespaces[namespace]
+	if !ok {
+		return result, nil
+	}
+	if err := decodeList(b.objects[model.KindService], &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

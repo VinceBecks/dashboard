@@ -32,6 +32,14 @@ func TestRender(t *testing.T) {
 	if _, err := Render(missing, d); err == nil {
 		t.Error("fehlende Variable muss einen Fehler liefern")
 	}
+	joined, _ := Parse("j", `[{{ join .Services "," }}]`)
+	if got, err := Render(joined, d); err != nil || got != "[]" {
+		t.Errorf("leere Services: got %q, err %v", got, err)
+	}
+	d.Services = []string{"a", "b"}
+	if got, err := Render(joined, d); err != nil || got != "[a,b]" {
+		t.Errorf("Services: got %q, err %v", got, err)
+	}
 	if _, err := NewData(model.ObjectRef{}, "kein Objekt", ""); err == nil {
 		t.Error("unbekannter Objekt-Typ muss einen Fehler liefern")
 	}

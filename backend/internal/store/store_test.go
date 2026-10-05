@@ -164,3 +164,25 @@ func must(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+func TestServices(t *testing.T) {
+	s := New()
+	must(t, s.Update(func(tx *Tx) error {
+		if err := tx.PutNamespace(ns("ns1", "foo")); err != nil {
+			return err
+		}
+		for _, name := range []string{"web", "api"} {
+			if _, err := tx.Put(model.KindService, "ns1", name, model.StoredService{Meta: model.Meta{Name: name, Namespace: "ns1"}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	got, err := s.Services("ns1")
+	if err != nil || len(got) != 2 || got[0].Name != "api" || got[1].Name != "web" {
+		t.Fatalf("Services(ns1) = %+v, %v", got, err)
+	}
+	if got, err := s.Services("unknown"); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("Services(unknown) = %#v, %v", got, err)
+	}
+}

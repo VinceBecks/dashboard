@@ -15,6 +15,7 @@ import (
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/actions/deletepod"
 	"feature-dashboard/internal/actions/gitlabpipeline"
+	"feature-dashboard/internal/actions/missingservices"
 	"feature-dashboard/internal/actions/nodeportservice"
 	"feature-dashboard/internal/actions/restartservice"
 	"feature-dashboard/internal/api"
@@ -61,6 +62,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	registry.Register(nodeportservice.DeleteActionName, nodeportservice.NewDelete)
 	registry.Register(gitlabpipeline.HandlerType, gitlabpipeline.New)
 	registry.Register(restartservice.ActionName, restartservice.New)
+	registry.Register(missingservices.HandlerType, missingservices.New)
 	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: st}); err != nil {
 		return err
 	}

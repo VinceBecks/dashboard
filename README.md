@@ -200,6 +200,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/actions/nodeportservice` | Aktionen `node-port-service-on-service-base`, `delete-node-port-service`   |
 | `internal/actions/restartservice`  | Aktion `restart-service-replicas`                                          |
 | `internal/actions/gitlabpipeline`  | Handler-Typ `gitlab-pipeline`                                              |
+| `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
 | `internal/api`                     | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI, Auslieferung des Frontends |
@@ -344,6 +345,7 @@ Aktion Formular-Felder, stehen sie in diesem Dialog. Das Ergebnis erscheint als 
 | `delete-node-port-service`          | Service        | Löscht einen von der vorigen Aktion erstellten NodePort-Service |
 | `restart-service-replicas`          | Service        | Löscht alle Pods eines Services, damit sie neu starten          |
 | `gitlab-pipeline`                   | konfigurierbar | Startet eine GitLab-Pipeline, beliebig viele Aktionen möglich   |
+| `deploy-missing-services`           | Namespace      | Startet eine GitLab-Pipeline für fehlende Services              |
 
 #### `delete-pod`
 
@@ -452,6 +454,40 @@ können ihn nutzen, sie unterscheiden sich nur in ihrer Konfiguration.
 > (siehe [Deployment](#deployment-im-cluster)). Das Deployment lädt alle Schlüssel dieses Secrets als
 > Umgebungsvariablen.
 
+#### `deploy-missing-services`
+
+Gleicht die konfigurierten Services mit den Services im Namespace ab, verglichen wird der Service-Name. Der Dialog
+bietet die fehlenden Services als Mehrfachauswahl an. Für die Auswahl startet der Handler **eine** GitLab-Pipeline,
+genau wie bei [`gitlab-pipeline`](#gitlab-pipeline). Die gewählten Services stehen in den Templates als `.Services`.
+
+```yaml
+  - action-name: deploy-missing-services
+    action-title: Fehlende Services deployen
+    lucide-icon: package-plus
+    lucide-icon-color: green
+    projects: [ foo-projekt ]
+    extra-handler-configs:
+      services:
+        - name: foo-backend
+          label: Foo Backend
+        - name: foo-frontend
+      gitlab-url: https://gitlab.mycomp.de
+      project: team/foo-deploy
+      ref: main
+      token-env: GITLAB_TRIGGER_TOKEN_FOO
+      variables:
+        NAMESPACE: "{{ .Namespace }}"
+        SERVICES: '{{ join .Services "," }}'
+```
+
+| `extra-handler-configs` | Pflicht | Bedeutung                                                                       |
+|-------------------------|---------|---------------------------------------------------------------------------------|
+| `services`              | ja      | Erwartete Services, mindestens einer. Je Eintrag `name` (eindeutig) und optional `label` für die Anzeige, Standard ist `name`. |
+| `gitlab-url` … `variables` | wie bei `gitlab-pipeline` | ohne `applies-to`, die Aktion gilt immer für Namespaces |
+
+- **Nichts fehlt:** Die Aktion bleibt sichtbar. Das Dropdown ist dann leer und die Ausführung wird abgelehnt.
+- **Prüfung:** Ausgewählt werden dürfen nur Services, die zum Zeitpunkt der Ausführung noch fehlen.
+
 ### `links` und `link-variables`
 
 Links erscheinen im Dashboard als Icon mit Tooltip und öffnen in einem neuen Tab:
@@ -517,7 +553,7 @@ links:
 
 ### Templates in der Konfiguration
 
-Templates in Links und bei `gitlab-pipeline` (`ref`, `variables`) sind
+Templates in Links und bei `gitlab-pipeline` bzw. `deploy-missing-services` (`ref`, `variables`) sind
 [Go-Templates](https://pkg.go.dev/text/template).
 
 **Verfügbare Daten:**
@@ -532,6 +568,7 @@ Templates in Links und bei `gitlab-pipeline` (`ref`, `variables`) sind
 | `.Annotations` | Annotations des Objekts                                                                   |
 | `.Selector`    | Selector eines Services, bei anderen Objekten leer                                        |
 | `.Vars`        | `link-variables`, überschrieben durch `link-variables-overrides`. Nur in Links verfügbar. |
+| `.Services`    | Gewählte Services, nur bei `deploy-missing-services` gefüllt, sonst leer                  |
 
 **Zusätzliche Funktionen** neben den Go-Standardfunktionen wie `urlquery`, `index`, `printf`, `range` und `if`:
 

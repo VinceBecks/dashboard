@@ -61,10 +61,12 @@ type Handler interface {
 	Execute(ctx context.Context, obj StoredObject, inputs map[string]any) Result
 }
 
-// ObjectReader liest Stored-Objects als Kopie aus dem Store (siehe store.Store.Get).
+// ObjectReader liest Stored-Objects als Kopie aus dem Store (siehe store.Store.Get und store.Store.Services).
 // Handler dürfen den Store nur lesen; Änderungen kommen ausschließlich über die Informer-Events.
 type ObjectReader interface {
 	Get(ref model.ObjectRef, out any) (bool, error)
+	// Services liefert alle Services eines Namespaces (leer, wenn der Namespace unbekannt ist).
+	Services(namespace string) ([]model.StoredService, error)
 }
 
 // Deps sind die Abhängigkeiten, die Handler bei ihrer Erzeugung erhalten.

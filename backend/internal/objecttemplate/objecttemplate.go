@@ -25,6 +25,8 @@ type Data struct {
 	Selector map[string]string
 	// Vars setzt der Aufrufer (z. B. link-variables bei Links).
 	Vars map[string]string
+	// Services setzt der Aufrufer (z. B. die gewählten Services bei deploy-missing-services), sonst leer.
+	Services []string
 }
 
 // NewData baut die Template-Daten zu einem Objekt. obj ist ein model.Stored*-Wert.
@@ -42,6 +44,7 @@ func NewData(ref model.ObjectRef, obj any, project string) (Data, error) {
 		Annotations: nonNil(meta.Annotations),
 		Selector:    map[string]string{},
 		Vars:        map[string]string{},
+		Services:    []string{},
 	}
 	if svc, ok := obj.(model.StoredService); ok {
 		d.Selector = nonNil(maps.Clone(svc.Selector))

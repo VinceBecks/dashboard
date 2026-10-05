@@ -64,6 +64,26 @@ actionHandlers:
     lucide-icon: rotate-ccw
     lucide-icon-color: orange
     projects: [foo-projekt, bar-projekt, foobar-projekt]
+  # Braucht die Umgebungsvariable GITLAB_TRIGGER_TOKEN_FOO, sonst startet das Backend nicht
+  # (lokal z. B. GITLAB_TRIGGER_TOKEN_FOO=dummy make run).
+  - action-name: deploy-missing-services
+    action-title: Fehlende Services deployen
+    lucide-icon: package-plus
+    lucide-icon-color: green
+    projects: [foo-projekt]
+    extra-handler-configs:
+      services:
+        - name: foo-backend
+          label: Foo Backend
+        - name: foo-frontend
+          label: Foo Frontend
+      gitlab-url: https://gitlab.mycomp.de
+      project: team/foo-deploy
+      ref: main
+      token-env: GITLAB_TRIGGER_TOKEN_FOO
+      variables:
+        NAMESPACE: "{{ .Namespace }}"
+        SERVICES: '{{ join .Services "," }}'
 
 link-variables:
   demoUrl: http://localhost:8080
