@@ -26,7 +26,7 @@ export function DashboardPage({ data }: { data?: Snapshot }) {
               }}
             >
               {project.namespaces.map((ns) => (
-                <NamespaceCard key={ns.name} namespace={ns} />
+                <NamespaceCard key={ns.name} namespace={ns} serviceAreas={project.serviceAreas} />
               ))}
             </Box>
           )}

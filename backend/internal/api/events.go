@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/store"
 )
 
@@ -38,10 +39,28 @@ type Snapshot struct {
 	Projects []ProjectSnapshot `json:"projects"`
 }
 
-// ProjectSnapshot ist ein Projekt mit den Teilbäumen seiner Namespaces.
+// ProjectSnapshot ist ein Projekt mit seinen Service-Bereichen und den Teilbäumen seiner Namespaces.
 type ProjectSnapshot struct {
-	Name       string            `json:"name"`
-	Namespaces []json.RawMessage `json:"namespaces"`
+	Name string `json:"name"`
+	// ServiceAreas sind die Bereiche in Config-Reihenfolge, „others“ immer zuletzt. Services verweisen über
+	// ServiceDTO.Areas auf deren IDs.
+	ServiceAreas []AreaDTO         `json:"serviceAreas"`
+	Namespaces   []json.RawMessage `json:"namespaces"`
+}
+
+// AreaDTO ist ein Service-Bereich; im Dashboard ein Reiter der Namespace-Kachel.
+type AreaDTO struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// serviceAreas liefert die Bereiche eines Projekts für den Snapshot.
+func serviceAreas(p config.Project) []AreaDTO {
+	areas := make([]AreaDTO, 0, len(p.ServiceAreas)+1)
+	for _, a := range p.ServiceAreas {
+		areas = append(areas, AreaDTO{ID: a.Name, Label: a.Label})
+	}
+	return append(areas, AreaDTO{ID: config.OthersAreaName, Label: p.OthersLabel()})
 }
 
 // nsState ist der zuletzt verschickte Stand eines Namespaces. Er besteht nur aus JSON-Bytes, damit niemand
@@ -58,7 +77,7 @@ type nsState struct {
 type Hub struct {
 	store    *store.Store
 	build    func(store.NamespaceView) NamespaceDTO
-	projects []string
+	projects []config.Project
 
 	mu          sync.Mutex
 	namespaces  map[string]*nsState
@@ -75,7 +94,7 @@ type Subscription struct {
 	hub      *Hub
 }
 
-func newHub(st *store.Store, projects []string, build func(store.NamespaceView) NamespaceDTO) *Hub {
+func newHub(st *store.Store, projects []config.Project, build func(store.NamespaceView) NamespaceDTO) *Hub {
 	return &Hub{
 		store:       st,
 		build:       build,
@@ -150,11 +169,11 @@ func (h *Hub) snapshotLocked() Snapshot {
 	}
 	snap := Snapshot{Projects: make([]ProjectSnapshot, 0, len(h.projects))}
 	for _, p := range h.projects {
-		nss := byProject[p]
+		nss := byProject[p.Name]
 		if nss == nil {
 			nss = []json.RawMessage{}
 		}
-		snap.Projects = append(snap.Projects, ProjectSnapshot{Name: p, Namespaces: nss})
+		snap.Projects = append(snap.Projects, ProjectSnapshot{Name: p.Name, ServiceAreas: serviceAreas(p), Namespaces: nss})
 	}
 	return snap
 }

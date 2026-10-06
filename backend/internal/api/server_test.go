@@ -166,7 +166,7 @@ func TestEvents(t *testing.T) {
 	})
 	got := syncHub(srv, sub)
 	want := []string{
-		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"actions":[],"links":[]}`,
+		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"areas":["others"],"actions":[],"links":[]}`,
 		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[]}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -236,6 +236,37 @@ func TestSlowSubscriberIsDropped(t *testing.T) {
 	}
 	if n != subscriberBuffer {
 		t.Fatalf("%d Events vor dem Schließen, want %d", n, subscriberBuffer)
+	}
+}
+
+func TestServiceAreas(t *testing.T) {
+	st, _, _ := setup(t)
+	projects := []config.Project{{Name: "foo", OthersAreaLabel: "Sonstige", ServiceAreas: []config.ServiceArea{
+		{Name: "business", Label: "Business", LabelCombinations: []map[string]string{{"part-of": "shop"}}},
+		{Name: "monitored", Label: "Überwacht", LabelCombinations: []map[string]string{{"monitored": "true"}}},
+	}}}
+	srv := NewServer(st, actions.NewRegistry(), projects, func() bool { return true })
+	_, sub, raw := subscribe(t, srv)
+	for _, want := range []string{
+		`"serviceAreas":[{"id":"business","label":"Business"},{"id":"monitored","label":"Überwacht"},{"id":"others","label":"Sonstige"}]`,
+		`{"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":false,"areas":["others"]`,
+	} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("%s fehlt in %s", want, raw)
+		}
+	}
+
+	// Label-Änderung am Service → upsert mit neuen Bereichen (mehrfach, Config-Reihenfolge).
+	_ = st.Update(func(tx *store.Tx) error {
+		_, err := tx.Put(model.KindService, "feat-1", "web", model.StoredService{
+			Meta: model.Meta{Name: "web", Labels: map[string]string{"part-of": "shop", "monitored": "true"}},
+			Type: "ClusterIP", Replicas: []string{"web-1"},
+		})
+		return err
+	})
+	got := syncHub(srv, sub)
+	if len(got) != 1 || !strings.Contains(got[0], `"name":"web",`) || !strings.Contains(got[0], `"areas":["business","monitored"]`) {
+		t.Fatalf("events = %v", got)
 	}
 }
 

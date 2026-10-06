@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { namespace, nodePortService, pod, service } from '../test/fixtures';
+import { namespace, nodePortService, pod, service, serviceAreas } from '../test/fixtures';
 import { NamespaceCard } from './NamespaceCard';
 
 describe('NamespaceCard', () => {
@@ -36,6 +36,29 @@ describe('NamespaceCard', () => {
     expect(screen.getByText('nodes.example:30080')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'nodes.example:30081 kopieren' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'NodePort-Service löschen' })).toBeInTheDocument();
+  });
+
+  it('teilt die Service-Punkte in Reiter je Bereich auf', async () => {
+    const user = userEvent.setup();
+    const ns = namespace([service('api', true, [], ['business']), service('mq', false, [], ['infra']), service('debug', true)]);
+    render(<NamespaceCard namespace={ns} serviceAreas={serviceAreas} />);
+
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent);
+    expect(tabs).toEqual(['Business (1)', 'Infrastruktur (1)', 'Andere (1)']);
+    expect(screen.getByRole('listitem', { name: 'api: läuft' })).toBeInTheDocument();
+    expect(screen.queryByRole('listitem', { name: 'mq: läuft nicht' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Infrastruktur (1)' }));
+    expect(screen.getByRole('listitem', { name: 'mq: läuft nicht' })).toBeInTheDocument();
+    expect(screen.queryByRole('listitem', { name: 'api: läuft' })).not.toBeInTheDocument();
+  });
+
+  it('zeigt ohne Bereiche oder mit nur einem Bereich keine Reiterleiste', () => {
+    const { rerender } = render(<NamespaceCard namespace={namespace([service('web', true)])} />);
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    rerender(<NamespaceCard namespace={namespace([service('api', true, [], ['business'])])} serviceAreas={serviceAreas} />);
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: 'api: läuft' })).toBeInTheDocument();
   });
 
   it('zeigt einen Hinweis ohne Services', () => {

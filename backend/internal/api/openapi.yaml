@@ -197,9 +197,15 @@ components:
       allOf:
         - $ref: '#/components/schemas/ObjectBase'
         - type: object
-          required: [running]
+          required: [running, areas]
           properties:
             running: { type: boolean, description: Mindestens ein Replica ist ready }
+            areas:
+              type: array
+              description: |
+                IDs der Service-Bereiche (`Snapshot.projects[].serviceAreas`), zu denen der Service gehört; mindestens
+                einer, ohne passenden Bereich `others`.
+              items: { type: string }
             pods:
               type: array
               items: { $ref: '#/components/schemas/PodObject' }
@@ -244,6 +250,12 @@ components:
                 Je Rule mit Host und je Path `https://<host><path>` (Reihenfolge der Spec, ohne Duplikate);
                 Rules ohne Host fehlen.
               items: { type: string, format: uri }
+    ServiceArea:
+      type: object
+      required: [id, label]
+      properties:
+        id: { type: string, description: '`area-name` aus der config.yaml oder `others`' }
+        label: { type: string }
     Snapshot:
       type: object
       required: [projects]
@@ -253,9 +265,15 @@ components:
           description: Alle Projekte in der Reihenfolge der config.yaml, auch ohne Namespaces.
           items:
             type: object
-            required: [name, namespaces]
+            required: [name, serviceAreas, namespaces]
             properties:
               name: { type: string }
+              serviceAreas:
+                type: array
+                description: |
+                  Service-Bereiche des Projekts (`service-areas` der config.yaml) in Config-Reihenfolge, `others`
+                  immer zuletzt. Im Dashboard je ein Reiter der Namespace-Kachel. Statisch, es gibt dafür keine Events.
+                items: { $ref: '#/components/schemas/ServiceArea' }
               namespaces:
                 type: array
                 description: Sortiert nach Name; darin Services, Ingresses und Pods ebenfalls nach Name.

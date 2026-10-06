@@ -95,6 +95,7 @@ Ein Helm-Chart mit einer Demo-Anwendung liegt unter `helpers/demo-app`.
 | Projekt            | In der `config.yaml` definiert. Hat mehrere Feature-Umgebungen.                                |
 | Feature-Umgebung   | Genau ein Namespace, der über seine Labels genau einem Projekt zugeordnet ist.                 |
 | Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                    |
+| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services; im Dashboard ein Reiter der Kachel.   |
 | Replica            | Ein Pod, der von einem Service über dessen Selector referenziert wird.                         |
 | Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts im In-Memory-Store.                 |
 | Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch einen ActionHandler. |
@@ -242,7 +243,7 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 
 | Schlüssel        | Pflicht | Inhalt                                                               |
 |------------------|---------|----------------------------------------------------------------------|
-| `projects`       | ja      | Projekte, ihre Namespace-Labels und Link-Variablen                   |
+| `projects`       | ja      | Projekte, ihre Namespace-Labels, Service-Bereiche, Link-Variablen    |
 | `actionHandlers` | nein    | Aktionen, die das Dashboard anbietet                                 |
 | `links`          | nein    | Links von Objekten in andere Systeme                                 |
 | `link-variables` | nein    | Statische Variablen für Link-Templates                               |
@@ -264,6 +265,14 @@ projects:
     namespace-labels: # ALLE Labels müssen am Namespace gesetzt sein
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: foo-projekt
+    others-area-label: Andere                      # optional
+    service-areas: # optional
+      - area-name: business-services
+        area-label: Business
+        label-combinations:
+          - app.kubernetes.io/part-of: shop
+            app.kubernetes.io/component: backend
+          - app.kubernetes.io/part-of: billing
     link-variables-overrides: # optional
       kibanaDataView: logs-foo
 ```
@@ -272,10 +281,33 @@ projects:
 |----------------------------|---------|-----------------------------------------------------------------------------------------------------------------------------|
 | `project-name`             | ja      | Eindeutiger Name. Er wird in `projects` von Aktionen und Links referenziert.                                                |
 | `namespace-labels`         | ja      | Labels samt Werten, die ein Namespace **alle** tragen muss, um zum Projekt zu gehören. Darf nicht leer sein.                |
+| `service-areas`            | nein    | Teilt die Anwendungs-Services einer Namespace-Kachel in Reiter auf.                                                         |
+| `others-area-label`        | nein    | Reiter-Titel für Services ohne Bereich. Standard ist „Andere“.                                                              |
 | `link-variables-overrides` | nein    | Überschreibt oder ergänzt die globalen `link-variables` für dieses Projekt.                                                 |
 
 **Zuordnung von Namespaces:** Passt ein Namespace zu mehreren Projekten, gewinnt das erste in der Reihenfolge der
 Config. Das Backend loggt dazu eine Warnung.
+
+#### Service-Bereiche (`service-areas`)
+
+Service-Bereiche teilen die **Anwendungs-Services (Typ `ClusterIP`)** einer Namespace-Kachel in **Reiter** auf.
+Ingresses und NodePort-Services stehen außerhalb der Reiter.
+
+| Feld                 | Pflicht | Bedeutung                                                        |
+|----------------------|---------|------------------------------------------------------------------|
+| `area-name`          | ja      | ID des Bereichs, eindeutig je Projekt. `others` ist reserviert.  |
+| `area-label`         | ja      | Titel des Reiters                                                |
+| `label-combinations` | ja      | Liste von Label-Kombinationen. Keine Kombination darf leer sein. |
+
+Ein Service gehört zu einem Bereich, wenn er **alle Labels mindestens einer Kombination** trägt: ODER über die
+Einträge, UND innerhalb eines Eintrags.
+
+- **Mehrere Bereiche:** Ein Service kann in mehreren Bereichen und damit in mehreren Reitern stehen.
+- **Rest:** Services ohne passenden Bereich stehen im Reiter `others-area-label` („Andere“), immer zuletzt.
+- **Nur gefüllte Reiter:** Eine Kachel zeigt nur Bereiche, die in diesem Namespace Services haben. Bleibt nur einer
+  übrig, oder hat das Projekt keine Bereiche, erscheinen die Punkte ohne Reiterleiste.
+- **Wiederverwendung:** Gleiche Bereiche in mehreren Projekten lassen sich mit YAML-Ankern (`&name` / `*name`)
+  teilen.
 
 ### `actionHandlers`
 
@@ -584,6 +616,10 @@ store:
 Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit einer Liste aller Probleme ab**:
 
 - **Projekte:** `project-name` ist gesetzt und eindeutig, `namespace-labels` sind nicht leer.
+- **Service-Bereiche:**
+    - `area-name` ist gesetzt, eindeutig je Projekt und nicht `others`.
+    - `area-label` ist gesetzt.
+    - Es gibt mindestens eine Label-Kombination, und keine Kombination ist leer.
 - **Aktionen:**
     - `action-name` ist gesetzt und eindeutig.
     - `projects` ist vorhanden und nennt nur bekannte Projekte.
@@ -620,8 +656,8 @@ Internetzugang.
 | GET     | `/healthz`                          | Liveness, immer `200`                                                   |
 | GET     | `/readyz`                           | Readiness: `200` nach dem ersten Aufbau des Stores, vorher `503`        |
 
-Ältere Konfigurationen mit `service-areas`, `others-area-label` oder `frontend` starten weiterhin; diese Schlüssel
-werden ignoriert. `cluster.dns-name` ist dagegen Pflicht.
+Ältere Konfigurationen mit `frontend` starten weiterhin; der Schlüssel wird ignoriert. `cluster.dns-name` ist dagegen
+Pflicht.
 
 ### Server-Sent Events (`GET /api/events`)
 
@@ -635,7 +671,9 @@ werden ignoriert. `cluster.dns-name` ist dagegen Pflicht.
   Feldern steht in [`backend/internal/api/example-api.jsonc`](backend/internal/api/example-api.jsonc).
 - **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
   `formFields`) und `links` (ID, Titel, Icon, Farbe, `url`), dazu je Typ:
-    - Service (Typ `ClusterIP`, in `services`): `running`, also mindestens ein Replica ready.
+    - Service (Typ `ClusterIP`, in `services`): `running`, also mindestens ein Replica ready, und `areas`, die IDs
+      seiner Service-Bereiche. Die Bereiche selbst (`id`, `label`) stehen im Snapshot je Projekt in `serviceAreas`,
+      `others` immer zuletzt.
     - NodePort-Service (Typ `NodePort`, in `nodePortServices`, `kind: node-port-service`): `addresses`, je Port
       `<cluster.dns-name>:<nodePort>`. Für `PATCH /api/actions` ist er ein Objekt vom Typ `service`.
     - Pod: `ready`, `containers` (Name, Image). Pods hängen unter jedem Service, der sie referenziert.

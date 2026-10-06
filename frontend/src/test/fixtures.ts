@@ -1,4 +1,4 @@
-import type { NamespaceObject, NodePortServiceObject, PodObject, ServiceObject, Snapshot } from '../api/types';
+import type { NamespaceObject, NodePortServiceObject, PodObject, ServiceArea, ServiceObject, Snapshot } from '../api/types';
 
 export function pod(name: string, ready: boolean, service = 'web'): PodObject {
   return {
@@ -12,12 +12,13 @@ export function pod(name: string, ready: boolean, service = 'web'): PodObject {
   };
 }
 
-export function service(name: string, running: boolean, pods: PodObject[] = []): ServiceObject {
+export function service(name: string, running: boolean, pods: PodObject[] = [], areas = ['others']): ServiceObject {
   return {
     kind: 'service',
     name,
     parents: { project: 'foo', namespace: 'feat-1' },
     running,
+    areas,
     actions: [],
     links: [],
     pods,
@@ -57,11 +58,21 @@ export function namespace(services: ServiceObject[] = [], nodePortServices: Node
   };
 }
 
+export const serviceAreas: ServiceArea[] = [
+  { id: 'business', label: 'Business' },
+  { id: 'infra', label: 'Infrastruktur' },
+  { id: 'others', label: 'Andere' },
+];
+
 export function snapshot(): Snapshot {
   return {
     projects: [
-      { name: 'foo', namespaces: [namespace([service('web', true, [pod('web-1', true)]), service('worker', false)])] },
-      { name: 'bar', namespaces: [] },
+      {
+        name: 'foo',
+        serviceAreas,
+        namespaces: [namespace([service('web', true, [pod('web-1', true)]), service('worker', false)])],
+      },
+      { name: 'bar', serviceAreas: [{ id: 'others', label: 'Andere' }], namespaces: [] },
     ],
   };
 }

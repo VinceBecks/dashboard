@@ -11,7 +11,7 @@ export function applyUpsert(state: Snapshot, obj: DashboardObject): Snapshot {
   if (obj.kind === 'namespace') {
     const projects = state.projects.some((p) => p.name === project)
       ? state.projects
-      : [...state.projects, { name: project, namespaces: [] }];
+      : [...state.projects, { name: project, serviceAreas: [], namespaces: [] }];
     return {
       projects: projects.map((p) =>
         p.name !== project

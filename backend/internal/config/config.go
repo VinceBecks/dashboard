@@ -59,8 +59,31 @@ type LinkTarget struct {
 type Project struct {
 	Name            string            `yaml:"project-name"`
 	NamespaceLabels map[string]string `yaml:"namespace-labels"`
+	// ServiceAreas teilen die Anwendungs-Services einer Namespace-Kachel in Reiter auf.
+	ServiceAreas []ServiceArea `yaml:"service-areas"`
+	// OthersAreaLabel ist das Label des Reiters für Services ohne Bereich (siehe OthersLabel).
+	OthersAreaLabel string `yaml:"others-area-label"`
 	// LinkVariablesOverrides überschreiben bzw. ergänzen die globalen link-variables für dieses Projekt.
 	LinkVariablesOverrides map[string]string `yaml:"link-variables-overrides"`
+}
+
+// OthersAreaName ist die reservierte ID des Bereichs für Services, die keinem Bereich zugeordnet sind.
+const OthersAreaName = "others"
+
+// OthersLabel liefert das Label des others-Bereichs, Standard „Andere“.
+func (p Project) OthersLabel() string {
+	if p.OthersAreaLabel != "" {
+		return p.OthersAreaLabel
+	}
+	return "Andere"
+}
+
+// ServiceArea ist ein Bereich von Anwendungs-Services. Ein Service gehört dazu, wenn er alle Labels mindestens
+// einer LabelCombination trägt (ODER über die Kombinationen, UND innerhalb einer Kombination).
+type ServiceArea struct {
+	Name              string              `yaml:"area-name"`
+	Label             string              `yaml:"area-label"`
+	LabelCombinations []map[string]string `yaml:"label-combinations"`
 }
 
 // ActionHandlerConfig konfiguriert genau eine Aktion und damit genau eine ActionHandler-Instanz.
@@ -169,6 +192,7 @@ func (c *Config) Validate() error {
 		if len(p.NamespaceLabels) == 0 {
 			errs = append(errs, fmt.Errorf("projects[%d]: namespace-labels dürfen nicht leer sein", i))
 		}
+		errs = append(errs, validateServiceAreas(fmt.Sprintf("projects[%d]", i), p.ServiceAreas)...)
 	}
 	errs = append(errs, validateLinks(c.Links, projects)...)
 	errs = append(errs, c.Cluster.validate()...)
@@ -183,6 +207,35 @@ func (c *Config) Validate() error {
 		errs = append(errs, validateProjects(fmt.Sprintf("actionHandlers[%d]", i), a.Projects, projects)...)
 	}
 	return errors.Join(errs...)
+}
+
+func validateServiceAreas(prefix string, areas []ServiceArea) []error {
+	var errs []error
+	names := map[string]bool{}
+	for i, a := range areas {
+		at := fmt.Sprintf("%s.service-areas[%d]", prefix, i)
+		switch {
+		case a.Name == "":
+			errs = append(errs, fmt.Errorf("%s: area-name fehlt", at))
+		case a.Name == OthersAreaName:
+			errs = append(errs, fmt.Errorf("%s: area-name %q ist reserviert", at, OthersAreaName))
+		case names[a.Name]:
+			errs = append(errs, fmt.Errorf("%s: area-name %q ist nicht eindeutig", at, a.Name))
+		}
+		names[a.Name] = true
+		if a.Label == "" {
+			errs = append(errs, fmt.Errorf("%s: area-label fehlt", at))
+		}
+		if len(a.LabelCombinations) == 0 {
+			errs = append(errs, fmt.Errorf("%s: label-combinations dürfen nicht leer sein", at))
+		}
+		for j, c := range a.LabelCombinations {
+			if len(c) == 0 {
+				errs = append(errs, fmt.Errorf("%s.label-combinations[%d]: leere Kombination würde alle Services treffen", at, j))
+			}
+		}
+	}
+	return errs
 }
 
 func validateLinks(links []Link, projects map[string]bool) []error {

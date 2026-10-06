@@ -11,6 +11,7 @@ import (
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
+	"feature-dashboard/internal/project"
 	"feature-dashboard/internal/store"
 )
 
@@ -61,6 +62,8 @@ type ServiceDTO struct {
 	ObjectHeader
 	// Running gilt, wenn mindestens ein Replica ready ist.
 	Running bool `json:"running"`
+	// Areas sind die IDs der Service-Bereiche (ProjectSnapshot.ServiceAreas), zu denen der Service gehört.
+	Areas []string `json:"areas"`
 	ObjectExtras
 	Pods []PodDTO `json:"pods,omitzero"`
 }
@@ -131,6 +134,7 @@ func (s *Server) buildService(svc model.StoredService, pods map[string]model.Sto
 	sd := ServiceDTO{
 		ObjectHeader: ObjectHeader{Kind: model.KindService, Name: svc.Name, Parents: parents},
 		ObjectExtras: s.extras(model.KindService, parents.Namespace, svc.Name, svc, parents.Project),
+		Areas:        project.ServiceAreaIDs(s.projects[parents.Project], svc.Labels),
 		Pods:         []PodDTO{},
 	}
 	podParents := Parents{Project: parents.Project, Namespace: parents.Namespace, Service: svc.Name}

@@ -80,6 +80,8 @@ export interface ServiceObject extends ObjectBase {
   kind: 'service';
   /** Mindestens ein Replica ist ready. */
   running: boolean;
+  /** IDs der Service-Bereiche (ProjectSnapshot.serviceAreas), zu denen der Service gehört. */
+  areas: string[];
   pods?: PodObject[];
 }
 
@@ -106,8 +108,16 @@ export interface NamespaceObject extends ObjectBase {
 
 export type DashboardObject = NamespaceObject | ServiceObject | PodObject | IngressObject | NodePortServiceObject;
 
+/** Service-Bereich eines Projekts; im Dashboard ein Reiter der Namespace-Kachel. */
+export interface ServiceArea {
+  id: string;
+  label: string;
+}
+
 export interface ProjectSnapshot {
   name: string;
+  /** Bereiche in Config-Reihenfolge, „others“ immer zuletzt. */
+  serviceAreas: ServiceArea[];
   namespaces: NamespaceObject[];
 }
 

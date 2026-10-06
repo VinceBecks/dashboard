@@ -76,6 +76,7 @@ Aktionen), `src/hooks/useDashboardEvents.ts` (EventSource auf `GET /api/events`)
 | Projekt            | In der `config.yaml` definiert. Hat mehrere Feature-Umgebungen.                                      |
 | Feature-Umgebung   | Genau ein Namespace. Gehört zu genau einem Projekt.                                                  |
 | Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                          |
+| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services, zugeordnet über Service-Labels; ein Reiter. |
 | Replica            | Ein Pod, der von einem Anwendungs-Service referenziert wird.                                         |
 | Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts im In-Memory-Store.                       |
 | Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch genau einen ActionHandler. |
@@ -184,6 +185,22 @@ projects:
 - `project-name` ist der eindeutige Name des Projektes
 - `namespace-labels` definiert Labels, die alle am Namespace definiert sein müssen, damit der Namespace zu dem Projekt
   gehört
+- `service-areas` (optional) teilt die Anwendungs-Services (ClusterIP) einer Namespace-Kachel in Reiter auf:
+
+```yaml
+    others-area-label: Andere          # optional; Standard "Andere"
+    service-areas:
+      - area-name: business-services   # eindeutig je Projekt, "others" ist reserviert
+        area-label: Business
+        label-combinations:            # ODER über die Einträge, UND innerhalb eines Eintrags; keine leeren Einträge
+          - app.kubernetes.io/part-of: shop
+            app.kubernetes.io/component: backend
+          - app.kubernetes.io/part-of: billing
+```
+
+  Ein Service kann in mehreren Bereichen liegen; nicht zugeordnete Services gehören zu `others`. Die Zuordnung
+  berechnet das Backend beim Aufbau der DTOs (`project.ServiceAreaIDs`, `areas` am Service); der Store bleibt
+  unverändert. Gleiche Bereiche in mehreren Projekten per YAML-Anker (`&name` / `*name`) wiederverwenden.
 
 Beispiel für ActionHandler:
 
@@ -337,7 +354,8 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 
 - Objekte tragen nur, was das Dashboard braucht (`kind`, `name`, `parents`, Aktionen, Links und je Typ wenige
   Felder), keine Labels/Annotations. Anwendungs-Services (ClusterIP) stehen in `services`; ihr `running` ist
-  gesetzt, wenn mindestens ein Replica ready ist. Pods hängen unter jedem Service, der sie referenziert.
+  gesetzt, wenn mindestens ein Replica ready ist, `areas` nennt die IDs ihrer Service-Bereiche. Die Bereiche selbst
+  (`id`, `label`, Config-Reihenfolge, `others` zuletzt) stehen im Snapshot je Projekt in `serviceAreas`. Pods hängen unter jedem Service, der sie referenziert.
   NodePort-Services stehen gesondert in `nodePortServices` (`kind: node-port-service`) und tragen nur `addresses`
   (`<dns-name>:<node-port>`, im Backend berechnet); für Aktionen sind sie Objekte vom Typ `service`. Andere
   Service-Typen werden nicht gesendet. Ingresses liefern fertige `https://<host><path>`-URLs (`urls`).
@@ -387,6 +405,9 @@ Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
 - Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (mit deren Aktionen/Links), die
   NodePort-Services (Name, Aktionen/Links, je Adresse ein Kopieren-Button, `CopyButton`) und je Anwendungs-Service
   ein Punkt – grün, wenn mindestens ein Replica läuft, sonst rot.
+- Die Punkte stehen in Reitern je Service-Bereich (`ServiceAreaTabs` in `NamespaceCard`, Gruppierung in
+  `components/serviceAreas.ts`): nur Bereiche mit Services, Reihenfolge aus `serviceAreas`, „Andere“ zuletzt. Bei
+  nur einem Bereich entfällt die Reiterleiste. Der gewählte Reiter gilt je Kachel und wird nicht gespeichert.
 - Klick auf einen Punkt öffnet den `ServiceDialog`: Aktionen und Links des Services, darunter je Replica Ready-Zustand,
   Container (Name, Image), Aktionen und Links. Verschwindet der Service zwischenzeitlich, zeigt der Dialog einen
   Hinweis.
@@ -413,7 +434,7 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 - Frontend: Vite, eine Seite ohne Router; Auslieferung durch das Backend (`--static-dir`, SPA-Fallback auf
   `index.html`).
 - Aktualisierung über Server-Sent Events statt Polling/ETag; der Initialstand ist das erste Event desselben Streams.
-- Keine Service-Bereiche. NodePort-Services kommen als eigenes Attribut `nodePortServices` mit fertigen Adressen;
+- Service-Bereiche sind Reiter in der Namespace-Kachel (kein seitenweiter Filter). NodePort-Services kommen als eigenes Attribut `nodePortServices` mit fertigen Adressen;
   `cluster.dns-name` ist dafür Pflicht.
 - Aktionen werden im Frontend immer über einen Dialog bestätigt; Formular-Felder erscheinen darin, falls vorhanden.
 - Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit Events)

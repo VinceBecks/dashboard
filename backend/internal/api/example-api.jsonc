@@ -6,6 +6,10 @@
   "projects": [
     {
       "name": "foo-projekt",                       // Reihenfolge wie in der config.yaml
+      "serviceAreas": [                            // Reiter der Kacheln; Config-Reihenfolge, "others" immer zuletzt
+        { "id": "business-services", "label": "Business" },
+        { "id": "others", "label": "Andere" }
+      ],
       "namespaces": [
         {
           "kind": "namespace",
@@ -43,6 +47,7 @@
               "name": "foo-backend",
               "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
               "running": true,                      // grün: mindestens ein Replica ready
+              "areas": ["business-services"],       // IDs aus serviceAreas; mehrere möglich
               "actions": [
                 { "id": "restart-service-replicas", "title": "Neu starten", "lucideIcon": "rotate-cw", "lucideIconColor": "orange" }
               ],
@@ -68,6 +73,7 @@
               "name": "foo-worker",
               "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
               "running": false,                     // rot: kein Replica ready (oder keine Pods)
+              "areas": ["others"],                  // kein Bereich passt
               "actions": [],
               "links": [],
               "pods": []
@@ -103,6 +109,7 @@
     },
     {
       "name": "bar-projekt",
+      "serviceAreas": [{ "id": "others", "label": "Andere" }],
       "namespaces": []                             // Projekte ohne Namespaces werden mitgeliefert
     }
   ]
@@ -110,7 +117,7 @@
 
 // Danach Delta-Events (Objekte ohne Kind-Listen):
 //   event: upsert
-//   data: {"kind":"service","name":"foo-worker","parents":{"project":"foo-projekt","namespace":"foo-feature-123"},"running":true,"actions":[],"links":[]}
+//   data: {"kind":"service","name":"foo-worker","parents":{"project":"foo-projekt","namespace":"foo-feature-123"},"running":true,"areas":["others"],"actions":[],"links":[]}
 //
 //   event: delete
 //   data: {"kind":"pod","name":"foo-backend-7d9f8c6b5-x2k4q","parents":{"project":"foo-projekt","namespace":"foo-feature-123","service":"foo-backend"}}

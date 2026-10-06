@@ -10,14 +10,42 @@ data:
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: foo-projekt
+        service-areas:
+          - area-name: business-services
+            area-label: Business
+            label-combinations:
+              - app.kubernetes.io/part-of: foo
+          - area-name: infrastructure-services
+            area-label: Infrastruktur
+            label-combinations:
+              - app.kubernetes.io/part-of: rabbitmq
+              - app.kubernetes.io/part-of: database
       - project-name: bar-projekt
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: bar
+        service-areas:
+          - area-name: business-services
+            area-label: Business
+            label-combinations:
+              - app.kubernetes.io/part-of: bar
+          - area-name: infrastructure-services
+            area-label: Infrastruktur
+            label-combinations:
+              - app.kubernetes.io/part-of: database
       - project-name: foobar-projekt
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: foobar
+        service-areas:
+          - area-name: business-services
+            area-label: Business
+            label-combinations:
+              - app.kubernetes.io/part-of: foobar
+          - area-name: infrastructure-services
+            area-label: Infrastruktur
+            label-combinations:
+              - app.kubernetes.io/part-of: database
         link-variables-overrides:
           something: isNotHere
     actionHandlers:

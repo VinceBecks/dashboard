@@ -29,17 +29,18 @@ type Server struct {
 	staticDir string
 	links     *links.Registry
 	dnsName   string
+	projects  map[string]config.Project
 	hub       *Hub
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
 func NewServer(st *store.Store, registry *actions.Registry, projects []config.Project, ready func() bool) *Server {
 	s := &Server{store: st, registry: registry, ready: ready}
-	names := make([]string, 0, len(projects))
+	s.projects = make(map[string]config.Project, len(projects))
 	for _, p := range projects {
-		names = append(names, p.Name)
+		s.projects[p.Name] = p
 	}
-	s.hub = newHub(st, names, s.buildNamespace)
+	s.hub = newHub(st, projects, s.buildNamespace)
 	return s
 }
 
