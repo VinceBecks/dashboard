@@ -9,7 +9,6 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { refOf } from '../api/state';
 import type { ServiceObject } from '../api/types';
 import { ObjectButtons } from './ObjectButtons';
 import { PodStatus } from './PodStatus';
@@ -36,7 +35,7 @@ export function ServiceDialog({ name, service, onClose }: Props) {
           <Alert severity="info">Der Service existiert nicht mehr.</Alert>
         ) : (
           <Stack spacing={2}>
-            <ObjectButtons actions={service.actions} links={service.links} object={refOf(service)} />
+            <ObjectButtons object={service} />
             <Divider />
             <Typography variant="subtitle2">Replicas</Typography>
             {pods.length === 0 && (
@@ -57,7 +56,7 @@ export function ServiceDialog({ name, service, onClose }: Props) {
                     {c.name}: {c.image}
                   </Typography>
                 ))}
-                <ObjectButtons actions={pod.actions} links={pod.links} object={refOf(pod)} />
+                <ObjectButtons object={pod} />
               </Stack>
             ))}
           </Stack>

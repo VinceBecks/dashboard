@@ -9,6 +9,15 @@ export function pod(name: string, ready: boolean, service = 'web'): PodObject {
     containers: [{ name: 'app', image: 'registry/app:1' }],
     actions: [{ id: 'delete-pod', title: 'Pod löschen', lucideIcon: 'trash', lucideIconColor: 'red' }],
     links: [],
+    copyCommands: [
+      {
+        id: 'shell/app',
+        title: 'Shell (app)',
+        lucideIcon: 'terminal',
+        lucideIconColor: '',
+        command: `kubectl exec -it -n feat-1 ${name} -c app -- sh`,
+      },
+    ],
   };
 }
 
@@ -21,6 +30,7 @@ export function service(name: string, running: boolean, pods: PodObject[] = [], 
     areas,
     actions: [],
     links: [],
+    copyCommands: [],
     pods,
   };
 }
@@ -33,6 +43,7 @@ export function nodePortService(name: string, addresses: string[]): NodePortServ
     addresses,
     actions: [{ id: 'delete-node-port-service', title: 'NodePort-Service löschen', lucideIcon: 'trash-2', lucideIconColor: 'red' }],
     links: [],
+    copyCommands: [],
   };
 }
 
@@ -43,6 +54,7 @@ export function namespace(services: ServiceObject[] = [], nodePortServices: Node
     parents: { project: 'foo' },
     actions: [],
     links: [],
+    copyCommands: [],
     services,
     nodePortServices,
     ingresses: [
@@ -53,6 +65,7 @@ export function namespace(services: ServiceObject[] = [], nodePortServices: Node
         urls: ['https://feat-1.example/', 'https://feat-1.example/api'],
         actions: [],
         links: [],
+    copyCommands: [],
       },
     ],
   };

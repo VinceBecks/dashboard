@@ -35,6 +35,7 @@ Replica.
     - [`actionHandlers`](#actionhandlers)
     - [Mitgelieferte Aktionen](#mitgelieferte-aktionen)
     - [`links` und `link-variables`](#links-und-link-variables)
+    - [`copy-commands`](#copy-commands)
     - [Templates in der Konfiguration](#templates-in-der-konfiguration)
     - [`cluster`](#cluster)
     - [`store`](#store)
@@ -205,6 +206,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
+| `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
 | `internal/api`                     | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, Auslieferung des Frontends |
 
 ---
@@ -246,7 +248,8 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 | `projects`       | ja      | Projekte, ihre Namespace-Labels, Service-Bereiche, Link-Variablen    |
 | `actionHandlers` | nein    | Aktionen, die das Dashboard anbietet                                 |
 | `links`          | nein    | Links von Objekten in andere Systeme                                 |
-| `link-variables` | nein    | Statische Variablen für Link-Templates                               |
+| `link-variables` | nein    | Statische Variablen für Link-Templates und Kopier-Befehle            |
+| `copy-commands`  | nein    | Befehle (z. B. `kubectl exec`), die das Dashboard zum Kopieren anbietet |
 | `cluster`        | ja      | Angaben zum Cluster: der DNS-Name der Nodes für NodePort-Adressen    |
 | `store`          | nein    | Verhalten des In-Memory-Stores                                       |
 
@@ -551,9 +554,46 @@ links:
 - **Fehler beim Rendern:** Lässt sich ein Link für ein Objekt nicht rendern, wird nur dieser Link weggelassen und
   eine Warnung geloggt. Typische Ursachen sind eine fehlende Variable oder eine ungültige URL.
 
+### `copy-commands`
+
+Kopier-Befehle erscheinen im Dashboard als Icon neben den Links. Der Tooltip zeigt Titel und Befehl, ein Klick legt den
+Befehl in die Zwischenablage. Pod-Befehle stehen in den Service-Details beim jeweiligen Replica.
+
+```yaml
+copy-commands:
+  - command-id: pod-shell                   # eindeutige ID
+    title: Shell im Pod öffnen              # Tooltip
+    lucide-icon: terminal                   # Name eines Lucide-Icons
+    lucide-icon-color: "#455a64"            # beliebige CSS-Farbe
+    projects: [ foo-projekt ]               # Pflicht; [] = in keinem Projekt
+    targets:                                # je Objekt-Typ ein Befehl; fehlende Typen haben den Befehl nicht
+      pod:
+        command: kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh
+      namespace:
+        command: kubectl config set-context --current --namespace={{ shellquote .Namespace }}
+```
+
+| Feld                | Pflicht | Bedeutung                                                                                  |
+|---------------------|---------|--------------------------------------------------------------------------------------------|
+| `command-id`        | ja      | Eindeutige ID                                                                              |
+| `title`             | ja      | Tooltip im Dashboard                                                                       |
+| `lucide-icon`       | nein    | Icon des Buttons                                                                           |
+| `lucide-icon-color` | nein    | Farbe des Icons                                                                            |
+| `projects`          | ja      | Projekte, in denen der Befehl angeboten wird. `[]` heißt: in keinem (Warnung beim Start).  |
+| `targets.<typ>`     | ja      | `command` je Objekt-Typ (`namespace`, `service`, `ingress`, `pod`) als Template            |
+
+- **Je Container:** Bei Pods rendert das Backend den Befehl je Container (`.Container`). Unterscheiden sich die
+  Ergebnisse, gibt es je Container ein Icon („Shell im Pod öffnen (app)“, „… (sidecar)“). Nutzt das Template
+  `.Container` nicht, bleibt es bei einem Befehl.
+- **Text:** Der Befehl wird unverändert übernommen, nur Leerraum am Anfang und Ende wird entfernt. Mehrzeilige Befehle
+  (YAML `|`) bleiben mehrzeilig.
+- **NodePort-Services** bekommen die `service`-Befehle.
+- **Fehler:** Lässt sich ein Befehl für ein Objekt nicht rendern oder ist er leer, fehlt nur dieser Befehl; das Backend
+  loggt eine Warnung.
+
 ### Templates in der Konfiguration
 
-Templates in Links und bei `gitlab-pipeline` bzw. `deploy-missing-services` (`ref`, `variables`) sind
+Templates in Links, Kopier-Befehlen und bei `gitlab-pipeline` bzw. `deploy-missing-services` (`ref`, `variables`) sind
 [Go-Templates](https://pkg.go.dev/text/template).
 
 **Verfügbare Daten:**
@@ -567,8 +607,9 @@ Templates in Links und bei `gitlab-pipeline` bzw. `deploy-missing-services` (`re
 | `.Labels`      | Labels des Objekts                                                                        |
 | `.Annotations` | Annotations des Objekts                                                                   |
 | `.Selector`    | Selector eines Services, bei anderen Objekten leer                                        |
-| `.Vars`        | `link-variables`, überschrieben durch `link-variables-overrides`. Nur in Links verfügbar. |
+| `.Vars`        | `link-variables`, überschrieben durch `link-variables-overrides`. In Links und Kopier-Befehlen. |
 | `.Services`    | Gewählte Services, nur bei `deploy-missing-services` gefüllt, sonst leer                  |
+| `.Container`   | Name des Containers, nur bei Kopier-Befehlen für Pods gefüllt (je Container ein Befehl)   |
 
 **Zusätzliche Funktionen** neben den Go-Standardfunktionen wie `urlquery`, `index`, `printf`, `range` und `if`:
 
@@ -578,6 +619,7 @@ Templates in Links und bei `gitlab-pipeline` bzw. `deploy-missing-services` (`re
 | `pathescape` | `{{ pathescape "team/foo" }}`               | `team%2Ffoo`                     |
 | `replace`    | `{{ replace "app.kubernetes.io" "." "_" }}` | `app_kubernetes_io`              |
 | `join`       | `{{ join .Liste ", " }}`                    | verbindet eine Liste von Strings |
+| `shellquote` | `{{ shellquote "it's" }}`                   | `'it'\''s'` (ein Shell-Argument)  |
 
 **Fallstricke:**
 
@@ -631,6 +673,11 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
     - `projects` ist vorhanden und nennt nur bekannte Projekte.
     - Es gibt mindestens ein Target, nur gültige Objekt-Typen, und jedes Target hat eine `url`.
     - Alle Templates sind syntaktisch korrekt.
+- **Kopier-Befehle:**
+    - `command-id` ist gesetzt und eindeutig, `title` ist gesetzt.
+    - `projects` ist vorhanden und nennt nur bekannte Projekte.
+    - Es gibt mindestens ein Target, nur gültige Objekt-Typen, und jedes Target hat ein nicht leeres `command`.
+    - Alle Templates sind syntaktisch korrekt.
 - **Cluster:** `dns-name` ist gesetzt und ein gültiger DNS-Name oder eine IP.
 - **Store:** `recreate-store-interval` hat ein gültiges Format.
 
@@ -670,7 +717,8 @@ Pflicht.
 - **Hierarchie:** Projekt → Namespace → Services (→ Pods), NodePort-Services und Ingresses. Ein Beispiel des Snapshots mit allen
   Feldern steht in [`backend/internal/api/example-api.jsonc`](backend/internal/api/example-api.jsonc).
 - **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
-  `formFields`) und `links` (ID, Titel, Icon, Farbe, `url`), dazu je Typ:
+  `formFields`), `links` (ID, Titel, Icon, Farbe, `url`) und `copyCommands` (ID, Titel, Icon, Farbe, `command`), dazu
+  je Typ:
     - Service (Typ `ClusterIP`, in `services`): `running`, also mindestens ein Replica ready, und `areas`, die IDs
       seiner Service-Bereiche. Die Bereiche selbst (`id`, `label`) stehen im Snapshot je Projekt in `serviceAreas`,
       `others` immer zuletzt.

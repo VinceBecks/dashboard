@@ -24,6 +24,7 @@ describe('NamespaceCard', () => {
     expect(within(dialog).getByText('Ready')).toBeInTheDocument();
     expect(within(dialog).getByText('app: registry/app:1')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Pod löschen' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Shell (app) kopieren' })).toBeInTheDocument();
 
     // Der Dialog folgt dem Event-Stream: Service verschwindet → Hinweis.
     rerender(<NamespaceCard namespace={namespace([])} />);

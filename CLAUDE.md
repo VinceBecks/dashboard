@@ -42,6 +42,7 @@ Backend-Pakete (`backend/`):
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
+| `internal/copycommands`       | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
 | `internal/api`                | HTTP-API, DTOs (`dto.go`), Event-Hub und SSE (`events.go`), `openapi.yaml`, `example-api.jsonc`, Swagger-UI |
 
 ## Build, Test, Start
@@ -165,6 +166,7 @@ Wird beim Startup einmal eingelesen. Enthält:
 3. Store konfiguration
 4. Cluster-Angaben (Pflicht)
 5. Links (optional)
+6. Kopier-Befehle (optional)
 
 Beispiel für Projekte:
 
@@ -302,12 +304,37 @@ links:
 - Lange URLs mit dem YAML-Blockstil `|-` umbrechen, nicht mit `>-` (der macht aus Zeilenumbrüchen Leerzeichen).
 - Templates, die mit `{{` beginnen, in Anführungszeichen setzen (sonst liest YAML `{` als Mapping).
 - Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars`
-  `.Services` (nur bei `deploy-missing-services` gefüllt).
+  `.Services` (nur bei `deploy-missing-services` gefüllt) `.Container` (nur bei Kopier-Befehlen für Pods).
 - Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, `range`, …): `rison`, `pathescape`,
-  `replace`, `join`.
+  `replace`, `join`, `shellquote`.
 - Gemeinsame URL-Teile mehrerer Targets (z. B. die Kibana-Discover-Basis) in `link-variables` auslagern.
 - Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
   (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
+
+Beispiel für Kopier-Befehle (z. B. Shell im Pod). Das Backend rendert sie je Objekt und liefert sie als
+`copyCommands`; das Frontend zeigt je Befehl ein Icon (Tooltip mit Titel und Befehl), ein Klick kopiert den Befehl:
+
+```yaml
+copy-commands:
+  - command-id: pod-shell             # eindeutig
+    title: Shell im Pod öffnen
+    lucide-icon: terminal
+    lucide-icon-color: "#455a64"
+    projects: [foo-projekt]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
+    targets:                          # je Objekt-Typ ein Befehl (namespace | service | ingress | pod)
+      pod:
+        command: kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh
+```
+
+- Dieselben Template-Daten und -Funktionen wie bei Links (inkl. `.Vars`); dazu `.Container` und `shellquote`
+  (Wert als ein Shell-Argument in einfachen Anführungszeichen).
+- **Je Container:** Bei Pods wird je Container gerendert. Unterscheiden sich die Ergebnisse (das Template nutzt
+  `.Container`), entsteht je Container ein Befehl mit ID `<command-id>/<container>` und Titel
+  `<title> (<container>)`; sonst genau einer.
+- Der Befehl wird unverändert übernommen (nur Leerraum am Anfang/Ende entfernt); mehrzeilige Befehle bleiben
+  mehrzeilig. NodePort-Services bekommen die `service`-Befehle.
+- Templates werden beim Start geparst (Fehler → Startabbruch); lässt sich ein Befehl für ein Objekt nicht rendern,
+  wird nur dieser weggelassen.
 
 Beispiel für store-konfiguration
 ```yaml
@@ -361,6 +388,7 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
   Service-Typen werden nicht gesendet. Ingresses liefern fertige `https://<host><path>`-URLs (`urls`).
 - Jedes Objekt kennt seine Parents bis zum Projekt (`parents.project`, `.namespace`, `.service`), damit ein Event
   ohne weitere Daten einsortiert werden kann.
+- Jedes Objekt trägt `links` und `copyCommands` (je Befehl `id`, `title`, `lucideIcon`, `lucideIconColor`, `command`).
 - Jedes Objekt trägt die Liste der Aktionen, die auf ihm ausführbar sind. Je Aktion:
     - Name (Titel)
     - Aktion-ID (eindeutiger Name)
@@ -408,6 +436,8 @@ Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
 - Die Punkte stehen in Reitern je Service-Bereich (`ServiceAreaTabs` in `NamespaceCard`, Gruppierung in
   `components/serviceAreas.ts`): nur Bereiche mit Services, Reihenfolge aus `serviceAreas`, „Andere“ zuletzt. Bei
   nur einem Bereich entfällt die Reiterleiste. Der gewählte Reiter gilt je Kachel und wird nicht gespeichert.
+- Aktionen, Kopier-Befehle und Links eines Objekts stehen in einer Zeile (`ObjectButtons`): Aktionen links,
+  Kopier-Befehle (`CopyCommandButtons`) und Links rechtsbündig. Pod-Befehle erscheinen im `ServiceDialog` beim Replica.
 - Klick auf einen Punkt öffnet den `ServiceDialog`: Aktionen und Links des Services, darunter je Replica Ready-Zustand,
   Container (Name, Image), Aktionen und Links. Verschwindet der Service zwischenzeitlich, zeigt der Dialog einen
   Hinweis.

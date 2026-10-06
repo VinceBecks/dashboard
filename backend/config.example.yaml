@@ -102,6 +102,32 @@ links:
         url: |-
           {{ .Vars.demoUrl }}/namespaces/{{ .Namespace }}/services/{{ .Name }}/{{ .Vars.something }}?foo={{ printf "hello" }}
 
+copy-commands:
+  - command-id: pod-shell                 # je Container ein Befehl, da das Template .Container nutzt
+    title: Shell im Pod öffnen
+    lucide-icon: terminal
+    lucide-icon-color: "#455a64"
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
+    targets:
+      pod:
+        command: kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh
+  - command-id: pod-logs
+    title: Logs verfolgen
+    lucide-icon: file-text
+    lucide-icon-color: "#455a64"
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
+    targets:
+      pod:
+        command: kubectl logs -f -n {{ .Namespace }} {{ .Name }} --all-containers
+  - command-id: namespace-context
+    title: Namespace im kubectl-Context setzen
+    lucide-icon: square-terminal
+    lucide-icon-color: "#455a64"
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
+    targets:
+      namespace:
+        command: kubectl config set-context --current --namespace={{ .Namespace }}
+
 cluster:
   dns-name: demo-cluster-control-plane   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
 

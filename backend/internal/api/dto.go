@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"feature-dashboard/internal/actions"
+	"feature-dashboard/internal/copycommands"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/project"
@@ -29,10 +30,11 @@ type ObjectHeader struct {
 	Parents Parents    `json:"parents"`
 }
 
-// ObjectExtras sind die Aktionen und Links, die jedes Objekt trägt.
+// ObjectExtras sind die Aktionen, Links und Kopier-Befehle, die jedes Objekt trägt.
 type ObjectExtras struct {
-	Actions []actions.Action `json:"actions"`
-	Links   []links.Link     `json:"links"`
+	Actions      []actions.Action       `json:"actions"`
+	Links        []links.Link           `json:"links"`
+	CopyCommands []copycommands.Command `json:"copyCommands"`
 }
 
 // Kind-Listen sind omitzero: Im Snapshot sind sie immer gesetzt (ggf. leer), in upsert-Events fehlen sie.

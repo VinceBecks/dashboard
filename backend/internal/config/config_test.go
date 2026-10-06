@@ -254,3 +254,44 @@ func TestClusterDNSName(t *testing.T) {
 		t.Error("ohne cluster: Fehler erwartet")
 	}
 }
+
+func TestCopyCommands(t *testing.T) {
+	cfg, err := parse([]byte(`
+projects: [{project-name: foo, namespace-labels: {a: b}}]
+copy-commands:
+  - command-id: pod-shell
+    title: Shell
+    lucide-icon: terminal
+    projects: [foo]
+    targets:
+      pod:
+        command: kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := cfg.CopyCommands[0]
+	if c.ID != "pod-shell" || c.Title != "Shell" || c.Targets["pod"].Command == "" || c.Projects[0] != "foo" {
+		t.Fatalf("copy-command = %+v", c)
+	}
+}
+
+func TestCopyCommandsValidation(t *testing.T) {
+	const pod = `targets: {pod: {command: "kubectl get pod"}}`
+	cases := map[string]string{
+		"id fehlt":          `[{title: T, projects: [foo], ` + pod + `}]`,
+		"doppelte id":       `[{command-id: x, title: T, projects: [foo], ` + pod + `}, {command-id: x, title: T, projects: [foo], ` + pod + `}]`,
+		"title fehlt":       `[{command-id: x, projects: [foo], ` + pod + `}]`,
+		"projects fehlt":    `[{command-id: x, title: T, ` + pod + `}]`,
+		"unbekanntes Proj.": `[{command-id: x, title: T, projects: [nope], ` + pod + `}]`,
+		"keine targets":     `[{command-id: x, title: T, projects: [foo]}]`,
+		"ungültiger Kind":   `[{command-id: x, title: T, projects: [foo], targets: {deployment: {command: "x"}}}]`,
+		"leerer command":    `[{command-id: x, title: T, projects: [foo], targets: {service: {command: "  "}}}]`,
+	}
+	for name, commands := range cases {
+		_, err := parse([]byte("projects:\n  - project-name: foo\n    namespace-labels: {a: b}\ncopy-commands: " + commands + "\n"))
+		if err == nil {
+			t.Errorf("%s: Fehler erwartet", name)
+		}
+	}
+}

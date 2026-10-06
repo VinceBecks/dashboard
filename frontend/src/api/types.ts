@@ -24,6 +24,15 @@ export interface Action {
   formFields?: FormField[];
 }
 
+/** Konfigurierter Kopier-Befehl; der Befehl ist vom Backend fertig gerendert (je Container einer bei Pods). */
+export interface CopyCommand {
+  id: string;
+  title: string;
+  lucideIcon: string;
+  lucideIconColor: string;
+  command: string;
+}
+
 /** Konfigurierter Link; die URL ist vom Backend fertig gerendert. */
 export interface Link {
   id: string;
@@ -62,6 +71,7 @@ export interface ObjectHeader {
 interface ObjectBase extends ObjectHeader {
   actions: Action[];
   links: Link[];
+  copyCommands: CopyCommand[];
 }
 
 export interface Container {

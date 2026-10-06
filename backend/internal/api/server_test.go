@@ -13,6 +13,7 @@ import (
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
+	"feature-dashboard/internal/copycommands"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/store"
@@ -136,12 +137,12 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("worker ohne Pods darf nicht laufen: %+v", ns.Services[1])
 	}
 	for _, want := range []string{
-		`{"kind":"namespace","name":"feat-1","parents":{"project":"foo"},"actions":[],"links":[],"services":[`,
+		`{"kind":"namespace","name":"feat-1","parents":{"project":"foo"},"actions":[],"links":[],"copyCommands":[],"services":[`,
 		`{"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":false,"containers":[],"actions":[{"id":"restart"`,
 		`"formFields":[{"id":"reason"`,
-		`{"kind":"ingress","name":"web","parents":{"project":"foo","namespace":"feat-1"},"urls":["https://feat-1.example/","https://feat-1.example/api"],"actions":[],"links":[]}`,
+		`{"kind":"ingress","name":"web","parents":{"project":"foo","namespace":"feat-1"},"urls":["https://feat-1.example/","https://feat-1.example/api"],"actions":[],"links":[],"copyCommands":[]}`,
 		`"pods":[]`,
-		`"nodePortServices":[{"kind":"node-port-service","name":"shop-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080","nodes.example:30081"],"actions":[],"links":[]}]`,
+		`"nodePortServices":[{"kind":"node-port-service","name":"shop-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080","nodes.example:30081"],"actions":[],"links":[],"copyCommands":[]}]`,
 	} {
 		if !strings.Contains(raw, want) {
 			t.Errorf("%s fehlt in %s", want, raw)
@@ -166,8 +167,8 @@ func TestEvents(t *testing.T) {
 	})
 	got := syncHub(srv, sub)
 	want := []string{
-		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"areas":["others"],"actions":[],"links":[]}`,
-		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[]}`,
+		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"areas":["others"],"actions":[],"links":[],"copyCommands":[]}`,
+		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[],"copyCommands":[]}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("events =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -181,7 +182,7 @@ func TestEvents(t *testing.T) {
 		return err
 	})
 	got = syncHub(srv, sub)
-	if len(got) != 1 || got[0] != `upsert {"kind":"node-port-service","name":"web-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080"],"actions":[],"links":[]}` {
+	if len(got) != 1 || got[0] != `upsert {"kind":"node-port-service","name":"web-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080"],"actions":[],"links":[],"copyCommands":[]}` {
 		t.Fatalf("events = %v", got)
 	}
 	_ = st.Update(func(tx *store.Tx) error {
@@ -386,6 +387,47 @@ links:
 	for _, want := range []string{
 		`"links":[{"id":"logs","title":"Logs","lucideIcon":"scroll-text","lucideIconColor":"","url":"https://kibana.example/namespace/feat-1"}]`,
 		`"url":"https://kibana.example/pod/web-1"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s fehlt in %s", want, body)
+		}
+	}
+}
+
+func TestCopyCommands(t *testing.T) {
+	st, _, _ := setup(t)
+	_ = st.Update(func(tx *store.Tx) error {
+		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{
+			Meta:       model.Meta{Name: "web-1", Namespace: "feat-1"},
+			Containers: []model.Container{{Name: "app"}, {Name: "sidecar"}},
+		})
+		return err
+	})
+	cfg, err := config.Parse([]byte(`
+cluster: {dns-name: nodes.example}
+projects: [{project-name: foo, namespace-labels: {a: b}}]
+copy-commands:
+  - command-id: shell
+    title: Shell
+    lucide-icon: terminal
+    projects: [foo]
+    targets:
+      pod: {command: "kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh"}
+      namespace: {command: "kubectl config set-context --current --namespace={{ .Namespace }}"}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := copycommands.NewRegistry(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(st, actions.NewRegistry(), cfg.Projects, func() bool { return true }).WithCopyCommands(reg)
+	_, _, body := subscribe(t, srv)
+	for _, want := range []string{
+		`"copyCommands":[{"id":"shell","title":"Shell","lucideIcon":"terminal","lucideIconColor":"","command":"kubectl config set-context --current --namespace=feat-1"}]`,
+		`{"id":"shell/app","title":"Shell (app)","lucideIcon":"terminal","lucideIconColor":"","command":"kubectl exec -it -n feat-1 web-1 -c app -- sh"}`,
+		`{"id":"shell/sidecar","title":"Shell (sidecar)","lucideIcon":"terminal","lucideIconColor":"","command":"kubectl exec -it -n feat-1 web-1 -c sidecar -- sh"}`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("%s fehlt in %s", want, body)

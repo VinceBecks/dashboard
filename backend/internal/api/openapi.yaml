@@ -164,9 +164,22 @@ components:
         kind: { type: string, enum: [namespace, service, node-port-service, ingress, pod] }
         name: { type: string }
         parents: { $ref: '#/components/schemas/Parents' }
+    CopyCommand:
+      type: object
+      description: |
+        Konfigurierter Befehl (`copy-commands` in der config.yaml), den das Frontend in die Zwischenablage kopiert.
+        Nutzt ein Pod-Template `.Container`, gibt es je Container einen Befehl (`id` `<command-id>/<container>`,
+        Titel mit Container-Name in Klammern).
+      required: [id, title, lucideIcon, lucideIconColor, command]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        lucideIcon: { type: string }
+        lucideIconColor: { type: string }
+        command: { type: string, description: Fertig gerenderter Befehl }
     ObjectBase:
       type: object
-      required: [kind, name, parents, actions, links]
+      required: [kind, name, parents, actions, links, copyCommands]
       properties:
         kind: { type: string, enum: [namespace, service, node-port-service, ingress, pod] }
         name: { type: string }
@@ -177,6 +190,9 @@ components:
         links:
           type: array
           items: { $ref: '#/components/schemas/Link' }
+        copyCommands:
+          type: array
+          items: { $ref: '#/components/schemas/CopyCommand' }
     NamespaceObject:
       description: Feature-Umgebung. `services`, `nodePortServices` und `ingresses` nur im Snapshot.
       allOf:

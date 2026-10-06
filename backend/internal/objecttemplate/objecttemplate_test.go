@@ -57,3 +57,17 @@ func TestRison(t *testing.T) {
 		}
 	}
 }
+
+func TestShellQuote(t *testing.T) {
+	for in, want := range map[string]string{
+		"":          `''`,
+		"app":       `'app'`,
+		"a b":       `'a b'`,
+		"it's":      `'it'\''s'`,
+		"$HOME; rm": `'$HOME; rm'`,
+	} {
+		if got := ShellQuote(in); got != want {
+			t.Errorf("ShellQuote(%q) = %s, want %s", in, got, want)
+		}
+	}
+}

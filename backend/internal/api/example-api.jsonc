@@ -41,6 +41,10 @@
               "url": "https://kibana.mycomp.de/app/discover#/?_a=(query:(query:'kubernetes.namespace:foo-feature-123'))"
             }
           ],
+          "copyCommands": [
+            { "id": "namespace-context", "title": "Namespace im kubectl-Context setzen", "lucideIcon": "square-terminal",
+              "lucideIconColor": "#455a64", "command": "kubectl config set-context --current --namespace=foo-feature-123" }
+          ],
           "services": [                             // nur ClusterIP; je Service ein Punkt auf der Kachel
             {
               "kind": "service",
@@ -52,6 +56,7 @@
                 { "id": "restart-service-replicas", "title": "Neu starten", "lucideIcon": "rotate-cw", "lucideIconColor": "orange" }
               ],
               "links": [],
+              "copyCommands": [],
               "pods": [                             // Replicas des Services
                 {
                   "kind": "pod",
@@ -64,7 +69,11 @@
                   "actions": [
                     { "id": "delete-pod", "title": "Pod löschen", "lucideIcon": "trash", "lucideIconColor": "red" }
                   ],
-                  "links": []
+                  "links": [],
+                  "copyCommands": [                  // je Container ein Befehl, wenn das Template .Container nutzt
+                    { "id": "pod-shell", "title": "Shell im Pod öffnen", "lucideIcon": "terminal", "lucideIconColor": "#455a64",
+                      "command": "kubectl exec -it -n foo-feature-123 foo-backend-7d9f8c6b5-x2k4q -c app -- sh" }
+                  ]
                 }
               ]
             },
@@ -76,6 +85,7 @@
               "areas": ["others"],                  // kein Bereich passt
               "actions": [],
               "links": [],
+              "copyCommands": [],
               "pods": []
             }
           ],
@@ -88,7 +98,8 @@
               "actions": [
                 { "id": "delete-node-port-service", "title": "NodePort-Service löschen", "lucideIcon": "trash-2", "lucideIconColor": "red" }
               ],
-              "links": []
+              "links": [],
+              "copyCommands": []
             }
           ],
           "ingresses": [
@@ -101,7 +112,8 @@
                 "https://foo-feature-123.mycomp.de/api"
               ],
               "actions": [],
-              "links": []
+              "links": [],
+              "copyCommands": []
             }
           ]
         }
@@ -117,7 +129,7 @@
 
 // Danach Delta-Events (Objekte ohne Kind-Listen):
 //   event: upsert
-//   data: {"kind":"service","name":"foo-worker","parents":{"project":"foo-projekt","namespace":"foo-feature-123"},"running":true,"areas":["others"],"actions":[],"links":[]}
+//   data: {"kind":"service","name":"foo-worker","parents":{"project":"foo-projekt","namespace":"foo-feature-123"},"running":true,"areas":["others"],"actions":[],"links":[],"copyCommands":[]}
 //
 //   event: delete
 //   data: {"kind":"pod","name":"foo-backend-7d9f8c6b5-x2k4q","parents":{"project":"foo-projekt","namespace":"foo-feature-123","service":"foo-backend"}}

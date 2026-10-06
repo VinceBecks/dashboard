@@ -27,6 +27,8 @@ type Data struct {
 	Vars map[string]string
 	// Services setzt der Aufrufer (z. B. die gewählten Services bei deploy-missing-services), sonst leer.
 	Services []string
+	// Container setzt der Aufrufer bei Kopier-Befehlen für Pods (je Container ein Befehl), sonst leer.
+	Container string
 }
 
 // NewData baut die Template-Daten zu einem Objekt. obj ist ein model.Stored*-Wert.
@@ -73,6 +75,13 @@ var Funcs = template.FuncMap{
 	"rison":      Rison,
 	"replace":    func(s, old, new string) string { return strings.ReplaceAll(s, old, new) },
 	"join":       func(elems []string, sep string) string { return strings.Join(elems, sep) },
+	"shellquote": ShellQuote,
+}
+
+// ShellQuote setzt s für POSIX-Shells in einfache Anführungszeichen; enthaltene Hochkommas werden maskiert,
+// sodass der Wert als genau ein Argument ankommt.
+func ShellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Parse parst ein Template. Fehlende Map-Schlüssel (z. B. .Vars.unbekannt) führen beim Ausführen zu einem Fehler.

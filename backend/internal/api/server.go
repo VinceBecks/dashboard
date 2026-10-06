@@ -13,6 +13,7 @@ import (
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
+	"feature-dashboard/internal/copycommands"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/store"
@@ -28,9 +29,11 @@ type Server struct {
 	ready     func() bool
 	staticDir string
 	links     *links.Registry
-	dnsName   string
-	projects  map[string]config.Project
-	hub       *Hub
+	// copyCommands rendert die Kopier-Befehle je Objekt; nil heißt: keine.
+	copyCommands *copycommands.Registry
+	dnsName      string
+	projects     map[string]config.Project
+	hub          *Hub
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
@@ -59,6 +62,12 @@ func (s *Server) WithStaticDir(dir string) *Server {
 // WithCluster setzt die Cluster-Angaben; der DNS-Name der Nodes bildet die NodePort-Adressen.
 func (s *Server) WithCluster(c config.ClusterConfig) *Server {
 	s.dnsName = c.DNSName
+	return s
+}
+
+// WithCopyCommands lässt den Server an jedem Objekt die konfigurierten Kopier-Befehle ausliefern.
+func (s *Server) WithCopyCommands(r *copycommands.Registry) *Server {
+	s.copyCommands = r
 	return s
 }
 
@@ -156,15 +165,13 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// extras liefert Aktionen und Links eines Objekts. obj ist ein model.Stored*-Wert.
+// extras liefert Aktionen, Links und Kopier-Befehle eines Objekts. obj ist ein model.Stored*-Wert.
 func (s *Server) extras(kind model.Kind, namespace, name string, obj any, project string) ObjectExtras {
+	ref := model.ObjectRef{Kind: kind, Namespace: namespace, Name: name}
 	return ObjectExtras{
-		Actions: s.registry.ActionsFor(actions.StoredObject{
-			Ref:     model.ObjectRef{Kind: kind, Namespace: namespace, Name: name},
-			Object:  obj,
-			Project: project,
-		}),
-		Links: s.links.For(model.ObjectRef{Kind: kind, Namespace: namespace, Name: name}, obj, project),
+		Actions:      s.registry.ActionsFor(actions.StoredObject{Ref: ref, Object: obj, Project: project}),
+		Links:        s.links.For(ref, obj, project),
+		CopyCommands: s.copyCommands.For(ref, obj, project),
 	}
 }
 

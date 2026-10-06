@@ -20,6 +20,7 @@ import (
 	"feature-dashboard/internal/actions/restartservice"
 	"feature-dashboard/internal/api"
 	"feature-dashboard/internal/config"
+	"feature-dashboard/internal/copycommands"
 	"feature-dashboard/internal/kube"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/project"
@@ -53,6 +54,10 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	if err != nil {
 		return err
 	}
+	copyCommandRegistry, err := copycommands.NewRegistry(cfg)
+	if err != nil {
+		return err
+	}
 	st := store.New()
 
 	registry := actions.NewRegistry()
@@ -77,7 +82,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 		watcher.Run(ctx)
 	}()
 
-	apiServer := api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).WithCluster(cfg.Cluster)
+	apiServer := api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster)
 	// Endet ctx, beendet der Hub alle Event-Streams; erst dann kann srv.Shutdown abschließen.
 	go apiServer.Run(ctx)
 	// Kein WriteTimeout: GET /api/events hält die Verbindung dauerhaft offen.

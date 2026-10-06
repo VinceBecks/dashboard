@@ -26,6 +26,28 @@ type Config struct {
 	// überschreibbar.
 	LinkVariables map[string]string `yaml:"link-variables"`
 	Links         []Link            `yaml:"links"`
+	// CopyCommands sind Befehle (z. B. kubectl exec), die das Dashboard je Objekt zum Kopieren anbietet.
+	CopyCommands []CopyCommand `yaml:"copy-commands"`
+}
+
+// CopyCommand ist ein konfigurierbarer Befehl, den das Dashboard an Objekten zum Kopieren in die Zwischenablage
+// anbietet.
+type CopyCommand struct {
+	ID              string `yaml:"command-id"`
+	Title           string `yaml:"title"`
+	LucideIcon      string `yaml:"lucide-icon"`
+	LucideIconColor string `yaml:"lucide-icon-color"`
+	// Projects (Pflicht) sind die Projekte, in denen der Befehl angeboten wird; leer heißt: in keinem.
+	Projects []string `yaml:"projects"`
+	// Targets: je Objekt-Typ (namespace, service, ingress, pod) der Befehl. Nur für die enthaltenen Typen wird er
+	// angezeigt.
+	Targets map[model.Kind]CommandTarget `yaml:"targets"`
+}
+
+// CommandTarget ist der Befehl eines CopyCommand für einen Objekt-Typ.
+type CommandTarget struct {
+	// Command ist ein Go-Template; nutzt es bei Pods .Container, entsteht je Container ein Befehl.
+	Command string `yaml:"command"`
 }
 
 // ClusterConfig enthält Angaben zum Cluster, die das Dashboard anzeigt.
@@ -195,6 +217,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, validateServiceAreas(fmt.Sprintf("projects[%d]", i), p.ServiceAreas)...)
 	}
 	errs = append(errs, validateLinks(c.Links, projects)...)
+	errs = append(errs, validateCopyCommands(c.CopyCommands, projects)...)
 	errs = append(errs, c.Cluster.validate()...)
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
@@ -263,6 +286,37 @@ func validateLinks(links []Link, projects map[string]bool) []error {
 			}
 			if target.URL == "" {
 				errs = append(errs, fmt.Errorf("%s: targets.%s: url fehlt (Typ ohne Link einfach weglassen)", at, kind))
+			}
+		}
+	}
+	return errs
+}
+
+func validateCopyCommands(commands []CopyCommand, projects map[string]bool) []error {
+	var errs []error
+	ids := map[string]bool{}
+	for i, c := range commands {
+		at := fmt.Sprintf("copy-commands[%d]", i)
+		switch {
+		case c.ID == "":
+			errs = append(errs, fmt.Errorf("%s: command-id fehlt", at))
+		case ids[c.ID]:
+			errs = append(errs, fmt.Errorf("%s: command-id %q ist nicht eindeutig", at, c.ID))
+		}
+		ids[c.ID] = true
+		if c.Title == "" {
+			errs = append(errs, fmt.Errorf("%s: title fehlt", at))
+		}
+		errs = append(errs, validateProjects(at, c.Projects, projects)...)
+		if len(c.Targets) == 0 {
+			errs = append(errs, fmt.Errorf("%s: targets dürfen nicht leer sein", at))
+		}
+		for kind, target := range c.Targets {
+			if !kind.Valid() {
+				errs = append(errs, fmt.Errorf("%s: targets: ungültiger Objekt-Typ %q", at, kind))
+			}
+			if strings.TrimSpace(target.Command) == "" {
+				errs = append(errs, fmt.Errorf("%s: targets.%s: command fehlt (Typ ohne Befehl einfach weglassen)", at, kind))
 			}
 		}
 	}

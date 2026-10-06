@@ -1,6 +1,5 @@
 import { Box, Card, CardContent, Link, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
-import { refOf } from '../api/state';
 import type { NamespaceObject, ServiceArea } from '../api/types';
 import { CopyButton } from './CopyButton';
 import { ObjectButtons } from './ObjectButtons';
@@ -32,7 +31,7 @@ export function NamespaceCard({ namespace, serviceAreas = [] }: Props) {
           <Typography variant="h6" component="h3" sx={{ wordBreak: 'break-all' }}>
             {namespace.name}
           </Typography>
-          <ObjectButtons actions={namespace.actions} links={namespace.links} object={refOf(namespace)} />
+          <ObjectButtons object={namespace} />
 
           {ingresses.map((ing) => (
             <Stack key={ing.name} spacing={0.5}>
@@ -41,7 +40,7 @@ export function NamespaceCard({ namespace, serviceAreas = [] }: Props) {
                   {url}
                 </Link>
               ))}
-              <ObjectButtons actions={ing.actions} links={ing.links} object={refOf(ing)} />
+              <ObjectButtons object={ing} />
             </Stack>
           ))}
 
@@ -51,7 +50,7 @@ export function NamespaceCard({ namespace, serviceAreas = [] }: Props) {
                 <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-all' }}>
                   {np.name}
                 </Typography>
-                <ObjectButtons actions={np.actions} links={np.links} object={refOf(np)} />
+                <ObjectButtons object={np} />
               </Stack>
               {np.addresses.map((address) => (
                 <Stack key={address} direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
