@@ -132,7 +132,7 @@ Je Objekt werden folgende Informationen gespeichert:
 
 Zusätzliche Informationen für Pods:
 
-- Status
+- Ready-Zustand (keine Phase)
 - Containers mit jeweils:
     - Name
     - Image
@@ -372,7 +372,7 @@ Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
 - Je Projekt (Reihenfolge der `config.yaml`) ein Abschnitt mit einer Kachel je Namespace (`NamespaceCard`).
 - Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (mit deren Aktionen/Links) und je
   Anwendungs-Service ein Punkt – grün, wenn mindestens ein Replica läuft, sonst rot.
-- Klick auf einen Punkt öffnet den `ServiceDialog`: Aktionen und Links des Services, darunter je Replica Status,
+- Klick auf einen Punkt öffnet den `ServiceDialog`: Aktionen und Links des Services, darunter je Replica Ready-Zustand,
   Container (Name, Image), Aktionen und Links. Verschwindet der Service zwischenzeitlich, zeigt der Dialog einen
   Hinweis.
 

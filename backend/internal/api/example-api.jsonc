@@ -52,7 +52,6 @@
                   "kind": "pod",
                   "name": "foo-backend-7d9f8c6b5-x2k4q",
                   "parents": { "project": "foo-projekt", "namespace": "foo-feature-123", "service": "foo-backend" },
-                  "phase": "Running",
                   "ready": true,
                   "containers": [
                     { "name": "app", "image": "registry.mycomp.de/foo/backend:feature-123" }

@@ -44,7 +44,6 @@ type StoredNamespace struct {
 // StoredPod ist die reduzierte Form eines Pods.
 type StoredPod struct {
 	Meta
-	Phase      string      `json:"phase"`
 	Ready      bool        `json:"ready"`
 	Containers []Container `json:"containers"`
 }

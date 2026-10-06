@@ -144,7 +144,7 @@ func TestObjectsOutsideKnownNamespacesAreDropped(t *testing.T) {
 
 func TestPodConversion(t *testing.T) {
 	p := Pod(testPod("web-1", 8080))
-	if !p.Ready || p.Phase != "Running" || p.Containers[0].Ports[0].Name != "http" {
+	if !p.Ready || p.Containers[0].Ports[0].Name != "http" {
 		t.Fatalf("unerwartet: %+v", p)
 	}
 }

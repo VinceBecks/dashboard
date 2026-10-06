@@ -205,9 +205,8 @@ components:
       allOf:
         - $ref: '#/components/schemas/ObjectBase'
         - type: object
-          required: [phase, ready, containers]
+          required: [ready, containers]
           properties:
-            phase: { type: string }
             ready: { type: boolean }
             containers:
               type: array

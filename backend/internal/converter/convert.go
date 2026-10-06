@@ -24,7 +24,6 @@ func Namespace(ns *corev1.Namespace, project string) model.StoredNamespace {
 func Pod(p *corev1.Pod) model.StoredPod {
 	sp := model.StoredPod{
 		Meta:       meta(p.Name, p.Namespace, p.Labels, p.Annotations),
-		Phase:      string(p.Status.Phase),
 		Containers: make([]model.Container, 0, len(p.Spec.Containers)),
 	}
 	for _, c := range p.Status.Conditions {

@@ -136,7 +136,7 @@ Von jedem Objekt werden nur Kern-Informationen übernommen:
 |-----------|----------------------------------------------------------------------------------------------------------|
 | alle      | Name, Namespace, Labels, Annotations                                                                     |
 | Namespace | zusätzlich das zugeordnete Projekt                                                                       |
-| Pod       | Phase, Ready-Zustand, Container (Name, Image, Ports)                                                     |
+| Pod       | Ready-Zustand, Container (Name, Image, Ports)                                                            |
 | Service   | Typ, Selector, Ports (Name, Protokoll, Port, Target-Port, aufgelöster Target-Port, NodePort), Replicas   |
 | Ingress   | je Regel: Host und je Pfad: Pfad-Typ, Pfad, Backend (Service, Port-Name/-Nummer, aufgelöste Port-Nummer) |
 
@@ -626,7 +626,7 @@ Schlüssel werden ignoriert.
 - **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
   `formFields`) und `links` (ID, Titel, Icon, Farbe, `url`), dazu je Typ:
     - Service: `running`, also mindestens ein Replica ready. Gesendet werden nur Services vom Typ `ClusterIP`.
-    - Pod: `phase`, `ready`, `containers` (Name, Image). Pods hängen unter jedem Service, der sie referenziert.
+    - Pod: `ready`, `containers` (Name, Image). Pods hängen unter jedem Service, der sie referenziert.
     - Ingress: `urls`, je Rule mit Host und je Pfad `https://<host><pfad>`.
 - **Parents:** Über `parents` (`project`, `namespace`, `service`) lässt sich jedes Event ohne weitere Daten
   einsortieren.

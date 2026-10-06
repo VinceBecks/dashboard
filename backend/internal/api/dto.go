@@ -54,7 +54,6 @@ type ServiceDTO struct {
 // PodDTO ist ein Replica eines Services.
 type PodDTO struct {
 	ObjectHeader
-	Phase      string         `json:"phase"`
 	Ready      bool           `json:"ready"`
 	Containers []ContainerDTO `json:"containers"`
 	ObjectExtras
@@ -108,7 +107,6 @@ func (s *Server) buildNamespace(view store.NamespaceView) NamespaceDTO {
 			sd.Running = sd.Running || p.Ready
 			sd.Pods = append(sd.Pods, PodDTO{
 				ObjectHeader: ObjectHeader{Kind: model.KindPod, Name: p.Name, Parents: podParents},
-				Phase:        p.Phase,
 				Ready:        p.Ready,
 				Containers:   containers(p.Containers),
 				ObjectExtras: s.extras(model.KindPod, ns.Name, p.Name, p, project),

@@ -12,7 +12,7 @@ func ns(name, project string) model.StoredNamespace {
 }
 
 func pod(name string) model.StoredPod {
-	return model.StoredPod{Meta: model.Meta{Name: name, Namespace: "ns1"}, Phase: "Running"}
+	return model.StoredPod{Meta: model.Meta{Name: name, Namespace: "ns1"}, Ready: true}
 }
 
 func TestPutAndTimestamps(t *testing.T) {
@@ -71,9 +71,9 @@ func TestReadsReturnCopies(t *testing.T) {
 		t.Fatalf("unerwartet: %+v %v %v", v, ok, err)
 	}
 	v.Namespace.Labels["a"] = "changed"
-	v.Pods[0].Phase = "changed"
+	v.Pods[0].Ready = false
 	var p model.StoredPod
-	if ok, _ := s.Get(model.ObjectRef{Kind: model.KindPod, Namespace: "ns1", Name: "p1"}, &p); !ok || p.Phase != "Running" {
+	if ok, _ := s.Get(model.ObjectRef{Kind: model.KindPod, Namespace: "ns1", Name: "p1"}, &p); !ok || !p.Ready {
 		t.Fatal("Store-Inhalt darf durch Leser nicht veränderbar sein")
 	}
 	var n model.StoredNamespace
@@ -132,7 +132,7 @@ func TestConcurrentAccess(t *testing.T) {
 			for j := range 200 {
 				_ = s.Update(func(tx *Tx) error {
 					p := pod("p")
-					p.Phase = string(rune('a' + (i+j)%26))
+					p.Labels = map[string]string{"v": string(rune('a' + (i+j)%26))}
 					_, err := tx.Put(model.KindPod, "ns1", "p", p)
 					return err
 				})

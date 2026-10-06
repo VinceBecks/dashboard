@@ -68,7 +68,6 @@ export interface Container {
 
 export interface PodObject extends ObjectBase {
   kind: 'pod';
-  phase: string;
   ready: boolean;
   containers: Container[];
 }

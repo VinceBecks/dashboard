@@ -45,7 +45,7 @@ func setup(t *testing.T) (*store.Store, *Server, *podAction) {
 		}); err != nil {
 			return err
 		}
-		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "feat-1"}, Phase: "Running"})
+		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "feat-1"}})
 		return err
 	})
 	if err != nil {
@@ -133,7 +133,7 @@ func TestSnapshot(t *testing.T) {
 	}
 	for _, want := range []string{
 		`{"kind":"namespace","name":"feat-1","parents":{"project":"foo"},"actions":[],"links":[],"services":[`,
-		`{"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"phase":"Running","ready":false,"containers":[],"actions":[{"id":"restart"`,
+		`{"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":false,"containers":[],"actions":[{"id":"restart"`,
 		`"formFields":[{"id":"reason"`,
 		`{"kind":"ingress","name":"web","parents":{"project":"foo","namespace":"feat-1"},"urls":["https://feat-1.example/","https://feat-1.example/api"],"actions":[],"links":[]}`,
 		`"pods":[]`,
@@ -156,13 +156,13 @@ func TestEvents(t *testing.T) {
 
 	// Pod wird ready → upsert für Service (running) und Pod, Parent zuerst.
 	_ = st.Update(func(tx *store.Tx) error {
-		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "feat-1"}, Phase: "Running", Ready: true})
+		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "feat-1"}, Ready: true})
 		return err
 	})
 	got := syncHub(srv, sub)
 	want := []string{
 		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"actions":[],"links":[]}`,
-		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"phase":"Running","ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[]}`,
+		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[]}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("events =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -198,7 +198,7 @@ func TestSlowSubscriberIsDropped(t *testing.T) {
 	_, sub, _ := subscribe(t, srv)
 	for i := range subscriberBuffer + 1 {
 		_ = st.Update(func(tx *store.Tx) error {
-			_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1"}, Phase: strconv.Itoa(i)})
+			_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1"}, Containers: []model.Container{{Name: "app", Image: strconv.Itoa(i)}}})
 			return err
 		})
 		srv.hub.mu.Lock()
@@ -350,7 +350,7 @@ func TestActionsRespectProjects(t *testing.T) {
 		return err
 	})
 	_, _, raw := subscribe(t, srv)
-	if !strings.Contains(raw, `{"kind":"pod","name":"web-1","parents":{"project":"bar","namespace":"bar-1","service":"web"},"phase":"","ready":false,"containers":[],"actions":[]`) {
+	if !strings.Contains(raw, `{"kind":"pod","name":"web-1","parents":{"project":"bar","namespace":"bar-1","service":"web"},"ready":false,"containers":[],"actions":[]`) {
 		t.Fatalf("keine Aktionen in Projekt bar erwartet: %s", raw)
 	}
 	body := `{"object":{"kind":"pod","namespace":"bar-1","name":"web-1"},"inputs":{"reason":"x"}}`

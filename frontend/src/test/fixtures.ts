@@ -5,7 +5,6 @@ export function pod(name: string, ready: boolean, service = 'web'): PodObject {
     kind: 'pod',
     name,
     parents: { project: 'foo', namespace: 'feat-1', service },
-    phase: 'Running',
     ready,
     containers: [{ name: 'app', image: 'registry/app:1' }],
     actions: [{ id: 'delete-pod', title: 'Pod löschen', lucideIcon: 'trash', lucideIconColor: 'red' }],
