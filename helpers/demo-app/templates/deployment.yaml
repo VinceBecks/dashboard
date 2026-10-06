@@ -4,16 +4,16 @@ metadata:
   name: {{ .Values.name }}
   namespace: {{ .Values.global.namespace.name }}
   labels:
-    {{- toYaml .Values.labels | nindent 4 }}
+    {{- include "demo-app.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- toYaml .Values.labels | nindent 6 }}
+      {{- include "demo-app.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- toYaml .Values.labels | nindent 8 }}
+        {{- include "demo-app.labels" . | nindent 8 }}
     spec:
       containers:
         - name: nginx
