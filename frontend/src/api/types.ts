@@ -49,9 +49,12 @@ export interface Parents {
   service?: string;
 }
 
+/** Objekt-Typen im Event-Stream; node-port-service ist für Aktionen ein service. */
+export type EventKind = ObjectKind | 'node-port-service';
+
 /** Inhalt eines delete-Events; identifiziert ein Objekt über kind, parents und name. */
 export interface ObjectHeader {
-  kind: ObjectKind;
+  kind: EventKind;
   name: string;
   parents: Parents;
 }
@@ -86,14 +89,22 @@ export interface IngressObject extends ObjectBase {
   urls: string[];
 }
 
-/** Feature-Umgebung. services und ingresses fehlen in upsert-Events. */
+/** Service vom Typ NodePort. */
+export interface NodePortServiceObject extends ObjectBase {
+  kind: 'node-port-service';
+  /** Fertige Adressen <dns-name>:<node-port>, je Port eine. */
+  addresses: string[];
+}
+
+/** Feature-Umgebung. Die Kind-Listen fehlen in upsert-Events. */
 export interface NamespaceObject extends ObjectBase {
   kind: 'namespace';
   services?: ServiceObject[];
+  nodePortServices?: NodePortServiceObject[];
   ingresses?: IngressObject[];
 }
 
-export type DashboardObject = NamespaceObject | ServiceObject | PodObject | IngressObject;
+export type DashboardObject = NamespaceObject | ServiceObject | PodObject | IngressObject | NodePortServiceObject;
 
 export interface ProjectSnapshot {
   name: string;

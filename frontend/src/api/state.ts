@@ -21,6 +21,7 @@ export function applyUpsert(state: Snapshot, obj: DashboardObject): Snapshot {
               namespaces: upsertByName(p.namespaces, obj.name, (old) => ({
                 ...obj,
                 services: old?.services ?? [],
+                nodePortServices: old?.nodePortServices ?? [],
                 ingresses: old?.ingresses ?? [],
               })),
             },
@@ -36,6 +37,8 @@ export function applyUpsert(state: Snapshot, obj: DashboardObject): Snapshot {
         };
       case 'ingress':
         return { ...ns, ingresses: upsertByName(ns.ingresses ?? [], obj.name, () => obj) };
+      case 'node-port-service':
+        return { ...ns, nodePortServices: upsertByName(ns.nodePortServices ?? [], obj.name, () => obj) };
       case 'pod':
         return {
           ...ns,
@@ -63,6 +66,8 @@ export function applyDelete(state: Snapshot, header: ObjectHeader): Snapshot {
         return { ...ns, services: (ns.services ?? []).filter((s) => s.name !== header.name) };
       case 'ingress':
         return { ...ns, ingresses: (ns.ingresses ?? []).filter((i) => i.name !== header.name) };
+      case 'node-port-service':
+        return { ...ns, nodePortServices: (ns.nodePortServices ?? []).filter((s) => s.name !== header.name) };
       case 'pod':
         return {
           ...ns,
@@ -75,9 +80,10 @@ export function applyDelete(state: Snapshot, header: ObjectHeader): Snapshot {
   });
 }
 
-/** Referenz für PATCH /api/actions/{action}. */
+/** Referenz für PATCH /api/actions/{action}. NodePort-Services sind dort gewöhnliche Services. */
 export function refOf(obj: DashboardObject): ObjectRef {
-  return { kind: obj.kind, namespace: obj.parents.namespace ?? obj.name, name: obj.name };
+  const kind = obj.kind === 'node-port-service' ? 'service' : obj.kind;
+  return { kind, namespace: obj.parents.namespace ?? obj.name, name: obj.name };
 }
 
 function updateNamespace(

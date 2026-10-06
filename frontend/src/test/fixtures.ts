@@ -1,4 +1,4 @@
-import type { NamespaceObject, PodObject, ServiceObject, Snapshot } from '../api/types';
+import type { NamespaceObject, NodePortServiceObject, PodObject, ServiceObject, Snapshot } from '../api/types';
 
 export function pod(name: string, ready: boolean, service = 'web'): PodObject {
   return {
@@ -24,7 +24,18 @@ export function service(name: string, running: boolean, pods: PodObject[] = []):
   };
 }
 
-export function namespace(services: ServiceObject[] = []): NamespaceObject {
+export function nodePortService(name: string, addresses: string[]): NodePortServiceObject {
+  return {
+    kind: 'node-port-service',
+    name,
+    parents: { project: 'foo', namespace: 'feat-1' },
+    addresses,
+    actions: [{ id: 'delete-node-port-service', title: 'NodePort-Service löschen', lucideIcon: 'trash-2', lucideIconColor: 'red' }],
+    links: [],
+  };
+}
+
+export function namespace(services: ServiceObject[] = [], nodePortServices: NodePortServiceObject[] = []): NamespaceObject {
   return {
     kind: 'namespace',
     name: 'feat-1',
@@ -32,6 +43,7 @@ export function namespace(services: ServiceObject[] = []): NamespaceObject {
     actions: [],
     links: [],
     services,
+    nodePortServices,
     ingresses: [
       {
         kind: 'ingress',

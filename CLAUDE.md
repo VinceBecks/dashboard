@@ -36,7 +36,7 @@ Backend-Pakete (`backend/`):
 | `internal/kube`               | Informer, Event-Verarbeitung (eine Goroutine), periodischer Full-Rebuild  |
 | `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
-| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht); das Dashboard zeigt keine NodePort-Services mehr an, in den Beispiel-Configs deaktiviert |
+| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht) |
 | `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
 | `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
@@ -162,7 +162,8 @@ Wird beim Startup einmal eingelesen. Enthält:
 1. Die Projekte und die für sie relevanten Namespace-Labels.
 2. Die ActionHandler und ob sie aktiviert sind.
 3. Store konfiguration
-4. Links (optional)
+4. Cluster-Angaben (Pflicht)
+5. Links (optional)
 
 Beispiel für Projekte:
 
@@ -297,6 +298,17 @@ store:
   recreate-store-interval: 1h
 ```
 
+Beispiel für Cluster-Angaben (Pflicht):
+
+```yaml
+cluster:
+  dns-name: k8s-nodes.mycomp.de       # DNS-Name oder IP der Nodes, ohne Schema und Port
+```
+
+- `dns-name` gilt für alle NodePort-Services. Das Backend berechnet daraus je Port die Adresse
+  `<dns-name>:<node-port>` und sendet sie als `addresses` am NodePort-Service. Fehlt `dns-name`, startet das Backend
+  nicht.
+
 - `recreate-store-interval` häufigkeit in der, der komplette store erneuert wird. Möglich ist auch eine '0' einzutragen, um das Verhalten zu disablen. Ansonsten sind möglich Minuten, Stunden oder Tage anzugeben
 
 ### Aktionen
@@ -319,14 +331,16 @@ Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Regis
 Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachliche Endpunkte:
 
 - `GET /api/events` (Server-Sent Events): zuerst ein `snapshot`-Event mit allen Objekten in der Hierarchie
-  **Projekt → Namespace → Services (→ Pods) / Ingresses**, danach nur noch `upsert`- und `delete`-Events.
+  **Projekt → Namespace → Services (→ Pods) / NodePort-Services / Ingresses**, danach nur noch `upsert`- und `delete`-Events.
   Beispiel des Snapshots: `backend/internal/api/example-api.jsonc`.
 - `PATCH /api/actions/{action-name}` zum Ausführen von Aktionen auf einem Objekt
 
 - Objekte tragen nur, was das Dashboard braucht (`kind`, `name`, `parents`, Aktionen, Links und je Typ wenige
-  Felder), keine Labels/Annotations. Gesendet werden nur Anwendungs-Services (ClusterIP); ihr `running` ist gesetzt,
-  wenn mindestens ein Replica ready ist. Pods hängen unter jedem Service, der sie referenziert. Ingresses liefern
-  fertige `https://<host><path>`-URLs (`urls`).
+  Felder), keine Labels/Annotations. Anwendungs-Services (ClusterIP) stehen in `services`; ihr `running` ist
+  gesetzt, wenn mindestens ein Replica ready ist. Pods hängen unter jedem Service, der sie referenziert.
+  NodePort-Services stehen gesondert in `nodePortServices` (`kind: node-port-service`) und tragen nur `addresses`
+  (`<dns-name>:<node-port>`, im Backend berechnet); für Aktionen sind sie Objekte vom Typ `service`. Andere
+  Service-Typen werden nicht gesendet. Ingresses liefern fertige `https://<host><path>`-URLs (`urls`).
 - Jedes Objekt kennt seine Parents bis zum Projekt (`parents.project`, `.namespace`, `.service`), damit ein Event
   ohne weitere Daten einsortiert werden kann.
 - Jedes Objekt trägt die Liste der Aktionen, die auf ihm ausführbar sind. Je Aktion:
@@ -370,8 +384,9 @@ Frontend eine Information, wird die API erweitert.
 Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
 
 - Je Projekt (Reihenfolge der `config.yaml`) ein Abschnitt mit einer Kachel je Namespace (`NamespaceCard`).
-- Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (mit deren Aktionen/Links) und je
-  Anwendungs-Service ein Punkt – grün, wenn mindestens ein Replica läuft, sonst rot.
+- Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (mit deren Aktionen/Links), die
+  NodePort-Services (Name, Aktionen/Links, je Adresse ein Kopieren-Button, `CopyButton`) und je Anwendungs-Service
+  ein Punkt – grün, wenn mindestens ein Replica läuft, sonst rot.
 - Klick auf einen Punkt öffnet den `ServiceDialog`: Aktionen und Links des Services, darunter je Replica Ready-Zustand,
   Container (Name, Image), Aktionen und Links. Verschwindet der Service zwischenzeitlich, zeigt der Dialog einen
   Hinweis.
@@ -398,7 +413,8 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 - Frontend: Vite, eine Seite ohne Router; Auslieferung durch das Backend (`--static-dir`, SPA-Fallback auf
   `index.html`).
 - Aktualisierung über Server-Sent Events statt Polling/ETag; der Initialstand ist das erste Event desselben Streams.
-- Keine Service-Bereiche, keine Anzeige von NodePort-Services (und damit kein `cluster.dns-name`).
+- Keine Service-Bereiche. NodePort-Services kommen als eigenes Attribut `nodePortServices` mit fertigen Adressen;
+  `cluster.dns-name` ist dafür Pflicht.
 - Aktionen werden im Frontend immer über einen Dialog bestätigt; Formular-Felder erscheinen darin, falls vorhanden.
 - Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit Events)
   ändern sich nur, wenn sich das gespeicherte JSON tatsächlich ändert.

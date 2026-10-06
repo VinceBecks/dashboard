@@ -73,6 +73,18 @@
               "pods": []
             }
           ],
+          "nodePortServices": [                     // nur Typ NodePort; Adressen fertig mit cluster.dns-name
+            {
+              "kind": "node-port-service",
+              "name": "foo-backend-node-port",
+              "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
+              "addresses": ["k8s-nodes.mycomp.de:30080"], // je Port mit NodePort
+              "actions": [
+                { "id": "delete-node-port-service", "title": "NodePort-Service löschen", "lucideIcon": "trash-2", "lucideIconColor": "red" }
+              ],
+              "links": []
+            }
+          ],
           "ingresses": [
             {
               "kind": "ingress",

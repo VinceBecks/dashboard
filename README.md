@@ -36,6 +36,7 @@ Replica.
     - [Mitgelieferte Aktionen](#mitgelieferte-aktionen)
     - [`links` und `link-variables`](#links-und-link-variables)
     - [Templates in der Konfiguration](#templates-in-der-konfiguration)
+    - [`cluster`](#cluster)
     - [`store`](#store)
     - [Prüfungen beim Start](#prüfungen-beim-start)
     - [Vollständiges Beispiel](#vollständiges-beispiel)
@@ -245,6 +246,7 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 | `actionHandlers` | nein    | Aktionen, die das Dashboard anbietet                                 |
 | `links`          | nein    | Links von Objekten in andere Systeme                                 |
 | `link-variables` | nein    | Statische Variablen für Link-Templates                               |
+| `cluster`        | ja      | Angaben zum Cluster: der DNS-Name der Nodes für NodePort-Adressen    |
 | `store`          | nein    | Verhalten des In-Memory-Stores                                       |
 
 > **YAML-Hinweise**
@@ -307,14 +309,11 @@ Aktion Formular-Felder, stehen sie in diesem Dialog. Das Ergebnis erscheint als 
 | Handler-Typ                         | Objekt         | Wirkung                                                         |
 |-------------------------------------|----------------|-----------------------------------------------------------------|
 | `delete-pod`                        | Pod            | Löscht den Pod                                                  |
-| `node-port-service-on-service-base` | Service        | Erstellt zu einem ClusterIP-Service einen NodePort-Service ¹    |
-| `delete-node-port-service`          | Service        | Löscht einen von der vorigen Aktion erstellten NodePort-Service ¹ |
+| `node-port-service-on-service-base` | Service        | Erstellt zu einem ClusterIP-Service einen NodePort-Service      |
+| `delete-node-port-service`          | Service        | Löscht einen von der vorigen Aktion erstellten NodePort-Service |
 | `restart-service-replicas`          | Service        | Löscht alle Pods eines Services, damit sie neu starten          |
 | `gitlab-pipeline`                   | konfigurierbar | Startet eine GitLab-Pipeline, beliebig viele Aktionen möglich   |
 | `deploy-missing-services`           | Namespace      | Startet eine GitLab-Pipeline für fehlende Services              |
-
-¹ Das Dashboard zeigt keine NodePort-Services mehr an. Die beiden NodePort-Aktionen sind in den Beispiel-Configs daher
-mit `projects: []` deaktiviert; `delete-node-port-service` wäre in der Oberfläche nicht erreichbar.
 
 #### `delete-pod`
 
@@ -559,6 +558,16 @@ Templates in Links und bei `gitlab-pipeline` bzw. `deploy-missing-services` (`re
   bei `gitlab-pipeline` schlägt die Aktion mit einer Meldung fehl.
 - **Leerzeichen als `+`:** `urlquery` kodiert Leerzeichen als `+`. Das ist für Query-Parameter korrekt.
 
+### `cluster`
+
+```yaml
+cluster:
+  dns-name: k8s-nodes.mycomp.de     # DNS-Name oder IP der Nodes, ohne Schema und Port
+```
+
+`dns-name` ist Pflicht und gilt für alle NodePort-Services. Das Backend berechnet daraus je Port die Adresse
+`<dns-name>:<nodePort>`; das Dashboard zeigt sie auf der Kachel des Namespaces mit einem Kopieren-Button an.
+
 ### `store`
 
 ```yaml
@@ -586,6 +595,7 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
     - `projects` ist vorhanden und nennt nur bekannte Projekte.
     - Es gibt mindestens ein Target, nur gültige Objekt-Typen, und jedes Target hat eine `url`.
     - Alle Templates sind syntaktisch korrekt.
+- **Cluster:** `dns-name` ist gesetzt und ein gültiger DNS-Name oder eine IP.
 - **Store:** `recreate-store-interval` hat ein gültiges Format.
 
 ### Vollständiges Beispiel
@@ -610,8 +620,8 @@ Internetzugang.
 | GET     | `/healthz`                          | Liveness, immer `200`                                                   |
 | GET     | `/readyz`                           | Readiness: `200` nach dem ersten Aufbau des Stores, vorher `503`        |
 
-Ältere Konfigurationen mit `service-areas`, `others-area-label`, `cluster` oder `frontend` starten weiterhin; diese
-Schlüssel werden ignoriert.
+Ältere Konfigurationen mit `service-areas`, `others-area-label` oder `frontend` starten weiterhin; diese Schlüssel
+werden ignoriert. `cluster.dns-name` ist dagegen Pflicht.
 
 ### Server-Sent Events (`GET /api/events`)
 
@@ -621,11 +631,13 @@ Schlüssel werden ignoriert.
 | `upsert`   | ein Objekt ohne Kind-Listen                    | Objekt neu oder geändert; vorhandene Kinder bleiben |
 | `delete`   | `{"kind": …, "name": …, "parents": {…}}`       | Objekt samt aller Kinder entfernen                |
 
-- **Hierarchie:** Projekt → Namespace → Services (→ Pods) und Ingresses. Ein Beispiel des Snapshots mit allen
+- **Hierarchie:** Projekt → Namespace → Services (→ Pods), NodePort-Services und Ingresses. Ein Beispiel des Snapshots mit allen
   Feldern steht in [`backend/internal/api/example-api.jsonc`](backend/internal/api/example-api.jsonc).
 - **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
   `formFields`) und `links` (ID, Titel, Icon, Farbe, `url`), dazu je Typ:
-    - Service: `running`, also mindestens ein Replica ready. Gesendet werden nur Services vom Typ `ClusterIP`.
+    - Service (Typ `ClusterIP`, in `services`): `running`, also mindestens ein Replica ready.
+    - NodePort-Service (Typ `NodePort`, in `nodePortServices`, `kind: node-port-service`): `addresses`, je Port
+      `<cluster.dns-name>:<nodePort>`. Für `PATCH /api/actions` ist er ein Objekt vom Typ `service`.
     - Pod: `ready`, `containers` (Name, Image). Pods hängen unter jedem Service, der sie referenziert.
     - Ingress: `urls`, je Rule mit Host und je Pfad `https://<host><pfad>`.
 - **Parents:** Über `parents` (`project`, `namespace`, `service`) lässt sich jedes Event ohne weitere Daten

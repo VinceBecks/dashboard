@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { namespace, pod, service } from '../test/fixtures';
+import { namespace, nodePortService, pod, service } from '../test/fixtures';
 import { NamespaceCard } from './NamespaceCard';
 
 describe('NamespaceCard', () => {
@@ -28,6 +28,14 @@ describe('NamespaceCard', () => {
     // Der Dialog folgt dem Event-Stream: Service verschwindet → Hinweis.
     rerender(<NamespaceCard namespace={namespace([])} />);
     expect(within(screen.getByRole('dialog')).getByText('Der Service existiert nicht mehr.')).toBeInTheDocument();
+  });
+
+  it('zeigt NodePort-Services mit kopierbaren Adressen und ihren Aktionen', () => {
+    render(<NamespaceCard namespace={namespace([], [nodePortService('web-node-port', ['nodes.example:30080', 'nodes.example:30081'])])} />);
+    expect(screen.getByText('web-node-port')).toBeInTheDocument();
+    expect(screen.getByText('nodes.example:30080')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'nodes.example:30081 kopieren' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'NodePort-Service löschen' })).toBeInTheDocument();
   });
 
   it('zeigt einen Hinweis ohne Services', () => {

@@ -32,17 +32,19 @@ data:
         action-title: NodePort-Service erstellen
         lucide-icon: network
         lucide-icon-color: blue
-        projects: []  # NodePort-Services zeigt das Dashboard nicht mehr an
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
       - action-name: delete-node-port-service
         action-title: NodePort-Service löschen
         lucide-icon: trash-2
         lucide-icon-color: red
-        projects: []  # NodePort-Services zeigt das Dashboard nicht mehr an
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
       - action-name: restart-service-replicas
         action-title: Alle Replika löschen (Neustart)
         lucide-icon: rotate-ccw
         lucide-icon-color: orange
         projects: [foo-projekt, bar-projekt, foobar-projekt]
+    cluster:
+      dns-name: k8s-nodes.mycomp.de.local   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
     store:
       recreate-store-interval: 5m
     link-variables:

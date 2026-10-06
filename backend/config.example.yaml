@@ -25,12 +25,12 @@ actionHandlers:
     action-title: NodePort-Service erstellen
     lucide-icon: network
     lucide-icon-color: blue
-    projects: []  # NodePort-Services zeigt das Dashboard nicht mehr an
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
   - action-name: delete-node-port-service
     action-title: NodePort-Service löschen
     lucide-icon: trash-2
     lucide-icon-color: red
-    projects: []  # NodePort-Services zeigt das Dashboard nicht mehr an
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
   - action-name: restart-service-replicas
     action-title: Alle Replika löschen (Neustart)
     lucide-icon: rotate-ccw
@@ -73,6 +73,9 @@ links:
       service: # Logs aller Pods, die der Service selektiert
         url: |-
           {{ .Vars.demoUrl }}/namespaces/{{ .Namespace }}/services/{{ .Name }}/{{ .Vars.something }}?foo={{ printf "hello" }}
+
+cluster:
+  dns-name: demo-cluster-control-plane   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
 
 store:
   recreate-store-interval: 1h

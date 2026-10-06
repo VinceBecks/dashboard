@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { namespace, pod, service, snapshot } from '../test/fixtures';
+import { namespace, nodePortService, pod, service, snapshot } from '../test/fixtures';
 import { applyDelete, applyUpsert, refOf } from './state';
 
 const ns = (s: ReturnType<typeof snapshot>) => s.projects[0].namespaces[0];
@@ -51,9 +51,24 @@ describe('applyDelete', () => {
   });
 });
 
+describe('NodePort-Services', () => {
+  it('werden in nodePortServices eingefügt und entfernt; Namespace-Updates behalten sie', () => {
+    let next = applyUpsert(snapshot(), nodePortService('web-node-port', ['nodes.example:30080']));
+    expect(ns(next).nodePortServices!.map((s) => s.addresses)).toEqual([['nodes.example:30080']]);
+    expect(ns(next).services!.map((s) => s.name)).toEqual(['web', 'worker']);
+
+    next = applyUpsert(next, { ...namespace(), services: undefined, nodePortServices: undefined, ingresses: undefined });
+    expect(ns(next).nodePortServices).toHaveLength(1);
+
+    next = applyDelete(next, { kind: 'node-port-service', name: 'web-node-port', parents: { project: 'foo', namespace: 'feat-1' } });
+    expect(ns(next).nodePortServices).toEqual([]);
+  });
+});
+
 describe('refOf', () => {
   it('baut die Objekt-Referenz für Aktionen', () => {
     expect(refOf(namespace())).toEqual({ kind: 'namespace', namespace: 'feat-1', name: 'feat-1' });
     expect(refOf(pod('web-1', true))).toEqual({ kind: 'pod', namespace: 'feat-1', name: 'web-1' });
+    expect(refOf(nodePortService('web-node-port', []))).toEqual({ kind: 'service', namespace: 'feat-1', name: 'web-node-port' });
   });
 });

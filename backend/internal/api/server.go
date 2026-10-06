@@ -28,6 +28,7 @@ type Server struct {
 	ready     func() bool
 	staticDir string
 	links     *links.Registry
+	dnsName   string
 	hub       *Hub
 }
 
@@ -51,6 +52,12 @@ func (s *Server) Run(ctx context.Context) {
 // WithStaticDir lässt den Server zusätzlich den Frontend-Build aus dir ausliefern.
 func (s *Server) WithStaticDir(dir string) *Server {
 	s.staticDir = dir
+	return s
+}
+
+// WithCluster setzt die Cluster-Angaben; der DNS-Name der Nodes bildet die NodePort-Adressen.
+func (s *Server) WithCluster(c config.ClusterConfig) *Server {
+	s.dnsName = c.DNSName
 	return s
 }
 

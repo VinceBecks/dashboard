@@ -24,7 +24,7 @@ store:
 `
 
 func TestParse(t *testing.T) {
-	cfg, err := Parse([]byte(sample))
+	cfg, err := parse([]byte(sample))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestParseInterval(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	_, err := Parse([]byte(`
+	_, err := parse([]byte(`
 projects:
   - project-name: a
     namespace-labels: {x: y}
@@ -71,7 +71,7 @@ actionHandlers:
 }
 
 func TestHandlerType(t *testing.T) {
-	cfg, err := Parse([]byte(`
+	cfg, err := parse([]byte(`
 actionHandlers:
   - action-name: deploy
     handler: gitlab-pipeline
@@ -91,7 +91,7 @@ actionHandlers:
 }
 
 func TestLinks(t *testing.T) {
-	cfg, err := Parse([]byte(`
+	cfg, err := parse([]byte(`
 link-variables:
   kibanaUrl: https://kibana
 projects:
@@ -143,7 +143,7 @@ func TestLinksValidation(t *testing.T) {
 		"target ohne url":   `[{link-id: x, title: T, projects: [foo], targets: {service: {}}}]`,
 	}
 	for name, links := range cases {
-		_, err := Parse([]byte("projects:\n  - project-name: foo\n    namespace-labels: {a: b}\nlinks: " + links + "\n"))
+		_, err := parse([]byte("projects:\n  - project-name: foo\n    namespace-labels: {a: b}\nlinks: " + links + "\n"))
 		if err == nil {
 			t.Errorf("%s: Fehler erwartet", name)
 		}
@@ -157,7 +157,7 @@ func TestActionProjectsValidation(t *testing.T) {
 		"leere Liste (deaktiviert)": `[{action-name: x, projects: []}]`,
 	}
 	for name, actions := range valid {
-		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err != nil {
+		if _, err := parse([]byte(projects + "actionHandlers: " + actions + "\n")); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -166,8 +166,35 @@ func TestActionProjectsValidation(t *testing.T) {
 		"unbekanntes Projekt": `[{action-name: x, projects: [nope]}]`,
 	}
 	for name, actions := range invalid {
-		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err == nil {
+		if _, err := parse([]byte(projects + "actionHandlers: " + actions + "\n")); err == nil {
 			t.Errorf("%s: Fehler erwartet", name)
 		}
+	}
+}
+
+// clusterYAML ist der Pflicht-Abschnitt cluster, den alle Test-Configs brauchen.
+const clusterYAML = "cluster:\n  dns-name: nodes.example\n"
+
+// parse ergänzt den Pflicht-Abschnitt cluster, damit Tests sich auf ihr Thema beschränken.
+func parse(data []byte) (*Config, error) {
+	return Parse(append([]byte(clusterYAML), data...))
+}
+
+func TestClusterDNSName(t *testing.T) {
+	for _, valid := range []string{"k8s-nodes.mycomp.de", "Nodes.MyComp.de", "10.0.0.12"} {
+		cfg, err := Parse([]byte("cluster:\n  dns-name: \"" + valid + "\"\n"))
+		if err != nil {
+			t.Errorf("%q: %v", valid, err)
+		} else if cfg.Cluster.DNSName != valid {
+			t.Errorf("DNSName = %q, want %q", cfg.Cluster.DNSName, valid)
+		}
+	}
+	for _, invalid := range []string{"", "https://nodes.mycomp.de", "nodes.mycomp.de:30000", "nodes mycomp"} {
+		if _, err := Parse([]byte("cluster:\n  dns-name: \"" + invalid + "\"\n")); err == nil {
+			t.Errorf("%q: Fehler erwartet", invalid)
+		}
+	}
+	if _, err := Parse([]byte("store:\n  recreate-store-interval: 1h\n")); err == nil {
+		t.Error("ohne cluster: Fehler erwartet")
 	}
 }

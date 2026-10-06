@@ -53,7 +53,7 @@ links:
 
 func registry(t *testing.T, yaml string) *Registry {
 	t.Helper()
-	cfg, err := config.Parse([]byte(yaml))
+	cfg, err := config.Parse([]byte("cluster: {dns-name: nodes.example}\n" + yaml))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,6 +149,7 @@ links:
 
 func TestInvalidTemplateFailsAtStartup(t *testing.T) {
 	cfg, err := config.Parse([]byte(`
+cluster: {dns-name: nodes.example}
 projects: [{project-name: foo, namespace-labels: {a: b}}]
 links:
   - {link-id: broken, title: X, projects: [foo], targets: {pod: {url: "https://x/{{ .Name "}}}

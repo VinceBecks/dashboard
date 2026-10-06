@@ -58,7 +58,8 @@ func setup(t *testing.T) (*store.Store, *Server, *podAction) {
 		t.Fatal(err)
 	}
 	projects := []config.Project{{Name: "foo"}, {Name: "bar"}}
-	return st, NewServer(st, reg, projects, func() bool { return true }), action
+	srv := NewServer(st, reg, projects, func() bool { return true }).WithCluster(config.ClusterConfig{DNSName: "nodes.example"})
+	return st, srv, action
 }
 
 func do(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
@@ -103,7 +104,10 @@ func TestSnapshot(t *testing.T) {
 	st, srv, _ := setup(t)
 	_ = st.Update(func(tx *store.Tx) error {
 		for _, svc := range []model.StoredService{
-			{Meta: model.Meta{Name: "shop-node-port"}, Type: "NodePort"},
+			{Meta: model.Meta{Name: "shop-node-port"}, Type: "NodePort", Ports: []model.ServicePort{
+				{Name: "http", Port: 80, NodePort: 30080}, {Name: "intern", Port: 9090}, {Name: "admin", Port: 8081, NodePort: 30081},
+			}},
+			{Meta: model.Meta{Name: "lb"}, Type: "LoadBalancer"},
 			{Meta: model.Meta{Name: "worker"}, Type: "ClusterIP"},
 		} {
 			if _, err := tx.Put(model.KindService, "feat-1", svc.Name, svc); err != nil {
@@ -137,6 +141,7 @@ func TestSnapshot(t *testing.T) {
 		`"formFields":[{"id":"reason"`,
 		`{"kind":"ingress","name":"web","parents":{"project":"foo","namespace":"feat-1"},"urls":["https://feat-1.example/","https://feat-1.example/api"],"actions":[],"links":[]}`,
 		`"pods":[]`,
+		`"nodePortServices":[{"kind":"node-port-service","name":"shop-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080","nodes.example:30081"],"actions":[],"links":[]}]`,
 	} {
 		if !strings.Contains(raw, want) {
 			t.Errorf("%s fehlt in %s", want, raw)
@@ -166,6 +171,26 @@ func TestEvents(t *testing.T) {
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("events =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	// NodePort-Service angelegt und wieder gelöscht.
+	_ = st.Update(func(tx *store.Tx) error {
+		_, err := tx.Put(model.KindService, "feat-1", "web-node-port", model.StoredService{
+			Meta: model.Meta{Name: "web-node-port"}, Type: "NodePort", Ports: []model.ServicePort{{Port: 80, NodePort: 30080}},
+		})
+		return err
+	})
+	got = syncHub(srv, sub)
+	if len(got) != 1 || got[0] != `upsert {"kind":"node-port-service","name":"web-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080"],"actions":[],"links":[]}` {
+		t.Fatalf("events = %v", got)
+	}
+	_ = st.Update(func(tx *store.Tx) error {
+		_, err := tx.Delete(model.KindService, "feat-1", "web-node-port")
+		return err
+	})
+	got = syncHub(srv, sub)
+	if len(got) != 1 || got[0] != `delete {"kind":"node-port-service","name":"web-node-port","parents":{"project":"foo","namespace":"feat-1"}}` {
+		t.Fatalf("events = %v", got)
 	}
 
 	// Service gelöscht → nur delete für den Service, der Pod fällt implizit mit weg.
@@ -307,6 +332,7 @@ func TestDocsAndHealth(t *testing.T) {
 func TestLinks(t *testing.T) {
 	st, _, _ := setup(t)
 	cfg, err := config.Parse([]byte(`
+cluster: {dns-name: nodes.example}
 projects: [{project-name: foo, namespace-labels: {a: b}}]
 links:
   - link-id: logs

@@ -19,7 +19,7 @@ paths:
         | Event      | data                                    | Bedeutung |
         |------------|-----------------------------------------|-----------|
         | `snapshot` | `Snapshot`                              | Immer das erste Event: kompletter Stand |
-        | `upsert`   | `NamespaceObject`, `ServiceObject`, `PodObject` oder `IngressObject` (ohne Kind-Listen) | Objekt neu oder geändert; vorhandene Kinder bleiben |
+        | `upsert`   | `NamespaceObject`, `ServiceObject`, `NodePortServiceObject`, `PodObject` oder `IngressObject` (ohne Kind-Listen) | Objekt neu oder geändert; vorhandene Kinder bleiben |
         | `delete`   | `DeleteEvent`                           | Objekt samt aller Kinder entfernen |
 
         - `upsert` kommt Parent vor Kind, `delete` Kind vor Parent. Wird ein Parent gelöscht, entfällt das
@@ -161,14 +161,14 @@ components:
       type: object
       required: [kind, name, parents]
       properties:
-        kind: { type: string, enum: [namespace, service, ingress, pod] }
+        kind: { type: string, enum: [namespace, service, node-port-service, ingress, pod] }
         name: { type: string }
         parents: { $ref: '#/components/schemas/Parents' }
     ObjectBase:
       type: object
       required: [kind, name, parents, actions, links]
       properties:
-        kind: { type: string, enum: [namespace, service, ingress, pod] }
+        kind: { type: string, enum: [namespace, service, node-port-service, ingress, pod] }
         name: { type: string }
         parents: { $ref: '#/components/schemas/Parents' }
         actions:
@@ -178,7 +178,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Link' }
     NamespaceObject:
-      description: Feature-Umgebung. `services` und `ingresses` nur im Snapshot.
+      description: Feature-Umgebung. `services`, `nodePortServices` und `ingresses` nur im Snapshot.
       allOf:
         - $ref: '#/components/schemas/ObjectBase'
         - type: object
@@ -186,6 +186,9 @@ components:
             services:
               type: array
               items: { $ref: '#/components/schemas/ServiceObject' }
+            nodePortServices:
+              type: array
+              items: { $ref: '#/components/schemas/NodePortServiceObject' }
             ingresses:
               type: array
               items: { $ref: '#/components/schemas/IngressObject' }
@@ -200,6 +203,19 @@ components:
             pods:
               type: array
               items: { $ref: '#/components/schemas/PodObject' }
+    NodePortServiceObject:
+      description: |
+        Service vom Typ NodePort (`kind: node-port-service`). Für `PATCH /api/actions` ist er ein Objekt vom Typ
+        `service`.
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+        - type: object
+          required: [addresses]
+          properties:
+            addresses:
+              type: array
+              description: Je Port mit NodePort `<cluster.dns-name>:<node-port>`, Reihenfolge der Spec.
+              items: { type: string, example: 'k8s-nodes.mycomp.de:30080' }
     PodObject:
       description: Replica eines Services.
       allOf:
