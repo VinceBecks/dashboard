@@ -67,9 +67,11 @@ func serviceAreas(p config.Project) []AreaDTO {
 // deserialisierte Objekte neben dem Store hält.
 type nsState struct {
 	revision time.Time
-	project  string
-	tree     json.RawMessage
-	flat     []flatObject
+	// extraRevision ist die Revision der Zusatzdaten (laufende Pipelines) beim Aufbau.
+	extraRevision time.Time
+	project       string
+	tree          json.RawMessage
+	flat          []flatObject
 }
 
 // Hub vergleicht den Store nach jeder Änderung mit dem zuletzt verschickten Stand und verteilt die Unterschiede
@@ -78,11 +80,19 @@ type Hub struct {
 	store    *store.Store
 	build    func(store.NamespaceView) NamespaceDTO
 	projects []config.Project
+	// extra liefert Daten außerhalb des Stores, die in die Objekte einfließen (laufende Pipelines); nil heißt keine.
+	extra RevisionSource
 
 	mu          sync.Mutex
 	namespaces  map[string]*nsState
 	subscribers map[*Subscription]struct{}
 	closed      bool
+}
+
+// RevisionSource meldet Änderungen je Namespace, z. B. pipelines.State.
+type RevisionSource interface {
+	Changes() <-chan struct{}
+	NamespaceRevisions() map[string]time.Time
 }
 
 // Subscription ist ein verbundener Client. Events wird geschlossen, wenn der Client zu langsam ist oder der Hub
@@ -107,16 +117,28 @@ func newHub(st *store.Store, projects []config.Project, build func(store.Namespa
 // Run gleicht den Stand bei jeder Store-Änderung ab, bis ctx endet. Danach werden alle Clients getrennt.
 func (h *Hub) Run(ctx context.Context) {
 	defer h.close()
+	var extraChanges <-chan struct{}
+	if h.extra != nil {
+		extraChanges = h.extra.Changes()
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-h.store.Changes():
-			h.mu.Lock()
-			h.syncLocked()
-			h.mu.Unlock()
+		case <-extraChanges:
 		}
+		h.mu.Lock()
+		h.syncLocked()
+		h.mu.Unlock()
 	}
+}
+
+func (h *Hub) extraRevisions() map[string]time.Time {
+	if h.extra == nil {
+		return nil
+	}
+	return h.extra.NamespaceRevisions()
 }
 
 // Subscribe registriert einen Client und liefert den aktuellen Snapshot. Beides geschieht unter demselben Lock
@@ -181,6 +203,7 @@ func (h *Hub) snapshotLocked() Snapshot {
 // syncLocked gleicht alle Namespaces ab, deren Zeitstempel sich geändert hat, und verteilt die Unterschiede.
 func (h *Hub) syncLocked() {
 	revisions := h.store.NamespaceRevisions()
+	extra := h.extraRevisions()
 	var events []Event
 	for _, name := range slices.Sorted(maps.Keys(h.namespaces)) {
 		if _, ok := revisions[name]; !ok {
@@ -190,10 +213,10 @@ func (h *Hub) syncLocked() {
 	}
 	for _, name := range slices.Sorted(maps.Keys(revisions)) {
 		old := h.namespaces[name]
-		if old != nil && old.revision.Equal(revisions[name]) {
+		if old != nil && old.revision.Equal(revisions[name]) && old.extraRevision.Equal(extra[name]) {
 			continue
 		}
-		next, ok, err := h.load(name)
+		next, ok, err := h.load(name, extra[name])
 		if err != nil {
 			slog.Error("Namespace für Events nicht aufbereitet", "namespace", name, "error", err)
 			continue
@@ -221,7 +244,7 @@ func (h *Hub) syncLocked() {
 	}
 }
 
-func (h *Hub) load(name string) (*nsState, bool, error) {
+func (h *Hub) load(name string, extraRevision time.Time) (*nsState, bool, error) {
 	view, revision, ok, err := h.store.Namespace(name)
 	if err != nil || !ok {
 		return nil, ok, err
@@ -235,7 +258,7 @@ func (h *Hub) load(name string) (*nsState, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	return &nsState{revision: revision, project: view.Namespace.Project, tree: raw, flat: flat}, true, nil
+	return &nsState{revision: revision, extraRevision: extraRevision, project: view.Namespace.Project, tree: raw, flat: flat}, true, nil
 }
 
 // diff liefert die Events, die old in next überführen: zuerst alle delete-, danach alle upsert-Events.

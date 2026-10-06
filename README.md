@@ -39,6 +39,7 @@ Replica.
     - [Templates in der Konfiguration](#templates-in-der-konfiguration)
     - [`cluster`](#cluster)
     - [`store`](#store)
+    - [`pipelines`](#pipelines)
     - [Prüfungen beim Start](#prüfungen-beim-start)
     - [Vollständiges Beispiel](#vollständiges-beispiel)
 6. [HTTP-API](#http-api)
@@ -207,6 +208,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
 | `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
+| `internal/pipelines`               | Laufende GitLab-Pipelines: Ablage in einer ConfigMap, Status-Abfrage       |
 | `internal/api`                     | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, Auslieferung des Frontends |
 
 ---
@@ -252,6 +254,7 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 | `copy-commands`  | nein    | Befehle (z. B. `kubectl exec`), die das Dashboard zum Kopieren anbietet |
 | `cluster`        | ja      | Angaben zum Cluster: der DNS-Name der Nodes für NodePort-Adressen    |
 | `store`          | nein    | Verhalten des In-Memory-Stores                                       |
+| `pipelines`      | nein    | Ablage und Status-Abfrage laufender GitLab-Pipelines                 |
 
 > **YAML-Hinweise**
 > - Unquotierte Werte wie `true` oder `8080` werden bei Labels und Variablen als Text gelesen. `true` passt also
@@ -428,6 +431,7 @@ können ihn nutzen, sie unterscheiden sich nur in ihrer Konfiguration.
       project: team/foo-deploy
       ref: "feature/{{ .Namespace }}"
       token-env: GITLAB_TRIGGER_TOKEN_FOO
+      status-token-env: GITLAB_READ_TOKEN_FOO   # optional: laufende Pipeline im Dashboard anzeigen
       applies-to: [ namespace ]
       timeout: 15s
       variables:
@@ -441,6 +445,7 @@ können ihn nutzen, sie unterscheiden sich nur in ihrer Konfiguration.
 | `project`               | ja      | Projekt-ID oder Projektpfad, z. B. `team/foo-deploy`. Wird automatisch kodiert.                              |
 | `ref`                   | ja      | Branch oder Tag. [Template](#templates-in-der-konfiguration) erlaubt.                                        |
 | `token-env`             | ja      | Name der Umgebungsvariable mit dem Pipeline-Trigger-Token. Ist sie nicht gesetzt, startet das Backend nicht. |
+| `status-token-env`      | nein    | Env-Variable mit einem Access-Token mit `read_api`. Nur dann zeigt das Dashboard die laufende Pipeline an.   |
 | `applies-to`            | ja      | Objekt-Typen, an denen die Aktion erscheint: `namespace`, `service`, `ingress`, `pod`                        |
 | `timeout`               | nein    | Timeout des HTTP-Aufrufs, Standard `10s`                                                                     |
 | `variables`             | nein    | Pipeline-Variablen. Die Werte sind Templates.                                                                |
@@ -456,6 +461,18 @@ können ihn nutzen, sie unterscheiden sich nur in ihrer Konfiguration.
 > **Tokens gehören nicht in die `config.yaml`.** Im Cluster kommen sie aus dem Secret `feature-dashboard-gitlab`
 > (siehe [Deployment](#deployment-im-cluster)). Das Deployment lädt alle Schlüssel dieses Secrets als
 > Umgebungsvariablen.
+
+**Laufende Pipelines anzeigen:** Mit `status-token-env` (gilt auch für `deploy-missing-services`) merkt sich das
+Backend jede gestartete Pipeline an dem Objekt, auf dem die Aktion lief. Das Dashboard zeigt dort einen Chip
+„Pipeline läuft“, der zur Pipeline in GitLab springt; Service-Punkte bekommen einen pulsierenden Rand, wenn am Service
+oder an einem seiner Replicas eine Pipeline läuft.
+
+- Je Objekt und Aktion zählt nur die zuletzt gestartete Pipeline.
+- Alle `pipelines.poll-interval` fragt das Backend `GET {gitlab-url}/api/v4/projects/{project}/pipelines/{id}` mit
+  dem Lese-Token ab. Beendete Pipelines (`success`, `failed`, `canceled`, `skipped`) und unbekannte (404)
+  verschwinden. Ist GitLab nicht erreichbar, bleibt die Markierung bis zur nächsten erfolgreichen Abfrage.
+- Ein Neustart verliert nichts: Die Pipelines liegen in einer ConfigMap (siehe [`pipelines`](#pipelines)).
+- Das Trigger-Token kann keinen Status lesen, deshalb ist ein zweites Token nötig.
 
 #### `deploy-missing-services`
 
@@ -653,6 +670,25 @@ store:
 |---------------------------|----------|----------------------------------------------------------------------------------------------------------------------------|
 | `recreate-store-interval` | `0`      | Abstand des periodischen Neuaufbaus. `0` schaltet ihn ab. Erlaubt sind `<n>m`, `<n>h` und `<n>d`, z. B. `30m`, `2h`, `1d`. |
 
+### `pipelines`
+
+```yaml
+pipelines:                                    # optional, gezeigt sind die Standardwerte
+  configmap-namespace: feature-dashboard
+  configmap-name: feature-dashboard-pipelines
+  poll-interval: 15s
+```
+
+| Feld                  | Standard                                | Bedeutung                                                  |
+|-----------------------|-----------------------------------------|------------------------------------------------------------|
+| `configmap-namespace` | `POD_NAMESPACE`, sonst `feature-dashboard` | Namespace der ConfigMap mit den laufenden Pipelines     |
+| `configmap-name`      | `feature-dashboard-pipelines`           | Name der ConfigMap                                         |
+| `poll-interval`       | `15s`                                   | Abstand der Status-Abfragen bei GitLab, mindestens `5s`    |
+
+Das Backend legt die ConfigMap beim Start selbst an, falls sie fehlt, und schreibt jede Änderung sofort zurück
+(Schlüssel `pipelines.json`). Sie steht absichtlich **nicht** in den Deploy-Manifesten: Würde ArgoCD sie verwalten,
+setzte Self-Heal den Inhalt zurück. Ist sie beim Start nicht lesbar, startet das Backend nicht.
+
 ### Prüfungen beim Start
 
 Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit einer Liste aller Probleme ab**:
@@ -680,6 +716,8 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
     - Alle Templates sind syntaktisch korrekt.
 - **Cluster:** `dns-name` ist gesetzt und ein gültiger DNS-Name oder eine IP.
 - **Store:** `recreate-store-interval` hat ein gültiges Format.
+- **Pipelines:** `poll-interval` ist eine Go-Dauer von mindestens `5s`; Env-Variablen aus `status-token-env` sind
+  gesetzt.
 
 ### Vollständiges Beispiel
 
@@ -717,7 +755,8 @@ Pflicht.
 - **Hierarchie:** Projekt → Namespace → Services (→ Pods), NodePort-Services und Ingresses. Ein Beispiel des Snapshots mit allen
   Feldern steht in [`backend/internal/api/example-api.jsonc`](backend/internal/api/example-api.jsonc).
 - **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
-  `formFields`), `links` (ID, Titel, Icon, Farbe, `url`) und `copyCommands` (ID, Titel, Icon, Farbe, `command`), dazu
+  `formFields`), `links` (ID, Titel, Icon, Farbe, `url`), `copyCommands` (ID, Titel, Icon, Farbe, `command`) und
+  `pipelines` (laufende GitLab-Pipelines: `action`, `title`, `url`, `startedAt`), dazu
   je Typ:
     - Service (Typ `ClusterIP`, in `services`): `running`, also mindestens ein Replica ready, und `areas`, die IDs
       seiner Service-Bereiche. Die Bereiche selbst (`id`, `label`) stehen im Snapshot je Projekt in `serviceAreas`,
@@ -836,6 +875,9 @@ kubectl apply -f backend/deploy/gitlab-secret.example.yaml
 | `services`                        | get, list, watch, create, delete | Informer, NodePort-Service erstellen und löschen   |
 | `pods`                            | get, list, watch, delete         | Informer, `delete-pod`, `restart-service-replicas` |
 | `ingresses` (`networking.k8s.io`) | get, list, watch                 | Informer                                           |
+
+Zusätzlich eine `Role` im Namespace `feature-dashboard` für die Pipeline-ConfigMap: `configmaps` `create` sowie
+`get`/`update` auf `feature-dashboard-pipelines`. Das Deployment setzt `POD_NAMESPACE` per Downward-API.
 
 ---
 

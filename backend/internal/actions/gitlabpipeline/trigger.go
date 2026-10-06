@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/objecttemplate"
+	"feature-dashboard/internal/pipelines"
 )
 
 const (
@@ -32,15 +34,24 @@ type TriggerConfig struct {
 	TokenEnv  string            `yaml:"token-env"`
 	Timeout   string            `yaml:"timeout"`
 	Variables map[string]string `yaml:"variables"`
+	// StatusTokenEnv (optional) nennt die Env-Variable mit einem Token mit read_api. Nur dann merkt sich das
+	// Dashboard gestartete Pipelines und zeigt sie an, bis sie beendet sind.
+	StatusTokenEnv string `yaml:"status-token-env"`
 }
 
 // Trigger startet eine GitLab-Pipeline über die Pipeline-Trigger-API.
 type Trigger struct {
-	client     *http.Client
-	triggerURL string
-	token      string
-	ref        *template.Template
-	variables  map[string]*template.Template
+	client      *http.Client
+	projectURL  string
+	triggerURL  string
+	project     string
+	token       string
+	statusToken string
+	ref         *template.Template
+	variables   map[string]*template.Template
+	// pipelines und action setzt Track; ohne sie werden gestartete Pipelines nicht gemerkt.
+	pipelines *pipelines.State
+	action    string
 }
 
 // NewTrigger prüft c, liest das Token aus der Umgebung und parst die Templates.
@@ -51,8 +62,10 @@ func NewTrigger(c TriggerConfig) (*Trigger, error) {
 	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
 		errs = append(errs, fmt.Errorf("gitlab-url muss eine absolute http(s)-URL sein"))
 	} else {
-		t.triggerURL = strings.TrimSuffix(base.String(), "/") + "/api/v4/projects/" + url.PathEscape(c.Project) + "/trigger/pipeline"
+		t.projectURL = strings.TrimSuffix(base.String(), "/") + "/api/v4/projects/" + url.PathEscape(c.Project)
+		t.triggerURL = t.projectURL + "/trigger/pipeline"
 	}
+	t.project = c.Project
 	if c.Project == "" {
 		errs = append(errs, errors.New("project fehlt"))
 	}
@@ -62,6 +75,11 @@ func NewTrigger(c TriggerConfig) (*Trigger, error) {
 		errs = append(errs, fmt.Errorf("umgebungsvariable %s mit dem Trigger-Token ist nicht gesetzt", c.TokenEnv))
 	}
 
+	if c.StatusTokenEnv != "" {
+		if t.statusToken = os.Getenv(c.StatusTokenEnv); t.statusToken == "" {
+			errs = append(errs, fmt.Errorf("umgebungsvariable %s mit dem Lese-Token (status-token-env) ist nicht gesetzt", c.StatusTokenEnv))
+		}
+	}
 	timeout := defaultTimeout
 	if c.Timeout != "" {
 		if timeout, err = time.ParseDuration(c.Timeout); err != nil || timeout <= 0 {
@@ -90,7 +108,46 @@ func NewTrigger(c TriggerConfig) (*Trigger, error) {
 	return t, nil
 }
 
-// Run rendert ref und Variablen mit data und löst die Pipeline aus.
+// Track lässt den Trigger gestartete Pipelines der Aktion in state merken, damit das Dashboard sie anzeigt, bis
+// sie beendet sind. Ohne status-token-env (oder ohne state) passiert nichts: Den Status könnte niemand abfragen.
+func (t *Trigger) Track(state *pipelines.State, action string) {
+	if state == nil || t.statusToken == "" {
+		return
+	}
+	t.pipelines, t.action = state, action
+	state.RegisterChecker(action, t)
+}
+
+// PipelineStatus fragt den Status einer Pipeline über die Pipelines-API ab (Lese-Token aus status-token-env).
+func (t *Trigger) PipelineStatus(ctx context.Context, id int) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.projectURL+"/pipelines/"+strconv.Itoa(id), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("PRIVATE-TOKEN", t.statusToken)
+	res, err := t.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("GitLab nicht erreichbar: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, maxResponseSize))
+	switch {
+	case res.StatusCode == http.StatusNotFound:
+		return "", pipelines.ErrNotFound
+	case res.StatusCode != http.StatusOK:
+		return "", fmt.Errorf("GitLab antwortete mit %s: %s", res.Status, gitlabMessage(body))
+	}
+	var pipeline struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &pipeline); err != nil || pipeline.Status == "" {
+		return "", fmt.Errorf("unerwartete Antwort von GitLab: %s", gitlabMessage(body))
+	}
+	return pipeline.Status, nil
+}
+
+// Run rendert ref und Variablen mit data und löst die Pipeline aus. Bei aktivem Track merkt es sich die gestartete
+// Pipeline am Objekt aus data; schlägt das fehl, bleibt die Aktion erfolgreich und die Meldung nennt den Grund.
 func (t *Trigger) Run(ctx context.Context, data objecttemplate.Data) actions.Result {
 	form := url.Values{}
 	form.Set("token", t.token)
@@ -130,7 +187,17 @@ func (t *Trigger) Run(ctx context.Context, data objecttemplate.Data) actions.Res
 	if err := json.Unmarshal(body, &pipeline); err != nil || pipeline.ID == 0 {
 		return actions.Result{Success: true, Message: fmt.Sprintf("Pipeline für ref %s gestartet", ref)}
 	}
-	return actions.Result{Success: true, Message: fmt.Sprintf("Pipeline #%d gestartet: %s", pipeline.ID, pipeline.WebURL)}
+	result := actions.Result{Success: true, Message: fmt.Sprintf("Pipeline #%d gestartet: %s", pipeline.ID, pipeline.WebURL)}
+	if t.pipelines != nil {
+		err := t.pipelines.Set(ctx, pipelines.Entry{
+			Kind: data.Kind, Namespace: data.Namespace, Name: data.Name, Action: t.action,
+			ID: pipeline.ID, Project: t.project, WebURL: pipeline.WebURL, StartedAt: time.Now().UTC().Truncate(time.Second),
+		})
+		if err != nil {
+			result.Message += fmt.Sprintf(" (wird im Dashboard nicht angezeigt: %v)", err)
+		}
+	}
+	return result
 }
 
 // gitlabMessage liest das Feld "message" einer GitLab-Fehlerantwort, sonst den gekürzten Body.

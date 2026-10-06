@@ -5,6 +5,7 @@ import (
 	"net"
 	"slices"
 	"strconv"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -35,6 +36,17 @@ type ObjectExtras struct {
 	Actions      []actions.Action       `json:"actions"`
 	Links        []links.Link           `json:"links"`
 	CopyCommands []copycommands.Command `json:"copyCommands"`
+	// Pipelines sind die laufenden GitLab-Pipelines, die eine Aktion auf diesem Objekt gestartet hat.
+	Pipelines []PipelineDTO `json:"pipelines"`
+}
+
+// PipelineDTO ist eine laufende Pipeline mit Link nach GitLab.
+type PipelineDTO struct {
+	// Action ist die Aktion-ID, Title ihr action-title.
+	Action    string    `json:"action"`
+	Title     string    `json:"title"`
+	URL       string    `json:"url"`
+	StartedAt time.Time `json:"startedAt"`
 }
 
 // Kind-Listen sind omitzero: Im Snapshot sind sie immer gesetzt (ggf. leer), in upsert-Events fehlen sie.

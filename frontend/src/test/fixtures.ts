@@ -18,6 +18,7 @@ export function pod(name: string, ready: boolean, service = 'web'): PodObject {
         command: `kubectl exec -it -n feat-1 ${name} -c app -- sh`,
       },
     ],
+    pipelines: [],
   };
 }
 
@@ -31,6 +32,7 @@ export function service(name: string, running: boolean, pods: PodObject[] = [], 
     actions: [],
     links: [],
     copyCommands: [],
+    pipelines: [],
     pods,
   };
 }
@@ -44,6 +46,7 @@ export function nodePortService(name: string, addresses: string[]): NodePortServ
     actions: [{ id: 'delete-node-port-service', title: 'NodePort-Service löschen', lucideIcon: 'trash-2', lucideIconColor: 'red' }],
     links: [],
     copyCommands: [],
+    pipelines: [],
   };
 }
 
@@ -55,6 +58,7 @@ export function namespace(services: ServiceObject[] = [], nodePortServices: Node
     actions: [],
     links: [],
     copyCommands: [],
+    pipelines: [],
     services,
     nodePortServices,
     ingresses: [
@@ -66,6 +70,7 @@ export function namespace(services: ServiceObject[] = [], nodePortServices: Node
         actions: [],
         links: [],
     copyCommands: [],
+    pipelines: [],
       },
     ],
   };

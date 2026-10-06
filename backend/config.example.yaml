@@ -81,6 +81,8 @@ actionHandlers:
       project: team/foo-deploy
       ref: main
       token-env: GITLAB_TRIGGER_TOKEN_FOO
+      # Optional: Lese-Token (read_api). Dann zeigt das Dashboard die Pipeline am Namespace, bis sie beendet ist.
+      # status-token-env: GITLAB_READ_TOKEN_FOO
       variables:
         NAMESPACE: "{{ .Namespace }}"
         SERVICES: '{{ join .Services "," }}'
@@ -133,3 +135,9 @@ cluster:
 
 store:
   recreate-store-interval: 1h
+
+# Optional; ohne Angabe gelten die hier gezeigten Werte.
+pipelines:
+  # configmap-namespace: feature-dashboard     # Standard: POD_NAMESPACE, sonst feature-dashboard
+  configmap-name: feature-dashboard-pipelines
+  poll-interval: 15s

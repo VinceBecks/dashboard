@@ -16,6 +16,7 @@ import (
 	"feature-dashboard/internal/copycommands"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
+	"feature-dashboard/internal/pipelines"
 	"feature-dashboard/internal/store"
 )
 
@@ -31,9 +32,11 @@ type Server struct {
 	links     *links.Registry
 	// copyCommands rendert die Kopier-Befehle je Objekt; nil heißt: keine.
 	copyCommands *copycommands.Registry
-	dnsName      string
-	projects     map[string]config.Project
-	hub          *Hub
+	// pipelines kennt die laufenden GitLab-Pipelines; nil heißt: keine.
+	pipelines *pipelines.State
+	dnsName   string
+	projects  map[string]config.Project
+	hub       *Hub
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
@@ -62,6 +65,14 @@ func (s *Server) WithStaticDir(dir string) *Server {
 // WithCluster setzt die Cluster-Angaben; der DNS-Name der Nodes bildet die NodePort-Adressen.
 func (s *Server) WithCluster(c config.ClusterConfig) *Server {
 	s.dnsName = c.DNSName
+	return s
+}
+
+// WithPipelines lässt den Server an jedem Objekt dessen laufende Pipelines ausliefern. Änderungen daran lösen
+// Events aus wie Änderungen im Store.
+func (s *Server) WithPipelines(p *pipelines.State) *Server {
+	s.pipelines = p
+	s.hub.extra = p
 	return s
 }
 
@@ -172,7 +183,20 @@ func (s *Server) extras(kind model.Kind, namespace, name string, obj any, projec
 		Actions:      s.registry.ActionsFor(actions.StoredObject{Ref: ref, Object: obj, Project: project}),
 		Links:        s.links.For(ref, obj, project),
 		CopyCommands: s.copyCommands.For(ref, obj, project),
+		Pipelines:    s.pipelinesOf(ref),
 	}
+}
+
+// pipelinesOf liefert die laufenden Pipelines eines Objekts (nie nil).
+func (s *Server) pipelinesOf(ref model.ObjectRef) []PipelineDTO {
+	result := []PipelineDTO{}
+	if s.pipelines == nil {
+		return result
+	}
+	for _, e := range s.pipelines.For(ref) {
+		result = append(result, PipelineDTO{Action: e.Action, Title: s.registry.Title(e.Action), URL: e.WebURL, StartedAt: e.StartedAt})
+	}
+	return result
 }
 
 // ActionRequest ist der Body von PATCH /api/actions/{action}.

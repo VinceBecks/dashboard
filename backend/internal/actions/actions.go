@@ -7,6 +7,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"feature-dashboard/internal/model"
+	"feature-dashboard/internal/pipelines"
 )
 
 // Feld-Typen für Formular-Felder.
@@ -73,6 +74,10 @@ type ObjectReader interface {
 type Deps struct {
 	Client kubernetes.Interface
 	Store  ObjectReader
+	// Pipelines merkt sich gestartete, laufende GitLab-Pipelines; nil heißt: nicht verfolgen.
+	Pipelines *pipelines.State
+	// ActionName ist der action-name der Aktion, für die der Handler erzeugt wird (setzt die Registry).
+	ActionName string
 }
 
 // Factory erzeugt einen Handler.

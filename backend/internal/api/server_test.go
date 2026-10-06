@@ -10,12 +10,16 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"k8s.io/client-go/kubernetes/fake"
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/copycommands"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
+	"feature-dashboard/internal/pipelines"
 	"feature-dashboard/internal/store"
 )
 
@@ -137,12 +141,12 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("worker ohne Pods darf nicht laufen: %+v", ns.Services[1])
 	}
 	for _, want := range []string{
-		`{"kind":"namespace","name":"feat-1","parents":{"project":"foo"},"actions":[],"links":[],"copyCommands":[],"services":[`,
+		`{"kind":"namespace","name":"feat-1","parents":{"project":"foo"},"actions":[],"links":[],"copyCommands":[],"pipelines":[],"services":[`,
 		`{"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":false,"containers":[],"actions":[{"id":"restart"`,
 		`"formFields":[{"id":"reason"`,
-		`{"kind":"ingress","name":"web","parents":{"project":"foo","namespace":"feat-1"},"urls":["https://feat-1.example/","https://feat-1.example/api"],"actions":[],"links":[],"copyCommands":[]}`,
+		`{"kind":"ingress","name":"web","parents":{"project":"foo","namespace":"feat-1"},"urls":["https://feat-1.example/","https://feat-1.example/api"],"actions":[],"links":[],"copyCommands":[],"pipelines":[]}`,
 		`"pods":[]`,
-		`"nodePortServices":[{"kind":"node-port-service","name":"shop-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080","nodes.example:30081"],"actions":[],"links":[],"copyCommands":[]}]`,
+		`"nodePortServices":[{"kind":"node-port-service","name":"shop-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080","nodes.example:30081"],"actions":[],"links":[],"copyCommands":[],"pipelines":[]}]`,
 	} {
 		if !strings.Contains(raw, want) {
 			t.Errorf("%s fehlt in %s", want, raw)
@@ -167,8 +171,8 @@ func TestEvents(t *testing.T) {
 	})
 	got := syncHub(srv, sub)
 	want := []string{
-		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"areas":["others"],"actions":[],"links":[],"copyCommands":[]}`,
-		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[],"copyCommands":[]}`,
+		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"areas":["others"],"actions":[],"links":[],"copyCommands":[],"pipelines":[]}`,
+		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[],"copyCommands":[],"pipelines":[]}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("events =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -182,7 +186,7 @@ func TestEvents(t *testing.T) {
 		return err
 	})
 	got = syncHub(srv, sub)
-	if len(got) != 1 || got[0] != `upsert {"kind":"node-port-service","name":"web-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080"],"actions":[],"links":[],"copyCommands":[]}` {
+	if len(got) != 1 || got[0] != `upsert {"kind":"node-port-service","name":"web-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080"],"actions":[],"links":[],"copyCommands":[],"pipelines":[]}` {
 		t.Fatalf("events = %v", got)
 	}
 	_ = st.Update(func(tx *store.Tx) error {
@@ -432,6 +436,42 @@ copy-commands:
 		if !strings.Contains(body, want) {
 			t.Errorf("%s fehlt in %s", want, body)
 		}
+	}
+}
+
+func TestPipelines(t *testing.T) {
+	st, _, _ := setup(t)
+	reg := actions.NewRegistry()
+	reg.Register("deploy", func(actions.Deps) actions.Handler { return &podAction{} })
+	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "deploy", Title: "Deployen", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
+		t.Fatal(err)
+	}
+	state := pipelines.NewState(fake.NewClientset(), "dash", "pipelines")
+	if err := state.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(st, reg, []config.Project{{Name: "foo"}}, func() bool { return true }).WithPipelines(state)
+	_, sub, raw := subscribe(t, srv)
+	if !strings.Contains(raw, `"parents":{"project":"foo"},"actions":[],"links":[],"copyCommands":[],"pipelines":[]`) {
+		t.Fatalf("Snapshot ohne leere pipelines: %s", raw)
+	}
+
+	started := time.Date(2026, 10, 6, 14, 0, 0, 0, time.UTC)
+	err := state.Set(context.Background(), pipelines.Entry{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1",
+		Action: "deploy", ID: 4711, WebURL: "https://gitlab.example/p/-/pipelines/4711", StartedAt: started})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := syncHub(srv, sub)
+	if len(got) != 1 || !strings.HasPrefix(got[0], `upsert {"kind":"namespace","name":"feat-1"`) ||
+		!strings.Contains(got[0], `"pipelines":[{"action":"deploy","title":"Deployen","url":"https://gitlab.example/p/-/pipelines/4711","startedAt":"2026-10-06T14:00:00Z"}]`) {
+		t.Fatalf("events = %v", got)
+	}
+
+	_ = state.Remove(context.Background(), model.ObjectRef{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1"}, "deploy")
+	got = syncHub(srv, sub)
+	if len(got) != 1 || !strings.Contains(got[0], `"pipelines":[]`) {
+		t.Fatalf("events = %v", got)
 	}
 }
 

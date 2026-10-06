@@ -43,6 +43,7 @@ Backend-Pakete (`backend/`):
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
 | `internal/copycommands`       | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
+| `internal/pipelines`          | Laufende GitLab-Pipelines je Objekt und Aktion (`State`, Ablage in einer ConfigMap) und `Tracker` (Status-Abfrage, entfernt beendete) |
 | `internal/api`                | HTTP-API, DTOs (`dto.go`), Event-Hub und SSE (`events.go`), `openapi.yaml`, `example-api.jsonc`, Swagger-UI |
 
 ## Build, Test, Start
@@ -167,6 +168,7 @@ Wird beim Startup einmal eingelesen. Enthält:
 4. Cluster-Angaben (Pflicht)
 5. Links (optional)
 6. Kopier-Befehle (optional)
+7. Ablage laufender Pipelines (optional)
 
 Beispiel für Projekte:
 
@@ -272,6 +274,27 @@ ohne `applies-to`). Fehlt nichts, bleibt die Aktion sichtbar, das Dropdown ist l
 Tokens stehen nie in der `config.yaml`, sondern nur in Umgebungsvariablen. Im Cluster kommen sie aus dem Secret
 `feature-dashboard-gitlab` (siehe `backend/deploy/gitlab-secret.example.yaml`). Ist eine Token-Variable nicht
 gesetzt, startet das Backend nicht.
+
+**Laufende Pipelines:** Haben `gitlab-pipeline` bzw. `deploy-missing-services` zusätzlich `status-token-env` (Env-Variable
+mit einem Token mit `read_api`), merkt sich das Backend jede gestartete Pipeline am Objekt der Aktion (nur die letzte
+je Objekt und Aktion) und liefert sie als `pipelines` aus; das Frontend zeigt „Pipeline läuft“ mit Link nach GitLab.
+Der `Tracker` fragt den Status alle `pipelines.poll-interval` ab und entfernt beendete Pipelines (success, failed,
+canceled, skipped) sowie unbekannte. Ohne `status-token-env` wird nichts gemerkt.
+
+```yaml
+pipelines:                                    # optional, gezeigt sind die Standardwerte
+  configmap-namespace: feature-dashboard      # Standard: POD_NAMESPACE (Downward-API), sonst feature-dashboard
+  configmap-name: feature-dashboard-pipelines
+  poll-interval: 15s                          # mindestens 5s
+```
+
+- Ablage in der ConfigMap (`pipelines.json`), damit ein Neustart nichts verliert. Das Backend legt sie selbst an; sie
+  steht **nicht** in den Manifesten, damit ArgoCD sie nicht zurücksetzt. Kein Informer auf ConfigMaps: Das Backend
+  (genau ein Replica) ist der einzige Schreiber, liest sie beim Start und schreibt jede Änderung zurück.
+- Zustand nie an Objekten der Feature-Umgebungen ablegen (Annotations o. Ä.): Sie werden per ArgoCD mit auto-sync
+  und self-heal verwaltet, fremde Änderungen werden zurückgesetzt.
+- Änderungen an `State` lösen Events aus wie Änderungen im Store (der Event-Hub beachtet beide Revisionen je
+  Namespace).
 
 
 Beispiel für Links (Absprung z. B. nach Kibana). Das Backend rendert die URLs je Objekt und liefert sie als `links`
@@ -388,7 +411,8 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
   Service-Typen werden nicht gesendet. Ingresses liefern fertige `https://<host><path>`-URLs (`urls`).
 - Jedes Objekt kennt seine Parents bis zum Projekt (`parents.project`, `.namespace`, `.service`), damit ein Event
   ohne weitere Daten einsortiert werden kann.
-- Jedes Objekt trägt `links` und `copyCommands` (je Befehl `id`, `title`, `lucideIcon`, `lucideIconColor`, `command`).
+- Jedes Objekt trägt `links` und `copyCommands` (je Befehl `id`, `title`, `lucideIcon`, `lucideIconColor`, `command`)
+  sowie `pipelines` (laufende Pipelines: `action`, `title`, `url`, `startedAt`).
 - Jedes Objekt trägt die Liste der Aktionen, die auf ihm ausführbar sind. Je Aktion:
     - Name (Titel)
     - Aktion-ID (eindeutiger Name)
@@ -453,6 +477,8 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 
 - Nur Namespace, Service, Ingress und Pod beobachten; nur Kern-Informationen speichern.
 - Store-Inhalte bleiben `json.RawMessage`.
+- Einzige Persistenz außerhalb des Stores ist die Pipeline-ConfigMap (`internal/pipelines`); sie wird nicht per
+  Informer beobachtet. Keinen Zustand an ArgoCD-verwalteten Objekten ablegen.
 - Aktionslogik gehört ins Backend in genau einen ActionHandler, nie ins Frontend.
 - Projekte, Labels und aktive Aktionen kommen aus der `config.yaml`, nicht aus dem Code.
 - Ändert ein ActionHandler den Cluster, muss der Store konsistent mitgeführt werden.
@@ -474,4 +500,7 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 
 ## Noch nicht festgelegt
 
-Aktuell keine offenen Punkte. Neue offene Punkte hier eintragen und vor der Umsetzung nachfragen.
+- Fehlgeschlagene Pipelines: Geplant ist ein Modal im Dashboard. Bis dahin werden sie wie beendete Pipelines
+  entfernt.
+
+Neue offene Punkte hier eintragen und vor der Umsetzung nachfragen.

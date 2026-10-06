@@ -164,6 +164,17 @@ components:
         kind: { type: string, enum: [namespace, service, node-port-service, ingress, pod] }
         name: { type: string }
         parents: { $ref: '#/components/schemas/Parents' }
+    Pipeline:
+      type: object
+      description: |
+        Von einer Aktion (gitlab-pipeline, deploy-missing-services mit `status-token-env`) gestartete, noch laufende
+        Pipeline. Beendete Pipelines (success, failed, canceled, skipped) entfallen; die Änderung kommt als `upsert`.
+      required: [action, title, url, startedAt]
+      properties:
+        action: { type: string, description: Aktion-ID }
+        title: { type: string, description: action-title der Aktion }
+        url: { type: string, format: uri, description: Pipeline in GitLab }
+        startedAt: { type: string, format: date-time }
     CopyCommand:
       type: object
       description: |
@@ -179,7 +190,7 @@ components:
         command: { type: string, description: Fertig gerenderter Befehl }
     ObjectBase:
       type: object
-      required: [kind, name, parents, actions, links, copyCommands]
+      required: [kind, name, parents, actions, links, copyCommands, pipelines]
       properties:
         kind: { type: string, enum: [namespace, service, node-port-service, ingress, pod] }
         name: { type: string }
@@ -193,6 +204,10 @@ components:
         copyCommands:
           type: array
           items: { $ref: '#/components/schemas/CopyCommand' }
+        pipelines:
+          type: array
+          description: Laufende GitLab-Pipelines, die eine Aktion auf diesem Objekt gestartet hat.
+          items: { $ref: '#/components/schemas/Pipeline' }
     NamespaceObject:
       description: Feature-Umgebung. `services`, `nodePortServices` und `ingresses` nur im Snapshot.
       allOf:

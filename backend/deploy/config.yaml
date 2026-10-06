@@ -101,6 +101,9 @@ data:
       dns-name: k8s-nodes.mycomp.de.local   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
     store:
       recreate-store-interval: 5m
+    pipelines: # Standardwerte; die ConfigMap legt das Backend selbst an
+      configmap-name: feature-dashboard-pipelines
+      poll-interval: 15s
     link-variables:
       demoUrl: http://localhost:8080
       something: isHere

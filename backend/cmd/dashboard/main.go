@@ -23,6 +23,7 @@ import (
 	"feature-dashboard/internal/copycommands"
 	"feature-dashboard/internal/kube"
 	"feature-dashboard/internal/links"
+	"feature-dashboard/internal/pipelines"
 	"feature-dashboard/internal/project"
 	"feature-dashboard/internal/store"
 )
@@ -38,6 +39,18 @@ func main() {
 		slog.Error("Backend beendet mit Fehler", "error", err)
 		os.Exit(1)
 	}
+}
+
+// pipelinesNamespace liefert den Namespace der Pipeline-ConfigMap: aus der config.yaml, sonst den eigenen
+// Namespace (POD_NAMESPACE per Downward-API), sonst „feature-dashboard“.
+func pipelinesNamespace(c config.PipelinesConfig) string {
+	if c.ConfigMapNamespace != "" {
+		return c.ConfigMapNamespace
+	}
+	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+		return ns
+	}
+	return "feature-dashboard"
 }
 
 func run(configPath, listen, kubeconfig, staticDir string) error {
@@ -60,6 +73,12 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	}
 	st := store.New()
 
+	// Laufende Pipelines liegen in einer ConfigMap im Dashboard-Namespace und überstehen so einen Neustart.
+	pipelineState := pipelines.NewState(client, pipelinesNamespace(cfg.Pipelines), cfg.Pipelines.ConfigMapName)
+	if err := pipelineState.Load(context.Background()); err != nil {
+		return err
+	}
+
 	registry := actions.NewRegistry()
 	// Neue ActionHandler hier registrieren und in der config.yaml aktivieren.
 	registry.Register("delete-pod", deletepod.New)
@@ -68,7 +87,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	registry.Register(gitlabpipeline.HandlerType, gitlabpipeline.New)
 	registry.Register(restartservice.ActionName, restartservice.New)
 	registry.Register(missingservices.HandlerType, missingservices.New)
-	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: st}); err != nil {
+	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: st, Pipelines: pipelineState}); err != nil {
 		return err
 	}
 
@@ -82,7 +101,10 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 		watcher.Run(ctx)
 	}()
 
-	apiServer := api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster)
+	go pipelines.NewTracker(pipelineState, cfg.Pipelines.Poll()).Run(ctx)
+
+	apiServer := api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).
+		WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster).WithPipelines(pipelineState)
 	// Endet ctx, beendet der Hub alle Event-Streams; erst dann kann srv.Shutdown abschließen.
 	go apiServer.Run(ctx)
 	// Kein WriteTimeout: GET /api/events hält die Verbindung dauerhaft offen.

@@ -62,6 +62,18 @@ describe('NamespaceCard', () => {
     expect(screen.getByRole('listitem', { name: 'api: läuft' })).toBeInTheDocument();
   });
 
+  it('zeigt eine laufende Pipeline am Namespace als Link', () => {
+    const ns = {
+      ...namespace([]),
+      pipelines: [{ action: 'deploy', title: 'Deployen', url: 'https://gitlab.example/p/-/pipelines/1', startedAt: '2026-10-06T14:00:00Z' }],
+    };
+    render(<NamespaceCard namespace={ns} />);
+    expect(screen.getByRole('link', { name: 'Pipeline Deployen läuft – in GitLab öffnen' })).toHaveAttribute(
+      'href',
+      'https://gitlab.example/p/-/pipelines/1',
+    );
+  });
+
   it('zeigt einen Hinweis ohne Services', () => {
     render(<NamespaceCard namespace={namespace([])} />);
     expect(screen.getByText('Keine Anwendungs-Services')).toBeInTheDocument();

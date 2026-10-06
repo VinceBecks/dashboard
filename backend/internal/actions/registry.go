@@ -67,7 +67,9 @@ func (r *Registry) Activate(cfgs []config.ActionHandlerConfig, deps Deps) error 
 			slog.Info("Aktion ist deaktiviert (projects ist leer)", "action", c.Name)
 			continue
 		}
-		h := f(deps)
+		actionDeps := deps
+		actionDeps.ActionName = c.Name
+		h := f(actionDeps)
 		if err := h.Configure(c.Extra); err != nil {
 			errs = append(errs, fmt.Errorf("aktion %q: %w", c.Name, err))
 			continue
@@ -93,6 +95,14 @@ func (r *Registry) ActionsFor(obj StoredObject) []Action {
 		})
 	}
 	return result
+}
+
+// Title liefert den action-title einer aktiven Aktion, sonst den Namen selbst.
+func (r *Registry) Title(name string) string {
+	if a, ok := r.find(name); ok && a.cfg.Title != "" {
+		return a.cfg.Title
+	}
+	return name
 }
 
 // Has meldet, ob die Aktion aktiviert ist.

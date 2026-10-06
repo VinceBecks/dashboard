@@ -34,6 +34,7 @@ type settings struct {
 
 // Handler startet eine Pipeline für die im Namespace fehlenden Services.
 type Handler struct {
+	deps     actions.Deps
 	store    actions.ObjectReader
 	services []serviceEntry
 	trigger  *gitlabpipeline.Trigger
@@ -41,7 +42,7 @@ type Handler struct {
 
 // New ist die Factory für die Registry.
 func New(deps actions.Deps) actions.Handler {
-	return &Handler{store: deps.Store}
+	return &Handler{deps: deps, store: deps.Store}
 }
 
 // Configure liest und prüft die extra-handler-configs. Fehler brechen den Start des Backends ab.
@@ -72,6 +73,8 @@ func (h *Handler) Configure(extra map[string]any) error {
 	t, err := gitlabpipeline.NewTrigger(s.TriggerConfig)
 	if err != nil {
 		errs = append(errs, err)
+	} else {
+		t.Track(h.deps.Pipelines, h.deps.ActionName)
 	}
 	h.trigger = t
 	return errors.Join(errs...)

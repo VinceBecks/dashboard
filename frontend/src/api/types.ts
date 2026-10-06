@@ -24,6 +24,16 @@ export interface Action {
   formFields?: FormField[];
 }
 
+/** Laufende GitLab-Pipeline; verschwindet, sobald sie beendet ist. */
+export interface Pipeline {
+  /** Aktion-ID, die die Pipeline gestartet hat. */
+  action: string;
+  /** action-title der Aktion. */
+  title: string;
+  url: string;
+  startedAt: string;
+}
+
 /** Konfigurierter Kopier-Befehl; der Befehl ist vom Backend fertig gerendert (je Container einer bei Pods). */
 export interface CopyCommand {
   id: string;
@@ -72,6 +82,8 @@ interface ObjectBase extends ObjectHeader {
   actions: Action[];
   links: Link[];
   copyCommands: CopyCommand[];
+  /** Laufende GitLab-Pipelines, die eine Aktion auf diesem Objekt gestartet hat. */
+  pipelines: Pipeline[];
 }
 
 export interface Container {

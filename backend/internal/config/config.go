@@ -22,6 +22,7 @@ type Config struct {
 	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
 	Store          StoreConfig           `yaml:"store"`
 	Cluster        ClusterConfig         `yaml:"cluster"`
+	Pipelines      PipelinesConfig       `yaml:"pipelines"`
 	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt per link-variables-overrides
 	// überschreibbar.
 	LinkVariables map[string]string `yaml:"link-variables"`
@@ -48,6 +49,46 @@ type CopyCommand struct {
 type CommandTarget struct {
 	// Command ist ein Go-Template; nutzt es bei Pods .Container, entsteht je Container ein Befehl.
 	Command string `yaml:"command"`
+}
+
+// PipelinesConfig legt fest, wo das Backend laufende GitLab-Pipelines ablegt und wie oft es ihren Status abfragt.
+type PipelinesConfig struct {
+	// ConfigMapNamespace ist der Namespace der ConfigMap; leer heißt: POD_NAMESPACE bzw. „feature-dashboard“.
+	ConfigMapNamespace string `yaml:"configmap-namespace"`
+	// ConfigMapName ist der Name der ConfigMap, Standard DefaultPipelinesConfigMap.
+	ConfigMapName string `yaml:"configmap-name"`
+	// PollInterval ist der Abstand der Status-Abfragen (Go-Dauer), Standard DefaultPipelinesPollInterval.
+	PollInterval string `yaml:"poll-interval"`
+}
+
+// Standardwerte für PipelinesConfig.
+const (
+	DefaultPipelinesConfigMap    = "feature-dashboard-pipelines"
+	DefaultPipelinesPollInterval = "15s"
+	minPipelinesPollInterval     = 5 * time.Second
+)
+
+// Poll liefert das Abfrage-Intervall. Gültig erst nach Parse (Standardwert und Prüfung).
+func (p PipelinesConfig) Poll() time.Duration {
+	d, _ := time.ParseDuration(p.PollInterval)
+	return d
+}
+
+func (p *PipelinesConfig) applyDefaults() {
+	if p.ConfigMapName == "" {
+		p.ConfigMapName = DefaultPipelinesConfigMap
+	}
+	if p.PollInterval == "" {
+		p.PollInterval = DefaultPipelinesPollInterval
+	}
+}
+
+func (p PipelinesConfig) validate() []error {
+	d, err := time.ParseDuration(p.PollInterval)
+	if err != nil || d < minPipelinesPollInterval {
+		return []error{fmt.Errorf("pipelines.poll-interval %q muss eine Go-Dauer von mindestens %s sein", p.PollInterval, minPipelinesPollInterval)}
+	}
+	return nil
 }
 
 // ClusterConfig enthält Angaben zum Cluster, die das Dashboard anzeigt.
@@ -194,6 +235,7 @@ func Parse(data []byte) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("config parsen: %w", err)
 	}
+	cfg.Pipelines.applyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -219,6 +261,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, validateLinks(c.Links, projects)...)
 	errs = append(errs, validateCopyCommands(c.CopyCommands, projects)...)
 	errs = append(errs, c.Cluster.validate()...)
+	errs = append(errs, c.Pipelines.validate()...)
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
 		if a.Name == "" {

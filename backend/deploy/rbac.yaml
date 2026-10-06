@@ -35,3 +35,33 @@ subjects:
   - kind: ServiceAccount
     name: feature-dashboard
     namespace: feature-dashboard
+---
+# Laufende GitLab-Pipelines (Abschnitt pipelines in der config.yaml): Das Backend legt die ConfigMap selbst an und
+# schreibt sie. Sie steht bewusst nicht in den Manifesten, damit ArgoCD sie nicht zurücksetzt.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: feature-dashboard-pipelines
+  namespace: feature-dashboard
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create] # create lässt sich nicht per resourceNames einschränken
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [feature-dashboard-pipelines]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: feature-dashboard-pipelines
+  namespace: feature-dashboard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: feature-dashboard-pipelines
+subjects:
+  - kind: ServiceAccount
+    name: feature-dashboard
+    namespace: feature-dashboard

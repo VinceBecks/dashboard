@@ -29,13 +29,14 @@ type settings struct {
 
 // Handler startet eine GitLab-Pipeline.
 type Handler struct {
+	deps      actions.Deps
 	trigger   *Trigger
 	appliesTo []model.Kind
 }
 
 // New ist die Factory für die Registry.
 func New(deps actions.Deps) actions.Handler {
-	return &Handler{}
+	return &Handler{deps: deps}
 }
 
 // Configure liest und prüft die extra-handler-configs. Fehler brechen den Start des Backends ab.
@@ -61,6 +62,8 @@ func (h *Handler) Configure(extra map[string]any) error {
 	t, err := NewTrigger(s.TriggerConfig)
 	if err != nil {
 		errs = append(errs, err)
+	} else {
+		t.Track(h.deps.Pipelines, h.deps.ActionName)
 	}
 	h.trigger = t
 	return errors.Join(errs...)

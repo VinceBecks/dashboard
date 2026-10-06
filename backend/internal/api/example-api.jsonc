@@ -45,6 +45,10 @@
             { "id": "namespace-context", "title": "Namespace im kubectl-Context setzen", "lucideIcon": "square-terminal",
               "lucideIconColor": "#455a64", "command": "kubectl config set-context --current --namespace=foo-feature-123" }
           ],
+          "pipelines": [                            // laufende Pipelines (gitlab-pipeline mit status-token-env)
+            { "action": "deploy-feature", "title": "Feature deployen",
+              "url": "https://gitlab.mycomp.de/team/foo-deploy/-/pipelines/4711", "startedAt": "2026-10-06T14:00:00Z" }
+          ],
           "services": [                             // nur ClusterIP; je Service ein Punkt auf der Kachel
             {
               "kind": "service",
@@ -57,6 +61,7 @@
               ],
               "links": [],
               "copyCommands": [],
+              "pipelines": [],
               "pods": [                             // Replicas des Services
                 {
                   "kind": "pod",
@@ -73,7 +78,8 @@
                   "copyCommands": [                  // je Container ein Befehl, wenn das Template .Container nutzt
                     { "id": "pod-shell", "title": "Shell im Pod öffnen", "lucideIcon": "terminal", "lucideIconColor": "#455a64",
                       "command": "kubectl exec -it -n foo-feature-123 foo-backend-7d9f8c6b5-x2k4q -c app -- sh" }
-                  ]
+                  ],
+                  "pipelines": []
                 }
               ]
             },
@@ -86,6 +92,7 @@
               "actions": [],
               "links": [],
               "copyCommands": [],
+              "pipelines": [],
               "pods": []
             }
           ],
@@ -99,7 +106,8 @@
                 { "id": "delete-node-port-service", "title": "NodePort-Service löschen", "lucideIcon": "trash-2", "lucideIconColor": "red" }
               ],
               "links": [],
-              "copyCommands": []
+              "copyCommands": [],
+              "pipelines": []
             }
           ],
           "ingresses": [
@@ -113,7 +121,8 @@
               ],
               "actions": [],
               "links": [],
-              "copyCommands": []
+              "copyCommands": [],
+              "pipelines": []
             }
           ]
         }
@@ -129,7 +138,7 @@
 
 // Danach Delta-Events (Objekte ohne Kind-Listen):
 //   event: upsert
-//   data: {"kind":"service","name":"foo-worker","parents":{"project":"foo-projekt","namespace":"foo-feature-123"},"running":true,"areas":["others"],"actions":[],"links":[],"copyCommands":[]}
+//   data: {"kind":"service","name":"foo-worker","parents":{"project":"foo-projekt","namespace":"foo-feature-123"},"running":true,"areas":["others"],"actions":[],"links":[],"copyCommands":[],"pipelines":[]}
 //
 //   event: delete
 //   data: {"kind":"pod","name":"foo-backend-7d9f8c6b5-x2k4q","parents":{"project":"foo-projekt","namespace":"foo-feature-123","service":"foo-backend"}}
