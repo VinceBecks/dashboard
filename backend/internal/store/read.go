@@ -17,26 +17,30 @@ type NamespaceView struct {
 	Pods      []model.StoredPod
 }
 
-// ProjectsLastUpdated liefert den Zeitpunkt der letzten Änderung an Namespaces von Projekten.
-func (s *Store) ProjectsLastUpdated() time.Time {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.projectsLastUpdated
-}
-
-// Namespaces liefert alle gespeicherten Namespaces (sortiert nach Name) und den Projects-Timestamp.
-func (s *Store) Namespaces() ([]model.StoredNamespace, time.Time, error) {
+// Namespaces liefert alle gespeicherten Namespaces, sortiert nach Name.
+func (s *Store) Namespaces() ([]model.StoredNamespace, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]model.StoredNamespace, 0, len(s.namespaces))
 	for _, name := range slices.Sorted(maps.Keys(s.namespaces)) {
 		var ns model.StoredNamespace
 		if err := json.Unmarshal(s.namespaces[name].namespace, &ns); err != nil {
-			return nil, time.Time{}, err
+			return nil, err
 		}
 		result = append(result, ns)
 	}
-	return result, s.projectsLastUpdated, nil
+	return result, nil
+}
+
+// NamespaceRevisions liefert je gespeichertem Namespace den Zeitpunkt der letzten Änderung darin.
+func (s *Store) NamespaceRevisions() map[string]time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make(map[string]time.Time, len(s.namespaces))
+	for name, b := range s.namespaces {
+		result[name] = b.lastUpdated
+	}
+	return result
 }
 
 // NamespaceLastUpdated liefert den Zeitpunkt der letzten Änderung im Namespace.

@@ -18,11 +18,14 @@ import (
 
 // Store ist der nebenläufig nutzbare In-Memory-Store.
 type Store struct {
-	mu                  sync.RWMutex
-	namespaces          map[string]*bucket
-	projectsLastUpdated time.Time
-	lastTimestamp       time.Time
-	now                 func() time.Time
+	mu            sync.RWMutex
+	namespaces    map[string]*bucket
+	lastTimestamp time.Time
+	now           func() time.Time
+	// modified merkt sich innerhalb einer Schreib-Operation, ob sich etwas geändert hat.
+	modified bool
+	// changed signalisiert Änderungen (koaleszierend, Puffer 1), siehe Changes.
+	changed chan struct{}
 }
 
 type bucket struct {
@@ -54,9 +57,23 @@ func (b *bucket) equal(o *bucket) bool {
 
 // New erzeugt einen leeren Store.
 func New() *Store {
-	s := &Store{namespaces: map[string]*bucket{}, now: time.Now}
-	s.projectsLastUpdated = s.nextTimestamp()
-	return s
+	return &Store{namespaces: map[string]*bucket{}, now: time.Now, changed: make(chan struct{}, 1)}
+}
+
+// Changes liefert einen Kanal, der nach Schreib-Operationen mit Änderungen signalisiert wird. Mehrere Änderungen
+// können zu einem Signal zusammenfallen; Empfänger lesen den aktuellen Stand daher selbst (NamespaceRevisions).
+func (s *Store) Changes() <-chan struct{} { return s.changed }
+
+// notifyIfModified signalisiert eine Änderung, ohne zu blockieren. Aufruf nur unter Write-Lock.
+func (s *Store) notifyIfModified() {
+	if !s.modified {
+		return
+	}
+	s.modified = false
+	select {
+	case s.changed <- struct{}{}:
+	default:
+	}
 }
 
 // nextTimestamp liefert einen streng monoton steigenden Zeitstempel, damit ETags eindeutig sind.
@@ -66,6 +83,7 @@ func (s *Store) nextTimestamp() time.Time {
 		ts = s.lastTimestamp.Add(time.Nanosecond)
 	}
 	s.lastTimestamp = ts
+	s.modified = true
 	return ts
 }
 
@@ -73,6 +91,7 @@ func (s *Store) nextTimestamp() time.Time {
 func (s *Store) Update(fn func(tx *Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.notifyIfModified()
 	return fn(&Tx{s: s})
 }
 
@@ -83,8 +102,8 @@ func (s *Store) ReplaceAll(other *Store) {
 	defer other.mu.RUnlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.notifyIfModified()
 
-	projectsChanged := false
 	next := make(map[string]*bucket, len(other.namespaces))
 	for name, nb := range other.namespaces {
 		cp := &bucket{project: nb.project, namespace: nb.namespace, objects: map[model.Kind]map[string]json.RawMessage{}}
@@ -93,13 +112,7 @@ func (s *Store) ReplaceAll(other *Store) {
 		}
 		old, ok := s.namespaces[name]
 		switch {
-		case !ok:
-			projectsChanged = true
-			cp.lastUpdated = s.nextTimestamp()
-		case !old.equal(cp):
-			if old.project != cp.project || !bytes.Equal(old.namespace, cp.namespace) {
-				projectsChanged = true
-			}
+		case !ok, !old.equal(cp):
 			cp.lastUpdated = s.nextTimestamp()
 		default:
 			cp.lastUpdated = old.lastUpdated
@@ -108,13 +121,10 @@ func (s *Store) ReplaceAll(other *Store) {
 	}
 	for name := range s.namespaces {
 		if _, ok := next[name]; !ok {
-			projectsChanged = true
+			s.modified = true
 		}
 	}
 	s.namespaces = next
-	if projectsChanged {
-		s.projectsLastUpdated = s.nextTimestamp()
-	}
 }
 
 // Tx ist eine Schreib-Transaktion. Sie ist nur innerhalb von Store.Update gültig.
@@ -139,7 +149,6 @@ func (tx *Tx) PutNamespace(ns model.StoredNamespace) error {
 	b.project = ns.Project
 	b.namespace = raw
 	b.lastUpdated = tx.s.nextTimestamp()
-	tx.s.projectsLastUpdated = b.lastUpdated
 	return nil
 }
 
@@ -149,7 +158,7 @@ func (tx *Tx) DeleteNamespace(name string) {
 		return
 	}
 	delete(tx.s.namespaces, name)
-	tx.s.projectsLastUpdated = tx.s.nextTimestamp()
+	tx.s.modified = true
 }
 
 // HasNamespace meldet, ob der Namespace im Store liegt.

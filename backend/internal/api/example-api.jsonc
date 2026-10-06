@@ -1,0 +1,105 @@
+// Initialstand: erstes Event auf GET /api/events
+//   event: snapshot
+//   id: 1
+//   data: <dieses JSON, einzeilig>
+{
+  "projects": [
+    {
+      "name": "foo-projekt",                       // Reihenfolge wie in der config.yaml
+      "namespaces": [
+        {
+          "kind": "namespace",
+          "name": "foo-feature-123",
+          "parents": { "project": "foo-projekt" },
+          "actions": [
+            {
+              "id": "deploy-missing-services",
+              "title": "Fehlende Services deployen",
+              "lucideIcon": "package-plus",
+              "lucideIconColor": "green",
+              "formFields": [
+                {
+                  "id": "services",
+                  "label": "Services",
+                  "type": "multi-select",
+                  "isRequired": true,
+                  "options": [{ "value": "foo-frontend", "label": "Foo Frontend" }]
+                }
+              ]
+            }
+          ],
+          "links": [
+            {
+              "id": "kibana",
+              "title": "Logs in Kibana",
+              "lucideIcon": "scroll-text",
+              "lucideIconColor": "#00bfb3",
+              "url": "https://kibana.mycomp.de/app/discover#/?_a=(query:(query:'kubernetes.namespace:foo-feature-123'))"
+            }
+          ],
+          "services": [                             // nur ClusterIP; je Service ein Punkt auf der Kachel
+            {
+              "kind": "service",
+              "name": "foo-backend",
+              "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
+              "running": true,                      // grün: mindestens ein Replica ready
+              "actions": [
+                { "id": "restart-service-replicas", "title": "Neu starten", "lucideIcon": "rotate-cw", "lucideIconColor": "orange" }
+              ],
+              "links": [],
+              "pods": [                             // Replicas des Services
+                {
+                  "kind": "pod",
+                  "name": "foo-backend-7d9f8c6b5-x2k4q",
+                  "parents": { "project": "foo-projekt", "namespace": "foo-feature-123", "service": "foo-backend" },
+                  "phase": "Running",
+                  "ready": true,
+                  "containers": [
+                    { "name": "app", "image": "registry.mycomp.de/foo/backend:feature-123" }
+                  ],
+                  "actions": [
+                    { "id": "delete-pod", "title": "Pod löschen", "lucideIcon": "trash", "lucideIconColor": "red" }
+                  ],
+                  "links": []
+                }
+              ]
+            },
+            {
+              "kind": "service",
+              "name": "foo-worker",
+              "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
+              "running": false,                     // rot: kein Replica ready (oder keine Pods)
+              "actions": [],
+              "links": [],
+              "pods": []
+            }
+          ],
+          "ingresses": [
+            {
+              "kind": "ingress",
+              "name": "foo",
+              "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
+              "urls": [                             // aus rules/paths aufgelöst
+                "https://foo-feature-123.mycomp.de/",
+                "https://foo-feature-123.mycomp.de/api"
+              ],
+              "actions": [],
+              "links": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bar-projekt",
+      "namespaces": []                             // Projekte ohne Namespaces werden mitgeliefert
+    }
+  ]
+}
+
+// Danach Delta-Events (Objekte ohne Kind-Listen):
+//   event: upsert
+//   data: {"kind":"service","name":"foo-worker","parents":{"project":"foo-projekt","namespace":"foo-feature-123"},"running":true,"actions":[],"links":[]}
+//
+//   event: delete
+//   data: {"kind":"pod","name":"foo-backend-7d9f8c6b5-x2k4q","parents":{"project":"foo-projekt","namespace":"foo-feature-123","service":"foo-backend"}}

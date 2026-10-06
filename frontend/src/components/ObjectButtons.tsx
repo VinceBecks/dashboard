@@ -7,20 +7,19 @@ interface Props {
   actions: Action[];
   links: Link[];
   object: ObjectRef;
-  onExecuted?: () => void;
 }
 
 /**
  * Aktionen und Links eines Objekts in einer Zeile: Aktionen links, Links rechtsbündig und durch einen
  * Trennstrich abgesetzt, damit beide Gruppen unterscheidbar bleiben.
  */
-export function ObjectButtons({ actions, links, object, onExecuted }: Props) {
+export function ObjectButtons({ actions, links, object }: Props) {
   if (actions.length === 0 && links.length === 0) {
     return null;
   }
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
-      <ActionButtons actions={actions} object={object} onExecuted={onExecuted} />
+      <ActionButtons actions={actions} object={object} />
       {links.length > 0 && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', ml: 'auto' }}>
           {actions.length > 0 && <Divider orientation="vertical" flexItem />}

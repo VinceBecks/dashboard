@@ -19,7 +19,8 @@ hochgefahren haben und welche Services darin laufen.
 - Keine Authentifizierung im Dashboard
 
 ## Aktueller Stand
-Backend und Frontend sind implementiert (Plan Backend: `plans/backend-implementierung.md`).
+Backend und Frontend sind implementiert (Plan Backend: `plans/backend-implementierung.md`, Umstellung auf
+Server-Sent Events und eine Seite: `plans/sse-einseiten-dashboard.md`).
 Das Backend liefert im Cluster auch das gebaute Frontend aus (ein Image, `Dockerfile` im Repository-Root).
 
 Backend-Pakete (`backend/`):
@@ -35,13 +36,13 @@ Backend-Pakete (`backend/`):
 | `internal/kube`               | Informer, Event-Verarbeitung (eine Goroutine), periodischer Full-Rebuild  |
 | `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
-| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht) |
+| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht); das Dashboard zeigt keine NodePort-Services mehr an, in den Beispiel-Configs deaktiviert |
 | `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
 | `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
-| `internal/api`                | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI                            |
+| `internal/api`                | HTTP-API, DTOs (`dto.go`), Event-Hub und SSE (`events.go`), `openapi.yaml`, `example-api.jsonc`, Swagger-UI |
 
 ## Build, Test, Start
 
@@ -62,11 +63,11 @@ Lokale Starts nutzen den Cluster aus `KUBECONFIG` (Standard `~/.kube/config`) un
 andere Config mit `make run CONFIG=pfad.yaml` (relativ zum Repository-Root). Für Frontend-Entwickler bleiben die
 npm-Scripts in `frontend/package.json` direkt nutzbar; das Makefile ruft nur sie auf.
 
-Frontend-Stack: Vite, React 19, MUI, React Router, Lucide.
-Frontend-Struktur: `src/api` (Typen gemäß `openapi.yaml`, Client mit ETag), `src/hooks/usePolling.ts`
-(Polling im gewählten Intervall), `src/hooks/PollingSettings.tsx` (lädt `GET /api/polling`, hält das gewählte
-Intervall), `src/components` (generische Aktions-Buttons/-Dialoge, `PollingControl` oben rechts),
-`src/pages` (Übersicht, Namespace-Seite).
+Frontend-Stack: Vite, React 19, MUI, Lucide.
+Frontend-Struktur: `src/api` (Typen gemäß `openapi.yaml`, `state.ts` wendet Events auf den Zustand an, Client für
+Aktionen), `src/hooks/useDashboardEvents.ts` (EventSource auf `GET /api/events`), `src/components`
+(`NamespaceCard`, `ServiceDialog`, generische Aktions-Buttons/-Dialoge, `ConnectionStatus` oben rechts),
+`src/pages/DashboardPage.tsx` (einzige Seite).
 
 ## Fachliche Begriffe
 
@@ -76,7 +77,6 @@ Intervall), `src/components` (generische Aktions-Buttons/-Dialoge, `PollingContr
 | Feature-Umgebung   | Genau ein Namespace. Gehört zu genau einem Projekt.                                                  |
 | Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                          |
 | Replica            | Ein Pod, der von einem Anwendungs-Service referenziert wird.                                         |
-| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services, zugeordnet über Service-Labels.             |
 | Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts im In-Memory-Store.                       |
 | Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch genau einen ActionHandler. |
 
@@ -119,8 +119,8 @@ aufgelöste Port-Nummer eines Service). Das beim Implementieren von Converter-Lo
   die diese Garantie unterlaufen.
 - Der Store wird nebenläufig gelesen (HTTP) und geschrieben (Informer-Events) und muss entsprechend
   abgesichert sein.
-- Der store merkt sich wann es eine letzte Änderung gab von Namespaces zu Projekten (hinzugefügt/verändert/entfernt) und
-  merkt sich zusätzliche, wann das letzte Mal ein Objekt innerhalb eines Namespaces hinzugefügt/verändert/entfernt wurde
+- Der Store merkt sich je Namespace, wann zuletzt der Namespace selbst oder ein Objekt darin hinzugefügt/verändert/
+  entfernt wurde (`NamespaceRevisions`), und signalisiert Änderungen über `Changes()`. Darauf baut der Event-Hub auf.
 
 #### Gespeicherte Informationen je Objekt
 
@@ -162,8 +162,7 @@ Wird beim Startup einmal eingelesen. Enthält:
 1. Die Projekte und die für sie relevanten Namespace-Labels.
 2. Die ActionHandler und ob sie aktiviert sind.
 3. Store konfiguration
-4. Cluster-Angaben (optional)
-5. Abfrage-Vorgaben fürs Frontend (optional)
+4. Links (optional)
 
 Beispiel für Projekte:
 
@@ -184,23 +183,6 @@ projects:
 - `project-name` ist der eindeutige Name des Projektes
 - `namespace-labels` definiert Labels, die alle am Namespace definiert sein müssen, damit der Namespace zu dem Projekt
   gehört
-- `service-areas` (optional) teilt die Anwendungs-Services (ClusterIP) im Dashboard in Bereiche auf:
-
-```yaml
-    others-area-label: Andere          # optional; Standard "Andere", ohne service-areas "Anwendungs-Services"
-    service-areas:
-      - area-name: business-services   # eindeutig je Projekt, "others" ist reserviert
-        area-label: Business
-        label-combinations:            # ODER über die Einträge, UND innerhalb eines Eintrags; keine leeren Einträge
-          - app.kubernetes.io/part-of: shop
-            app.kubernetes.io/component: backend
-          - app.kubernetes.io/part-of: billing
-```
-
-  Ein Service kann in mehreren Bereichen liegen. Nicht zugeordnete Services landen im Bereich `others`. Die
-  Zuordnung berechnet die API zur Antwortzeit (`serviceAreas` in der Namespace-Response, Services per Name
-  referenziert); der Store bleibt unverändert. Gleiche Bereiche in mehreren Projekten per YAML-Anker
-  (`&name` / `*name`) wiederverwenden.
 
 Beispiel für ActionHandler:
 
@@ -309,31 +291,11 @@ links:
 - Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
   (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
 
-Beispiel für Cluster-Angaben:
-
-```yaml
-cluster:
-  dns-name: k8s-nodes.mycomp.de       # optional; DNS-Name oder IP der Nodes, ohne Schema und Port
-```
-
-- `dns-name` gilt für alle NodePort-Services. Das Frontend lädt ihn über `GET /api/cluster` und zeigt je Port
-  `<dns-name>:<node-port>` mit Kopieren-Button an. Ohne `dns-name` wird nur der NodePort angezeigt.
-
 Beispiel für store-konfiguration
 ```yaml
 store:
   recreate-store-interval: 1h
 ```
-
-Beispiel für Abfrage-Vorgaben fürs Frontend (alle Felder optional, gezeigt sind die Standardwerte):
-```yaml
-frontend:
-  polling-intervals: [0s, 5s, 10s, 30s, 1m]   # Go-Dauern; 0s = nur manuell
-  default-polling-interval: 10s               # muss in polling-intervals stehen
-  manual-refresh-cooldown: 3s                 # Sperrzeit des Aktualisieren-Buttons, mindestens 1s
-```
-
-- Das Frontend lädt die Werte über `GET /api/polling` und bietet die Intervalle in einem Dropdown oben rechts an.
 
 - `recreate-store-interval` häufigkeit in der, der komplette store erneuert wird. Möglich ist auch eine '0' einzutragen, um das Verhalten zu disablen. Ansonsten sind möglich Minuten, Stunden oder Tage anzugeben
 
@@ -356,17 +318,17 @@ Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Regis
 
 Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachliche Endpunkte:
 
-- `GET /api/cluster` liefert statische Cluster-Angaben aus der `config.yaml` (z. B. den DNS-Namen der Nodes)
-- `GET /api/polling` liefert die wählbaren Abfrage-Intervalle, den Default und die Sperrzeit des
-  Aktualisieren-Buttons (Abschnitt `frontend` der `config.yaml`)
-- `GET /api/projects` liefert eine Liste der Projekte und deren Namespaces
-- `GET /api/projects/{project-name}/namespaces/{namespace-name}` zum Laden der Objekte des Namespaces (inkl. dem
-  namespace selber)
+- `GET /api/events` (Server-Sent Events): zuerst ein `snapshot`-Event mit allen Objekten in der Hierarchie
+  **Projekt → Namespace → Services (→ Pods) / Ingresses**, danach nur noch `upsert`- und `delete`-Events.
+  Beispiel des Snapshots: `backend/internal/api/example-api.jsonc`.
 - `PATCH /api/actions/{action-name}` zum Ausführen von Aktionen auf einem Objekt
 
-- Objekte werden gruppiert ausgegeben:
-    - **Projekt → Namespace**
-    - **Namespace → Services / Ingresses / Pods**.
+- Objekte tragen nur, was das Dashboard braucht (`kind`, `name`, `parents`, Aktionen, Links und je Typ wenige
+  Felder), keine Labels/Annotations. Gesendet werden nur Anwendungs-Services (ClusterIP); ihr `running` ist gesetzt,
+  wenn mindestens ein Replica ready ist. Pods hängen unter jedem Service, der sie referenziert. Ingresses liefern
+  fertige `https://<host><path>`-URLs (`urls`).
+- Jedes Objekt kennt seine Parents bis zum Projekt (`parents.project`, `.namespace`, `.service`), damit ein Event
+  ohne weitere Daten einsortiert werden kann.
 - Jedes Objekt trägt die Liste der Aktionen, die auf ihm ausführbar sind. Je Aktion:
     - Name (Titel)
     - Aktion-ID (eindeutiger Name)
@@ -375,21 +337,20 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
     - optional eine Liste von Formular-Feldern
 - Je Formular-Feld u. a.: Feld-Typ (`text`, `select`, `multi-select`, `number`), Feld-Label, Feld-ID, `isRequired`,
   `description`.
-- Abfragen werden mit `200` und aktuellen Daten beantwortet oder mit `304`, wenn das Frontend bereits auf dem aktuellen
-  Stand ist.
 - Die API wird in einer openapi.yaml Datei dokumentiert und stets up-to-date gehalten, wenn sich API-Änderungen ergeben.
   Es kann auch eine swagger-GUI aufgerufen werden unter /api/swagger
 
-#### Mechanismus für 200er bzw. 304er Response-Code
+#### Event-Mechanismus
 
-Ob ein 200er response-code oder 304er response-code zurückgegeben wird bestimmt sich an einem ETag Header, welches das
-Frontend mitsendet.
-Wenn es sich um die Abfrage der Projekte und Namespaces handelt, dann wird der last-updated-timestamp verwendet, wann
-das letzte mal ein Namespace zu einem Projekt hinzugefügt/verändert/entfernt wurde.
-
-Wenn es sich um die Abfrage der Objekte eines Namespaces handelt, dann wird der last-update-timestamp verwendet, wann
-das letzte mal ein Objekte in dem Namespace hinzugefügt/verändert/entfernt wurde, oder der Namespace selber
-verändert/entfernt wurde.
+- Der Event-Hub (`internal/api/events.go`) wartet auf `store.Changes()`, baut jeden Namespace mit geändertem
+  Zeitstempel neu als DTO-Teilbaum auf und vergleicht ihn Objekt für Objekt (JSON-Bytes) mit dem zuletzt
+  verschickten Stand. So werden auch abgeleitete Änderungen (`running`, URLs, Anwendbarkeit von Aktionen) und der
+  periodische Neuaufbau erfasst.
+- `upsert` enthält das Objekt ohne Kind-Listen und kommt Parent vor Kind; `delete` enthält `kind`, `name`,
+  `parents`, kommt Kind vor Parent und entfällt für Kinder eines ebenfalls gelöschten Parents.
+- Snapshot und Abo entstehen unter demselben Lock, dazwischen geht kein Event verloren. Ein Reconnect erhält immer
+  einen neuen Snapshot (`Last-Event-ID` wird ignoriert). Zu langsame Clients werden getrennt und verbinden sich neu.
+- Der Hub hält nur JSON-Bytes, keine deserialisierten Objekte (Store-Garantie).
 
 ## Frontend
 
@@ -404,40 +365,23 @@ Das Dashboard kennt keine konkreten Aktionen. Buttons, Icons, Farben und Formula
 Backends aufgebaut. **Kein aktionsspezifischer Code im Frontend** (kein `if (action.id === "delete-pod")`). Fehlt dem
 Frontend eine Information, wird die API erweitert.
 
-### Seiten
+### Seite
 
-**1. Übersichtsseite**
-Zeigt die Projekte und die Namespaces (Feature-Environments), die zu ihnen existieren. Klick auf einen Namespace führt
-zur Namespace-Seite.
+Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
 
-**2. Namespace-Seite**, von oben nach unten:
-
-1. Aktionen, die zum Namespace-Objekt gehören.
-2. Übersicht der Ingress-Objekte mit ihren Pfaden und den Aktionen auf Ingress-Objekten.
-3. Auflistung der existierenden Node-Port-Services; je Port die Adresse `<dns-name>:<node-port>` (DNS-Name aus
-   `GET /api/cluster`) mit einem Button zum Kopieren in die Zwischenablage
-4. Übersicht der Anwendungs-Services (ClusterIP), je Service-Bereich ein Abschnitt (Reihenfolge aus dem Backend,
-   „others“ zuletzt), darin je Service eine Kachel. Darüber ein Quick-Filter (ab zwei Bereichen) mit einem Chip je
-   Bereich; mehrere Bereiche sind gleichzeitig wählbar, ohne Auswahl werden alle gezeigt. Die Auswahl steht in der
-   URL (`?area=<id>&area=<id>`).
-    - zuerst die Aktionen und Links des Service-Objekts (Links rechtsbündig, durch einen Trennstrich abgesetzt),
-    - danach die Replicas (Pods), die der Service referenziert, je mit Status und Links.
-    - Klick auf ein Replica dreht die Kachel um (Komponente `ServiceCard`). Die Rückseite zeigt oben links einen
-      Pfeil zurück zum Service, darunter Status und Container (Name, Image, Ports) des Pods, darunter seine Aktionen
-      und Links. Verschwindet der Pod zwischenzeitlich, zeigt die Rückseite einen Hinweis.
-
-Aktionen zu Pods werden nur auf der Rückseite der Service-Kachel angezeigt. Links stehen bei allen anderen Objekten
-neben deren Aktionen.
+- Je Projekt (Reihenfolge der `config.yaml`) ein Abschnitt mit einer Kachel je Namespace (`NamespaceCard`).
+- Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (mit deren Aktionen/Links) und je
+  Anwendungs-Service ein Punkt – grün, wenn mindestens ein Replica läuft, sonst rot.
+- Klick auf einen Punkt öffnet den `ServiceDialog`: Aktionen und Links des Services, darunter je Replica Status,
+  Container (Name, Image), Aktionen und Links. Verschwindet der Service zwischenzeitlich, zeigt der Dialog einen
+  Hinweis.
 
 ### Datenaktualisierung
 
-Das Frontend fragt das Backend regelmäßig ab, abhängig von der Seite, auf der sich der Nutzer befindet (nur die Daten,
-die diese Seite braucht). Bei `304` bleibt der bestehende Zustand unverändert, bei `200` wird er ersetzt.
-
-Das Intervall wählt der User im Dropdown oben rechts aus der Liste von `GET /api/polling`; Startwert ist der Default
-aus dem Backend, die Auswahl wird nicht gespeichert. Der Wert `0s` („Manuell“) schaltet das automatische Abfragen ab;
-dann gibt es ein Aktualisieren-Icon, das die Daten der Seite neu lädt und nach einem Klick für die Sperrzeit aus dem
-Backend gesperrt ist.
+Beim Aufruf öffnet das Frontend `GET /api/events` (EventSource). Das erste Event (`snapshot`) liefert den kompletten
+Stand, danach werden `upsert`/`delete` angewendet (`src/api/state.ts`). Nach einem Verbindungsabbruch verbindet sich
+der Browser selbst neu und erhält einen frischen Snapshot. Den Verbindungszustand zeigt `ConnectionStatus` oben
+rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die Events.
 
 ## Leitplanken für Änderungen
 
@@ -451,11 +395,12 @@ Backend gesperrt ist.
 
 - Backend: `k8s.io/client-go` v0.33.x mit Informern, HTTP mit stdlib `net/http`, YAML mit `gopkg.in/yaml.v3`.
 - Build/Test: Makefile + `go test`, Dockerfile (distroless).
-- Frontend: Vite, React Router; Auslieferung durch das Backend (`--static-dir`, SPA-Fallback auf `index.html`);
-  Polling-Intervall im Frontend wählbar; Liste, Default und Sperrzeit für manuelles Aktualisieren kommen aus der
-  `config.yaml` (`GET /api/polling`), die Auswahl wird nicht gespeichert.
+- Frontend: Vite, eine Seite ohne Router; Auslieferung durch das Backend (`--static-dir`, SPA-Fallback auf
+  `index.html`).
+- Aktualisierung über Server-Sent Events statt Polling/ETag; der Initialstand ist das erste Event desselben Streams.
+- Keine Service-Bereiche, keine Anzeige von NodePort-Services (und damit kein `cluster.dns-name`).
 - Aktionen werden im Frontend immer über einen Dialog bestätigt; Formular-Felder erscheinen darin, falls vorhanden.
-- Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit ETags)
+- Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit Events)
   ändern sich nur, wenn sich das gespeicherte JSON tatsächlich ändert.
 - Periodischer Neuaufbau: frische Informer, kompletter neuer Store-Inhalt, atomarer Austausch;
   Timestamps nur für Namespaces mit abweichendem Inhalt.

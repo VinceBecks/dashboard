@@ -35,126 +35,75 @@ export interface Link {
 
 export type ObjectKind = 'namespace' | 'service' | 'ingress' | 'pod';
 
+/** Referenz auf ein Objekt im Body von PATCH /api/actions/{action}. */
 export interface ObjectRef {
   kind: ObjectKind;
   namespace: string;
   name: string;
 }
 
-interface ObjectBase {
-  name: string;
+/** Einordnung in die Hierarchie Projekt → Namespace → Service. */
+export interface Parents {
+  project: string;
   namespace?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
+  service?: string;
+}
+
+/** Inhalt eines delete-Events; identifiziert ein Objekt über kind, parents und name. */
+export interface ObjectHeader {
+  kind: ObjectKind;
+  name: string;
+  parents: Parents;
+}
+
+interface ObjectBase extends ObjectHeader {
   actions: Action[];
   links: Link[];
-}
-
-export interface Namespace extends ObjectBase {
-  project: string;
-}
-
-export interface ContainerPort {
-  name?: string;
-  containerPort: number;
-  protocol?: string;
 }
 
 export interface Container {
   name: string;
   image: string;
-  ports?: ContainerPort[];
 }
 
-export interface Pod extends ObjectBase {
+export interface PodObject extends ObjectBase {
+  kind: 'pod';
   phase: string;
   ready: boolean;
   containers: Container[];
 }
 
-export interface ServicePort {
-  name?: string;
-  protocol?: string;
-  port: number;
-  targetPort: string;
-  resolvedTargetPort?: number;
-  nodePort?: number;
+/** Anwendungs-Service (ClusterIP). pods fehlt in upsert-Events. */
+export interface ServiceObject extends ObjectBase {
+  kind: 'service';
+  /** Mindestens ein Replica ist ready. */
+  running: boolean;
+  pods?: PodObject[];
 }
 
-export interface Service extends ObjectBase {
-  type: string;
-  selector?: Record<string, string>;
-  ports: ServicePort[];
-  replicas: string[];
+export interface IngressObject extends ObjectBase {
+  kind: 'ingress';
+  /** Fertig aufgelöste https-URLs der Rules. */
+  urls: string[];
 }
 
-export interface IngressBackend {
-  serviceName: string;
-  servicePortName?: string;
-  servicePortNumber?: number;
-  resolvedServicePortNumber?: number;
+/** Feature-Umgebung. services und ingresses fehlen in upsert-Events. */
+export interface NamespaceObject extends ObjectBase {
+  kind: 'namespace';
+  services?: ServiceObject[];
+  ingresses?: IngressObject[];
 }
 
-export interface IngressPath {
-  pathType: string;
-  path: string;
-  backend: IngressBackend;
-}
+export type DashboardObject = NamespaceObject | ServiceObject | PodObject | IngressObject;
 
-export interface IngressRule {
-  host: string;
-  paths: IngressPath[];
-}
-
-export interface Ingress extends ObjectBase {
-  rules: IngressRule[];
-}
-
-export interface Project {
+export interface ProjectSnapshot {
   name: string;
-  namespaces: Namespace[];
+  namespaces: NamespaceObject[];
 }
 
-/** Antwort von GET /api/cluster. */
-export interface ClusterResponse {
-  /** DNS-Name der Nodes für alle NodePort-Services; leer, wenn nicht konfiguriert. */
-  dnsName: string;
-}
-
-/** Wählbares Abfrage-Intervall aus GET /api/polling. */
-export interface PollingInterval {
-  /** Wert aus der config.yaml, z. B. „10s“; Anzeige und ID. */
-  value: string;
-  /** 0 heißt: nicht automatisch abfragen, nur per Aktualisieren-Button. */
-  milliseconds: number;
-}
-
-/** Antwort von GET /api/polling. */
-export interface PollingResponse {
-  intervals: PollingInterval[];
-  /** value des Intervalls, das nach dem Laden gilt. */
-  defaultInterval: string;
-  /** So lange ist der Aktualisieren-Button nach einem Klick gesperrt. */
-  manualRefreshCooldownMilliseconds: number;
-}
-
-export interface ProjectsResponse {
-  projects: Project[];
-}
-
-/** Bereich von Anwendungs-Services; services enthält die Namen aus NamespaceResponse.services. */
-export interface ServiceArea {
-  id: string;
-  label: string;
-  services: string[];
-}
-
-export interface NamespaceResponse {
-  namespace: Namespace;
-  services: Service[];
-  ingresses: Ingress[];
-  pods: Pod[];
-  serviceAreas: ServiceArea[];
+/** Inhalt des snapshot-Events (erstes Event auf GET /api/events). */
+export interface Snapshot {
+  projects: ProjectSnapshot[];
 }
 
 export interface ActionResult {

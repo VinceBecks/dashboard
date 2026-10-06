@@ -81,7 +81,7 @@ func TestWatcher(t *testing.T) {
 	// Der fake-Client kann Events zwischen List und Watch verlieren; kurz warten, bis die Watches stehen.
 	time.Sleep(200 * time.Millisecond)
 
-	nss, _, _ := st.Namespaces()
+	nss, _ := st.Namespaces()
 	if len(nss) != 1 || nss[0].Name != "feat-1" || nss[0].Project != "foo" {
 		t.Fatalf("Namespaces = %+v", nss)
 	}
@@ -116,11 +116,10 @@ func TestWatcher(t *testing.T) {
 
 	// Full-Rebuild bei unverändertem Cluster ändert keine Timestamps.
 	before, _ := st.NamespaceLastUpdated("other")
-	beforeProjects := st.ProjectsLastUpdated()
 	if err := w.rebuildForTest(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if after, _ := st.NamespaceLastUpdated("other"); after != before || st.ProjectsLastUpdated() != beforeProjects {
+	if after, _ := st.NamespaceLastUpdated("other"); after != before {
 		t.Fatal("Rebuild ohne Änderungen darf Timestamps nicht ändern")
 	}
 }

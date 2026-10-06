@@ -90,62 +90,6 @@ actionHandlers:
 	}
 }
 
-func TestServiceAreas(t *testing.T) {
-	cfg, err := Parse([]byte(`
-projects:
-  - project-name: foo
-    namespace-labels: {a: b}
-    service-areas:
-      - area-name: business
-        area-label: Business
-        label-combinations:
-          - app.kubernetes.io/part-of: shop
-            tier: backend
-          - app.kubernetes.io/part-of: billing
-  - project-name: bar
-    namespace-labels: {a: c}
-    others-area-label: Sonstige
-    service-areas:
-      - area-name: infra
-        area-label: Infrastruktur
-        label-combinations: [{managed: true}]
-  - project-name: baz
-    namespace-labels: {a: d}
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	area := cfg.Projects[0].ServiceAreas[0]
-	if area.Name != "business" || len(area.LabelCombinations) != 2 || area.LabelCombinations[0]["tier"] != "backend" {
-		t.Fatalf("area = %+v", area)
-	}
-	if got := cfg.Projects[1].ServiceAreas[0].LabelCombinations[0]["managed"]; got != "true" {
-		t.Errorf("bool-Label = %q", got)
-	}
-	for i, want := range []string{"Andere", "Sonstige", "Anwendungs-Services"} {
-		if got := cfg.Projects[i].OthersLabel(); got != want {
-			t.Errorf("OthersLabel[%d] = %q, want %q", i, got, want)
-		}
-	}
-}
-
-func TestServiceAreasValidation(t *testing.T) {
-	cases := map[string]string{
-		"reservierter Name": `[{area-name: others, area-label: X, label-combinations: [{a: b}]}]`,
-		"doppelter Name":    `[{area-name: x, area-label: X, label-combinations: [{a: b}]}, {area-name: x, area-label: Y, label-combinations: [{a: b}]}]`,
-		"Name fehlt":        `[{area-label: X, label-combinations: [{a: b}]}]`,
-		"Label fehlt":       `[{area-name: x, label-combinations: [{a: b}]}]`,
-		"keine Kombination": `[{area-name: x, area-label: X}]`,
-		"leere Kombination": `[{area-name: x, area-label: X, label-combinations: [{}]}]`,
-	}
-	for name, areas := range cases {
-		_, err := Parse([]byte("projects:\n  - project-name: foo\n    namespace-labels: {a: b}\n    service-areas: " + areas + "\n"))
-		if err == nil {
-			t.Errorf("%s: Fehler erwartet", name)
-		}
-	}
-}
-
 func TestLinks(t *testing.T) {
 	cfg, err := Parse([]byte(`
 link-variables:
@@ -206,22 +150,6 @@ func TestLinksValidation(t *testing.T) {
 	}
 }
 
-func TestClusterDNSName(t *testing.T) {
-	for _, valid := range []string{"", "k8s-nodes.mycomp.de", "Nodes.MyComp.de", "10.0.0.12"} {
-		cfg, err := Parse([]byte("cluster:\n  dns-name: \"" + valid + "\"\n"))
-		if err != nil {
-			t.Errorf("%q: %v", valid, err)
-		} else if cfg.Cluster.DNSName != valid {
-			t.Errorf("DNSName = %q, want %q", cfg.Cluster.DNSName, valid)
-		}
-	}
-	for _, invalid := range []string{"https://nodes.mycomp.de", "nodes.mycomp.de:30000", "nodes mycomp"} {
-		if _, err := Parse([]byte("cluster:\n  dns-name: \"" + invalid + "\"\n")); err == nil {
-			t.Errorf("%q: Fehler erwartet", invalid)
-		}
-	}
-}
-
 func TestActionProjectsValidation(t *testing.T) {
 	const projects = "projects:\n  - project-name: foo\n    namespace-labels: {a: b}\n"
 	valid := map[string]string{
@@ -239,50 +167,6 @@ func TestActionProjectsValidation(t *testing.T) {
 	}
 	for name, actions := range invalid {
 		if _, err := Parse([]byte(projects + "actionHandlers: " + actions + "\n")); err == nil {
-			t.Errorf("%s: Fehler erwartet", name)
-		}
-	}
-}
-
-func TestFrontendDefaults(t *testing.T) {
-	cfg, err := Parse([]byte(sample))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := cfg.Frontend
-	if len(f.PollingIntervals) != 5 || f.PollingIntervals[0].Value != 0 || f.PollingIntervals[4].Text != "1m" ||
-		f.DefaultPollingInterval.Value != 10*time.Second || f.ManualRefreshCooldown.Value != 3*time.Second {
-		t.Fatalf("Defaults = %+v", f)
-	}
-}
-
-func TestFrontend(t *testing.T) {
-	cfg, err := Parse([]byte("frontend:\n  polling-intervals: [0s, 15s, 2m]\n  default-polling-interval: 2m\n  manual-refresh-cooldown: 5s\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := cfg.Frontend
-	if len(f.PollingIntervals) != 3 || f.PollingIntervals[2].Text != "2m" || f.PollingIntervals[2].Value != 2*time.Minute ||
-		f.DefaultPollingInterval.Text != "2m" || f.ManualRefreshCooldown.Value != 5*time.Second {
-		t.Fatalf("Frontend = %+v", f)
-	}
-	// Nur die Liste gesetzt: Default und Sperrzeit kommen aus den Vorgaben.
-	if _, err := Parse([]byte("frontend:\n  polling-intervals: [10s, 1m]\n")); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestFrontendValidation(t *testing.T) {
-	invalid := map[string]string{
-		"leere Liste":            "polling-intervals: []\n",
-		"Default nicht in Liste": "polling-intervals: [0s, 30s]\n  default-polling-interval: 10s\n",
-		"Duplikat":               "polling-intervals: [10s, 10000ms]\n",
-		"negativ":                "polling-intervals: [-5s, 10s]\n",
-		"ungültige Dauer":        "polling-intervals: [10x]\n",
-		"Sperrzeit zu kurz":      "manual-refresh-cooldown: 500ms\n",
-	}
-	for name, frontend := range invalid {
-		if _, err := Parse([]byte("frontend:\n  " + frontend)); err == nil {
 			t.Errorf("%s: Fehler erwartet", name)
 		}
 	}

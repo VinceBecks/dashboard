@@ -1,84 +1,58 @@
 openapi: 3.0.3
 info:
   title: Feature-Dashboard API
-  version: 1.0.0
+  version: 2.0.0
   description: |
-    API des Feature-Environment-Dashboards. Liefert Projekte, deren Feature-Umgebungen (Namespaces)
-    und die darin laufenden Objekte samt ausführbarer Aktionen.
+    API des Feature-Environment-Dashboards. Das Frontend öffnet `GET /api/events` (Server-Sent Events),
+    erhält zuerst die komplette Hierarchie Projekt → Namespace → Services (→ Pods) / Ingresses und danach
+    nur noch Änderungen. Aktionen werden über `PATCH /api/actions/{action}` ausgelöst.
 
-    GET-Endpunkte liefern einen `ETag`. Sendet das Frontend diesen als `If-None-Match` mit und hat sich
-    nichts geändert, antwortet der Server mit `304 Not Modified` ohne Body.
+    Ein Beispiel des Initialstands liegt in `backend/internal/api/example-api.jsonc`.
 paths:
-  /api/cluster:
+  /api/events:
     get:
-      summary: Statische Angaben zum Cluster
-      description: Werte aus der config.yaml (Abschnitt cluster); sie ändern sich erst mit einem Neustart des Backends.
-      parameters:
-        - $ref: '#/components/parameters/IfNoneMatch'
-      responses:
-        '200':
-          description: Aktuelle Daten
-          headers:
-            ETag: { $ref: '#/components/headers/ETag' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ClusterResponse' }
-        '304': { $ref: '#/components/responses/NotModified' }
-  /api/polling:
-    get:
-      summary: Abfrage-Vorgaben für das Frontend
+      summary: Event-Stream mit Initialstand und Änderungen
       description: |
-        Wählbare Abfrage-Intervalle, Default und Sperrzeit des Aktualisieren-Buttons aus der config.yaml (Abschnitt
-        frontend); sie ändern sich erst mit einem Neustart des Backends. Ein Intervall mit 0 Millisekunden heißt:
-        nicht automatisch abfragen, nur per Aktualisieren-Button.
-      parameters:
-        - $ref: '#/components/parameters/IfNoneMatch'
+        `text/event-stream`. Jedes Event hat eine je Verbindung fortlaufende `id`, einen Typ (`event:`) und
+        einzeiliges JSON (`data:`). Alle 25 s kommt ein Kommentar `: ping`.
+
+        | Event      | data                                    | Bedeutung |
+        |------------|-----------------------------------------|-----------|
+        | `snapshot` | `Snapshot`                              | Immer das erste Event: kompletter Stand |
+        | `upsert`   | `NamespaceObject`, `ServiceObject`, `PodObject` oder `IngressObject` (ohne Kind-Listen) | Objekt neu oder geändert; vorhandene Kinder bleiben |
+        | `delete`   | `DeleteEvent`                           | Objekt samt aller Kinder entfernen |
+
+        - `upsert` kommt Parent vor Kind, `delete` Kind vor Parent. Wird ein Parent gelöscht, entfällt das
+          `delete` für seine Kinder.
+        - Objekte werden über `kind`, `parents` und `name` identifiziert. Wechselt ein Namespace das Projekt,
+          kommt `delete` im alten und `upsert` im neuen Projekt.
+        - `Last-Event-ID` wird ignoriert; nach einem Reconnect kommt wieder ein `snapshot`.
+        - Ist ein Client zu langsam, beendet der Server den Stream; der Client verbindet sich neu.
       responses:
         '200':
-          description: Aktuelle Daten
-          headers:
-            ETag: { $ref: '#/components/headers/ETag' }
+          description: Event-Stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+              example: |
+                id: 1
+                event: snapshot
+                data: {"projects":[{"name":"foo-projekt","namespaces":[]}]}
+
+                id: 2
+                event: delete
+                data: {"kind":"namespace","name":"foo-feature-123","parents":{"project":"foo-projekt"}}
+        '503':
+          description: Store wird noch aufgebaut oder Server fährt herunter
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PollingResponse' }
-        '304': { $ref: '#/components/responses/NotModified' }
-  /api/projects:
-    get:
-      summary: Projekte und ihre Namespaces
-      parameters:
-        - $ref: '#/components/parameters/IfNoneMatch'
-      responses:
-        '200':
-          description: Aktuelle Daten
-          headers:
-            ETag: { $ref: '#/components/headers/ETag' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ProjectsResponse' }
-        '304': { $ref: '#/components/responses/NotModified' }
-  /api/projects/{project}/namespaces/{namespace}:
-    get:
-      summary: Alle Objekte eines Namespaces (inkl. Namespace selbst)
-      parameters:
-        - { name: project, in: path, required: true, schema: { type: string } }
-        - { name: namespace, in: path, required: true, schema: { type: string } }
-        - $ref: '#/components/parameters/IfNoneMatch'
-      responses:
-        '200':
-          description: Aktuelle Daten
-          headers:
-            ETag: { $ref: '#/components/headers/ETag' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/NamespaceResponse' }
-        '304': { $ref: '#/components/responses/NotModified' }
-        '404': { $ref: '#/components/responses/Error' }
+              schema: { $ref: '#/components/schemas/Error' }
   /api/actions/{action}:
     patch:
       summary: Aktion auf einem Objekt ausführen
       description: |
-        Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die Informer-Events im Store,
-        also mit dem nächsten Abruf der GET-Endpunkte.
+        Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die Informer-Events im Store
+        und kommen dann als Events über `GET /api/events`.
       parameters:
         - { name: action, in: path, required: true, description: Aktion-ID, schema: { type: string } }
       requestBody:
@@ -124,25 +98,6 @@ paths:
       responses:
         '200': { description: HTML-Seite }
 components:
-  parameters:
-    IfNoneMatch:
-      name: If-None-Match
-      in: header
-      required: false
-      description: Zuletzt erhaltener ETag
-      schema: { type: string }
-  headers:
-    ETag:
-      description: Zeitstempel der letzten relevanten Änderung
-      schema: { type: string }
-  responses:
-    NotModified:
-      description: Frontend ist bereits auf dem aktuellen Stand
-    Error:
-      description: Fehler
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/Error' }
   schemas:
     Error:
       type: object
@@ -153,9 +108,6 @@ components:
           type: array
           items: { type: string }
           description: Einzelne Validierungsfehler der Formular-Eingaben
-    StringMap:
-      type: object
-      additionalProperties: { type: string }
     Action:
       type: object
       required: [id, title, lucideIcon, lucideIconColor]
@@ -195,34 +147,67 @@ components:
         lucideIcon: { type: string }
         lucideIconColor: { type: string }
         url: { type: string, format: uri, description: Absolute http(s)-URL }
+    Parents:
+      type: object
+      description: |
+        Einordnung in die Hierarchie. Namespace: `project`; Service und Ingress: `project`, `namespace`;
+        Pod: `project`, `namespace`, `service`. Ein Pod, den mehrere Services referenzieren, erscheint unter jedem.
+      required: [project]
+      properties:
+        project: { type: string }
+        namespace: { type: string }
+        service: { type: string }
+    DeleteEvent:
+      type: object
+      required: [kind, name, parents]
+      properties:
+        kind: { type: string, enum: [namespace, service, ingress, pod] }
+        name: { type: string }
+        parents: { $ref: '#/components/schemas/Parents' }
     ObjectBase:
       type: object
-      required: [name, actions, links]
+      required: [kind, name, parents, actions, links]
       properties:
+        kind: { type: string, enum: [namespace, service, ingress, pod] }
         name: { type: string }
-        namespace: { type: string }
-        labels: { $ref: '#/components/schemas/StringMap' }
-        annotations: { $ref: '#/components/schemas/StringMap' }
+        parents: { $ref: '#/components/schemas/Parents' }
         actions:
           type: array
           items: { $ref: '#/components/schemas/Action' }
         links:
           type: array
           items: { $ref: '#/components/schemas/Link' }
-    Namespace:
+    NamespaceObject:
+      description: Feature-Umgebung. `services` und `ingresses` nur im Snapshot.
       allOf:
         - $ref: '#/components/schemas/ObjectBase'
         - type: object
-          required: [project]
           properties:
-            project: { type: string }
-    Pod:
+            services:
+              type: array
+              items: { $ref: '#/components/schemas/ServiceObject' }
+            ingresses:
+              type: array
+              items: { $ref: '#/components/schemas/IngressObject' }
+    ServiceObject:
+      description: Anwendungs-Service (nur Typ ClusterIP). `pods` nur im Snapshot, sortiert nach Name.
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+        - type: object
+          required: [running]
+          properties:
+            running: { type: boolean, description: Mindestens ein Replica ist ready }
+            pods:
+              type: array
+              items: { $ref: '#/components/schemas/PodObject' }
+    PodObject:
+      description: Replica eines Services.
       allOf:
         - $ref: '#/components/schemas/ObjectBase'
         - type: object
           required: [phase, ready, containers]
           properties:
-            phase: { type: string, example: Running }
+            phase: { type: string }
             ready: { type: boolean }
             containers:
               type: array
@@ -232,111 +217,25 @@ components:
                 properties:
                   name: { type: string }
                   image: { type: string }
-                  ports:
-                    type: array
-                    items:
-                      type: object
-                      required: [containerPort]
-                      properties:
-                        name: { type: string }
-                        containerPort: { type: integer, format: int32 }
-                        protocol: { type: string }
-    Service:
+    IngressObject:
       allOf:
         - $ref: '#/components/schemas/ObjectBase'
         - type: object
-          required: [type, ports, replicas]
+          required: [urls]
           properties:
-            type: { type: string, example: ClusterIP }
-            selector: { $ref: '#/components/schemas/StringMap' }
-            replicas:
+            urls:
               type: array
-              description: Namen der Pods, die der Service referenziert
-              items: { type: string }
-            ports:
-              type: array
-              items:
-                type: object
-                required: [port, targetPort]
-                properties:
-                  name: { type: string }
-                  protocol: { type: string }
-                  port: { type: integer, format: int32 }
-                  targetPort: { type: string, description: Rohwert (Name oder Zahl) }
-                  resolvedTargetPort: { type: integer, format: int32, description: Aufgelöste Port-Nummer }
-                  nodePort: { type: integer, format: int32 }
-    Ingress:
-      allOf:
-        - $ref: '#/components/schemas/ObjectBase'
-        - type: object
-          required: [rules]
-          properties:
-            rules:
-              type: array
-              items:
-                type: object
-                required: [host, paths]
-                properties:
-                  host: { type: string }
-                  paths:
-                    type: array
-                    items:
-                      type: object
-                      required: [pathType, path, backend]
-                      properties:
-                        pathType: { type: string }
-                        path: { type: string }
-                        backend:
-                          type: object
-                          required: [serviceName]
-                          properties:
-                            serviceName: { type: string }
-                            servicePortName: { type: string }
-                            servicePortNumber: { type: integer, format: int32 }
-                            resolvedServicePortNumber: { type: integer, format: int32 }
-    ClusterResponse:
-      type: object
-      required: [dnsName]
-      properties:
-        dnsName:
-          type: string
-          description: DNS-Name (oder IP) der Nodes für alle NodePort-Services (<dnsName>:<nodePort>); leer, wenn nicht konfiguriert.
-    PollingResponse:
-      type: object
-      required: [intervals, defaultInterval, manualRefreshCooldownMilliseconds]
-      properties:
-        intervals:
-          type: array
-          description: Im Frontend wählbare Abfrage-Intervalle in der Reihenfolge der config.yaml.
-          items: { $ref: '#/components/schemas/PollingInterval' }
-        defaultInterval:
-          type: string
-          description: value des Intervalls, das nach dem Laden des Frontends gilt.
-          example: 10s
-        manualRefreshCooldownMilliseconds:
-          type: integer
-          format: int64
-          description: So lange ist der Aktualisieren-Button nach einem Klick gesperrt.
-          example: 3000
-    PollingInterval:
-      type: object
-      required: [value, milliseconds]
-      properties:
-        value:
-          type: string
-          description: Wert aus der config.yaml (Go-Dauer), dient als Anzeige und ID.
-          example: 10s
-        milliseconds:
-          type: integer
-          format: int64
-          description: Intervall in Millisekunden; 0 heißt nur manuell aktualisieren.
-          example: 10000
-    ProjectsResponse:
+              description: |
+                Je Rule mit Host und je Path `https://<host><path>` (Reihenfolge der Spec, ohne Duplikate);
+                Rules ohne Host fehlen.
+              items: { type: string, format: uri }
+    Snapshot:
       type: object
       required: [projects]
       properties:
         projects:
           type: array
+          description: Alle Projekte in der Reihenfolge der config.yaml, auch ohne Namespaces.
           items:
             type: object
             required: [name, namespaces]
@@ -344,39 +243,8 @@ components:
               name: { type: string }
               namespaces:
                 type: array
-                items: { $ref: '#/components/schemas/Namespace' }
-    NamespaceResponse:
-      type: object
-      required: [namespace, services, ingresses, pods, serviceAreas]
-      properties:
-        namespace: { $ref: '#/components/schemas/Namespace' }
-        serviceAreas:
-          type: array
-          description: |
-            Aufteilung der Anwendungs-Services (Typ ClusterIP) in Bereiche gemäß service-areas der config.yaml.
-            Konfigurierte Bereiche kommen in Config-Reihenfolge (auch leer), zuletzt der Bereich `others` mit allen
-            nicht zugeordneten Services. `others` fehlt, wenn er leer ist und Bereiche konfiguriert sind.
-            Ein Service kann in mehreren Bereichen vorkommen.
-          items: { $ref: '#/components/schemas/ServiceArea' }
-        services:
-          type: array
-          items: { $ref: '#/components/schemas/Service' }
-        ingresses:
-          type: array
-          items: { $ref: '#/components/schemas/Ingress' }
-        pods:
-          type: array
-          items: { $ref: '#/components/schemas/Pod' }
-    ServiceArea:
-      type: object
-      required: [id, label, services]
-      properties:
-        id: { type: string, description: 'area-name aus der config.yaml bzw. "others"' }
-        label: { type: string }
-        services:
-          type: array
-          description: Namen der Services aus `services`, sortiert nach Name
-          items: { type: string }
+                description: Sortiert nach Name; darin Services, Ingresses und Pods ebenfalls nach Name.
+                items: { $ref: '#/components/schemas/NamespaceObject' }
     ActionRequest:
       type: object
       required: [object]

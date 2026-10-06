@@ -12,23 +12,6 @@ export class ApiError extends Error {
   }
 }
 
-export type ConditionalResult<T> = { notModified: true } | { notModified: false; data: T; etag: string | null };
-
-/**
- * GET mit ETag: Bei 304 ist das Frontend bereits auf dem aktuellen Stand und der bestehende Zustand bleibt.
- */
-export async function getConditional<T>(url: string, etag: string | null, signal?: AbortSignal): Promise<ConditionalResult<T>> {
-  const headers: HeadersInit = etag ? { 'If-None-Match': etag } : {};
-  const res = await fetch(url, { headers, signal });
-  if (res.status === 304) {
-    return { notModified: true };
-  }
-  if (!res.ok) {
-    throw await toError(res);
-  }
-  return { notModified: false, data: (await res.json()) as T, etag: res.headers.get('ETag') };
-}
-
 /** Führt eine Aktion auf einem Objekt aus. */
 export async function executeAction(
   actionId: string,

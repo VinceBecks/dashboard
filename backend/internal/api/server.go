@@ -2,20 +2,19 @@
 package api
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
-	"feature-dashboard/internal/project"
 	"feature-dashboard/internal/store"
 )
 
@@ -26,36 +25,32 @@ var openAPISpec []byte
 type Server struct {
 	store     *store.Store
 	registry  *actions.Registry
-	projects  []config.Project
 	ready     func() bool
 	staticDir string
 	links     *links.Registry
-	cluster   config.ClusterConfig
-	frontend  config.FrontendConfig
-	startedAt time.Time
+	hub       *Hub
 }
 
 // NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
 func NewServer(st *store.Store, registry *actions.Registry, projects []config.Project, ready func() bool) *Server {
-	return &Server{store: st, registry: registry, projects: projects, ready: ready,
-		frontend: config.DefaultFrontendConfig(), startedAt: time.Now()}
+	s := &Server{store: st, registry: registry, ready: ready}
+	names := make([]string, 0, len(projects))
+	for _, p := range projects {
+		names = append(names, p.Name)
+	}
+	s.hub = newHub(st, names, s.buildNamespace)
+	return s
+}
+
+// Run verteilt Store-Änderungen an die Clients von GET /api/events, bis ctx endet. Danach werden alle
+// Event-Streams beendet, damit der HTTP-Server herunterfahren kann.
+func (s *Server) Run(ctx context.Context) {
+	s.hub.Run(ctx)
 }
 
 // WithStaticDir lässt den Server zusätzlich den Frontend-Build aus dir ausliefern.
 func (s *Server) WithStaticDir(dir string) *Server {
 	s.staticDir = dir
-	return s
-}
-
-// WithCluster setzt die Cluster-Angaben für GET /api/cluster.
-func (s *Server) WithCluster(c config.ClusterConfig) *Server {
-	s.cluster = c
-	return s
-}
-
-// WithFrontend setzt die Vorgaben für das Frontend (GET /api/polling).
-func (s *Server) WithFrontend(f config.FrontendConfig) *Server {
-	s.frontend = f
 	return s
 }
 
@@ -70,10 +65,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
-	mux.HandleFunc("GET /api/cluster", s.handleCluster)
-	mux.HandleFunc("GET /api/polling", s.handlePolling)
-	mux.HandleFunc("GET /api/projects", s.handleProjects)
-	mux.HandleFunc("GET /api/projects/{project}/namespaces/{namespace}", s.handleNamespace)
+	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("PATCH /api/actions/{action}", s.handleAction)
 	mux.HandleFunc("GET /api/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
@@ -97,162 +89,63 @@ func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// ClusterResponse ist die Antwort von GET /api/cluster.
-type ClusterResponse struct {
-	// DNSName ist der DNS-Name der Nodes für alle NodePort-Services; leer, wenn nicht konfiguriert.
-	DNSName string `json:"dnsName"`
-}
+// pingInterval hält Event-Streams über Proxys hinweg offen.
+const pingInterval = 25 * time.Second
 
-// handleCluster liefert statische Cluster-Angaben aus der config.yaml. Sie ändern sich erst mit einem Neustart,
-// daher dient der Startzeitpunkt als ETag.
-func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
-	if notModified(w, r, s.startedAt) {
+// handleEvents liefert den Server-Sent-Events-Stream: zuerst ein snapshot-Event mit allen Projekten, danach
+// upsert- und delete-Events. Ein Reconnect erhält immer einen neuen Snapshot; Last-Event-ID wird ignoriert.
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if !s.ready() {
+		writeError(w, http.StatusServiceUnavailable, errors.New("store ist noch nicht befüllt"))
 		return
 	}
-	writeJSON(w, http.StatusOK, ClusterResponse{DNSName: s.cluster.DNSName})
-}
-
-// PollingResponse ist die Antwort von GET /api/polling.
-type PollingResponse struct {
-	// Intervals sind die im Frontend wählbaren Abfrage-Intervalle; 0 Millisekunden heißt: nur manuell.
-	Intervals []PollingInterval `json:"intervals"`
-	// DefaultInterval ist der value des Intervalls, das nach dem Laden gilt.
-	DefaultInterval string `json:"defaultInterval"`
-	// ManualRefreshCooldownMilliseconds sperrt den Aktualisieren-Button nach einem Klick.
-	ManualRefreshCooldownMilliseconds int64 `json:"manualRefreshCooldownMilliseconds"`
-}
-
-// PollingInterval ist ein wählbares Abfrage-Intervall.
-type PollingInterval struct {
-	// Value ist der Wert aus der config.yaml, z. B. "10s"; dient als Anzeige und ID.
-	Value        string `json:"value"`
-	Milliseconds int64  `json:"milliseconds"`
-}
-
-// handlePolling liefert die Abfrage-Vorgaben aus der config.yaml. Wie bei handleCluster dient der Startzeitpunkt
-// als ETag.
-func (s *Server) handlePolling(w http.ResponseWriter, r *http.Request) {
-	if notModified(w, r, s.startedAt) {
-		return
-	}
-	res := PollingResponse{
-		Intervals:                         make([]PollingInterval, 0, len(s.frontend.PollingIntervals)),
-		DefaultInterval:                   s.frontend.DefaultPollingInterval.Text,
-		ManualRefreshCooldownMilliseconds: s.frontend.ManualRefreshCooldown.Value.Milliseconds(),
-	}
-	for _, d := range s.frontend.PollingIntervals {
-		res.Intervals = append(res.Intervals, PollingInterval{Value: d.Text, Milliseconds: d.Value.Milliseconds()})
-	}
-	writeJSON(w, http.StatusOK, res)
-}
-
-// ProjectsResponse ist die Antwort von GET /api/projects.
-type ProjectsResponse struct {
-	Projects []ProjectDTO `json:"projects"`
-}
-
-// ProjectDTO ist ein Projekt mit seinen Namespaces.
-type ProjectDTO struct {
-	Name       string         `json:"name"`
-	Namespaces []NamespaceDTO `json:"namespaces"`
-}
-
-// ObjectExtras sind die Aktionen und Links, die jedes Objekt in der Response trägt.
-type ObjectExtras struct {
-	Actions []actions.Action `json:"actions"`
-	Links   []links.Link     `json:"links"`
-}
-
-// NamespaceDTO ist ein Namespace mit seinen Aktionen und Links.
-type NamespaceDTO struct {
-	model.StoredNamespace
-	ObjectExtras
-}
-
-// ServiceDTO ist ein Service mit seinen Aktionen und Links.
-type ServiceDTO struct {
-	model.StoredService
-	ObjectExtras
-}
-
-// IngressDTO ist ein Ingress mit seinen Aktionen und Links.
-type IngressDTO struct {
-	model.StoredIngress
-	ObjectExtras
-}
-
-// PodDTO ist ein Pod mit seinen Aktionen und Links.
-type PodDTO struct {
-	model.StoredPod
-	ObjectExtras
-}
-
-// NamespaceResponse ist die Antwort von GET /api/projects/{project}/namespaces/{namespace}.
-type NamespaceResponse struct {
-	Namespace NamespaceDTO `json:"namespace"`
-	Services  []ServiceDTO `json:"services"`
-	Ingresses []IngressDTO `json:"ingresses"`
-	Pods      []PodDTO     `json:"pods"`
-	// ServiceAreas teilen die Anwendungs-Services in Bereiche auf und referenzieren sie über ihren Namen.
-	ServiceAreas []project.Area `json:"serviceAreas"`
-}
-
-func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
-	namespaces, lastUpdated, err := s.store.Namespaces()
+	sub, err := s.hub.Subscribe()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	if notModified(w, r, lastUpdated) {
-		return
-	}
-	byProject := map[string][]NamespaceDTO{}
-	for _, ns := range namespaces {
-		byProject[ns.Project] = append(byProject[ns.Project], NamespaceDTO{ns, s.extras(model.KindNamespace, ns.Name, ns.Name, ns, ns.Project)})
-	}
-	resp := ProjectsResponse{Projects: make([]ProjectDTO, 0, len(s.projects))}
-	for _, p := range s.projects {
-		nss := byProject[p.Name]
-		if nss == nil {
-			nss = []NamespaceDTO{}
+	defer sub.Cancel()
+
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	rc := http.NewResponseController(w)
+	id := 0
+	send := func(typ string, data []byte) error {
+		id++
+		if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", id, typ, data); err != nil {
+			return err
 		}
-		resp.Projects = append(resp.Projects, ProjectDTO{Name: p.Name, Namespaces: nss})
+		return rc.Flush()
 	}
-	writeJSON(w, http.StatusOK, resp)
-}
 
-func (s *Server) handleNamespace(w http.ResponseWriter, r *http.Request) {
-	view, lastUpdated, ok, err := s.store.Namespace(r.PathValue("namespace"))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+	if err := send(EventSnapshot, sub.Snapshot); err != nil {
 		return
 	}
-	if !ok || view.Namespace.Project != r.PathValue("project") {
-		writeError(w, http.StatusNotFound, errors.New("namespace nicht gefunden"))
-		return
+	ping := time.NewTicker(pingInterval)
+	defer ping.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case ev, ok := <-sub.Events:
+			if !ok {
+				return
+			}
+			if err := send(ev.Type, ev.Data); err != nil {
+				return
+			}
+		case <-ping.C:
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return
+			}
+			if err := rc.Flush(); err != nil {
+				return
+			}
+		}
 	}
-	if notModified(w, r, lastUpdated) {
-		return
-	}
-	ns := view.Namespace
-	projectCfg, _ := s.project(ns.Project)
-	resp := NamespaceResponse{
-		ServiceAreas: project.AssignServiceAreas(projectCfg, view.Services),
-		Namespace:    NamespaceDTO{ns, s.extras(model.KindNamespace, ns.Name, ns.Name, ns, ns.Project)},
-		Services:     make([]ServiceDTO, 0, len(view.Services)),
-		Ingresses:    make([]IngressDTO, 0, len(view.Ingresses)),
-		Pods:         make([]PodDTO, 0, len(view.Pods)),
-	}
-	for _, o := range view.Services {
-		resp.Services = append(resp.Services, ServiceDTO{o, s.extras(model.KindService, ns.Name, o.Name, o, ns.Project)})
-	}
-	for _, o := range view.Ingresses {
-		resp.Ingresses = append(resp.Ingresses, IngressDTO{o, s.extras(model.KindIngress, ns.Name, o.Name, o, ns.Project)})
-	}
-	for _, o := range view.Pods {
-		resp.Pods = append(resp.Pods, PodDTO{o, s.extras(model.KindPod, ns.Name, o.Name, o, ns.Project)})
-	}
-	writeJSON(w, http.StatusOK, resp)
 }
 
 // extras liefert Aktionen und Links eines Objekts. obj ist ein model.Stored*-Wert.
@@ -265,16 +158,6 @@ func (s *Server) extras(kind model.Kind, namespace, name string, obj any, projec
 		}),
 		Links: s.links.For(model.ObjectRef{Kind: kind, Namespace: namespace, Name: name}, obj, project),
 	}
-}
-
-// project liefert die Konfiguration eines Projekts.
-func (s *Server) project(name string) (config.Project, bool) {
-	for _, p := range s.projects {
-		if p.Name == name {
-			return p, true
-		}
-	}
-	return config.Project{Name: name}, false
 }
 
 // ActionRequest ist der Body von PATCH /api/actions/{action}.
@@ -364,21 +247,6 @@ func deref(obj any) any {
 		return *o
 	}
 	return obj
-}
-
-// notModified setzt den ETag und beantwortet die Anfrage mit 304, wenn das Frontend aktuell ist.
-func notModified(w http.ResponseWriter, r *http.Request, lastUpdated time.Time) bool {
-	etag := `"` + strconv.FormatInt(lastUpdated.UnixNano(), 10) + `"`
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "no-cache")
-	for _, candidate := range strings.Split(r.Header.Get("If-None-Match"), ",") {
-		candidate = strings.TrimPrefix(strings.TrimSpace(candidate), "W/")
-		if candidate == etag || candidate == "*" {
-			w.WriteHeader(http.StatusNotModified)
-			return true
-		}
-	}
-	return false
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -77,9 +77,13 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 		watcher.Run(ctx)
 	}()
 
+	apiServer := api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry)
+	// Endet ctx, beendet der Hub alle Event-Streams; erst dann kann srv.Shutdown abschließen.
+	go apiServer.Run(ctx)
+	// Kein WriteTimeout: GET /api/events hält die Verbindung dauerhaft offen.
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           api.NewServer(st, registry, cfg.Projects, watcher.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).WithCluster(cfg.Cluster).WithFrontend(cfg.Frontend).Handler(),
+		Handler:           apiServer.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	serverErr := make(chan error, 1)

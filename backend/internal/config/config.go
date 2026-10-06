@@ -4,14 +4,12 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
-	"k8s.io/apimachinery/pkg/util/validation"
 
 	"feature-dashboard/internal/model"
 )
@@ -21,107 +19,10 @@ type Config struct {
 	Projects       []Project             `yaml:"projects"`
 	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
 	Store          StoreConfig           `yaml:"store"`
-	Cluster        ClusterConfig         `yaml:"cluster"`
-	Frontend       FrontendConfig        `yaml:"frontend"`
 	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt per link-variables-overrides
 	// überschreibbar.
 	LinkVariables map[string]string `yaml:"link-variables"`
 	Links         []Link            `yaml:"links"`
-}
-
-// ClusterConfig enthält Angaben zum Cluster, die das Dashboard anzeigt.
-type ClusterConfig struct {
-	// DNSName ist der DNS-Name (oder die IP), unter dem die Nodes erreichbar sind. Er gilt für alle
-	// NodePort-Services: <dns-name>:<node-port>. Optional.
-	DNSName string `yaml:"dns-name"`
-}
-
-// FrontendConfig enthält Vorgaben für das Frontend, die es über GET /api/polling lädt.
-type FrontendConfig struct {
-	// PollingIntervals sind die im Frontend wählbaren Abfrage-Intervalle; 0s heißt: nur manuell aktualisieren.
-	PollingIntervals []Duration `yaml:"polling-intervals"`
-	// DefaultPollingInterval ist das Intervall nach dem Laden des Frontends; muss in PollingIntervals stehen.
-	DefaultPollingInterval Duration `yaml:"default-polling-interval"`
-	// ManualRefreshCooldown sperrt den Aktualisieren-Button nach einem Klick, damit nicht ständig neu geladen wird.
-	ManualRefreshCooldown Duration `yaml:"manual-refresh-cooldown"`
-}
-
-// minManualRefreshCooldown ist die kleinste erlaubte Sperrzeit; darunter wäre der Klickschutz wirkungslos.
-const minManualRefreshCooldown = time.Second
-
-// DefaultFrontendConfig liefert die Vorgaben, die gelten, wenn die config.yaml keine Werte setzt.
-func DefaultFrontendConfig() FrontendConfig {
-	return FrontendConfig{
-		PollingIntervals: []Duration{
-			NewDuration("0s"), NewDuration("5s"), NewDuration("10s"), NewDuration("30s"), NewDuration("1m"),
-		},
-		DefaultPollingInterval: NewDuration("10s"),
-		ManualRefreshCooldown:  NewDuration("3s"),
-	}
-}
-
-// applyDefaults ergänzt fehlende Werte aus DefaultFrontendConfig.
-func (f *FrontendConfig) applyDefaults() {
-	d := DefaultFrontendConfig()
-	if f.PollingIntervals == nil {
-		f.PollingIntervals = d.PollingIntervals
-	}
-	if f.DefaultPollingInterval.Text == "" {
-		f.DefaultPollingInterval = d.DefaultPollingInterval
-	}
-	if f.ManualRefreshCooldown.Text == "" {
-		f.ManualRefreshCooldown = d.ManualRefreshCooldown
-	}
-}
-
-func (f FrontendConfig) validate() []error {
-	var errs []error
-	if len(f.PollingIntervals) == 0 {
-		errs = append(errs, errors.New("frontend.polling-intervals darf nicht leer sein"))
-	}
-	seen := map[time.Duration]bool{}
-	for i, d := range f.PollingIntervals {
-		if d.Value < 0 {
-			errs = append(errs, fmt.Errorf("frontend.polling-intervals[%d]: %q ist negativ", i, d.Text))
-		}
-		if seen[d.Value] {
-			errs = append(errs, fmt.Errorf("frontend.polling-intervals[%d]: %q ist doppelt", i, d.Text))
-		}
-		seen[d.Value] = true
-	}
-	if len(f.PollingIntervals) > 0 && !seen[f.DefaultPollingInterval.Value] {
-		errs = append(errs, fmt.Errorf("frontend.default-polling-interval %q steht nicht in polling-intervals", f.DefaultPollingInterval.Text))
-	}
-	if f.ManualRefreshCooldown.Value < minManualRefreshCooldown {
-		errs = append(errs, fmt.Errorf("frontend.manual-refresh-cooldown %q muss mindestens %s sein", f.ManualRefreshCooldown.Text, minManualRefreshCooldown))
-	}
-	return errs
-}
-
-// Duration ist eine Go-Dauer (time.ParseDuration, z. B. "0s", "10s", "1m"). Text ist der Wert, wie er in der
-// config.yaml steht; so zeigt das Frontend "1m" statt "1m0s".
-type Duration struct {
-	Value time.Duration
-	Text  string
-}
-
-// NewDuration parst s und bricht bei ungültigen Werten ab; nur für feste Werte im Code gedacht.
-func NewDuration(s string) Duration {
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		panic(err)
-	}
-	return Duration{Value: d, Text: s}
-}
-
-// UnmarshalYAML parst Werte wie "0s", "10s" oder "1m".
-func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
-	v, err := time.ParseDuration(strings.TrimSpace(node.Value))
-	if err != nil {
-		return fmt.Errorf("ungültige Dauer %q: erwartet z. B. 0s, 10s oder 1m", node.Value)
-	}
-	*d = Duration{Value: v, Text: strings.TrimSpace(node.Value)}
-	return nil
 }
 
 // Link ist ein konfigurierbarer Absprung (z. B. nach Kibana), den das Dashboard an Objekten anzeigt.
@@ -148,36 +49,8 @@ type LinkTarget struct {
 type Project struct {
 	Name            string            `yaml:"project-name"`
 	NamespaceLabels map[string]string `yaml:"namespace-labels"`
-	// ServiceAreas teilen die Anwendungs-Services im Dashboard in Bereiche auf.
-	ServiceAreas []ServiceArea `yaml:"service-areas"`
-	// OthersAreaLabel ist das Label des Bereichs für nicht zugeordnete Services (siehe OthersLabel).
-	OthersAreaLabel string `yaml:"others-area-label"`
 	// LinkVariablesOverrides überschreiben bzw. ergänzen die globalen link-variables für dieses Projekt.
 	LinkVariablesOverrides map[string]string `yaml:"link-variables-overrides"`
-}
-
-// OthersAreaName ist die reservierte ID des Bereichs für Services, die keinem Bereich zugeordnet sind.
-const OthersAreaName = "others"
-
-// OthersLabel liefert das Label des others-Bereichs. Ohne konfigurierte Bereiche heißt er „Anwendungs-Services“,
-// da er dann alle Anwendungs-Services enthält.
-func (p Project) OthersLabel() string {
-	switch {
-	case p.OthersAreaLabel != "":
-		return p.OthersAreaLabel
-	case len(p.ServiceAreas) == 0:
-		return "Anwendungs-Services"
-	default:
-		return "Andere"
-	}
-}
-
-// ServiceArea ist ein Bereich von Anwendungs-Services. Ein Service gehört dazu, wenn er alle Labels mindestens
-// einer LabelCombination trägt (ODER über die Kombinationen, UND innerhalb einer Kombination).
-type ServiceArea struct {
-	Name              string              `yaml:"area-name"`
-	Label             string              `yaml:"area-label"`
-	LabelCombinations []map[string]string `yaml:"label-combinations"`
 }
 
 // ActionHandlerConfig konfiguriert genau eine Aktion und damit genau eine ActionHandler-Instanz.
@@ -266,7 +139,6 @@ func Parse(data []byte) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("config parsen: %w", err)
 	}
-	cfg.Frontend.applyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -287,13 +159,8 @@ func (c *Config) Validate() error {
 		if len(p.NamespaceLabels) == 0 {
 			errs = append(errs, fmt.Errorf("projects[%d]: namespace-labels dürfen nicht leer sein", i))
 		}
-		errs = append(errs, validateServiceAreas(fmt.Sprintf("projects[%d]", i), p.ServiceAreas)...)
 	}
 	errs = append(errs, validateLinks(c.Links, projects)...)
-	if d := c.Cluster.DNSName; d != "" && net.ParseIP(d) == nil && len(validation.IsDNS1123Subdomain(strings.ToLower(d))) > 0 {
-		errs = append(errs, fmt.Errorf("cluster.dns-name %q ist weder ein gültiger DNS-Name noch eine IP (ohne Schema und Port angeben)", d))
-	}
-	errs = append(errs, c.Frontend.validate()...)
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
 		if a.Name == "" {
@@ -305,35 +172,6 @@ func (c *Config) Validate() error {
 		errs = append(errs, validateProjects(fmt.Sprintf("actionHandlers[%d]", i), a.Projects, projects)...)
 	}
 	return errors.Join(errs...)
-}
-
-func validateServiceAreas(prefix string, areas []ServiceArea) []error {
-	var errs []error
-	names := map[string]bool{}
-	for i, a := range areas {
-		at := fmt.Sprintf("%s.service-areas[%d]", prefix, i)
-		switch {
-		case a.Name == "":
-			errs = append(errs, fmt.Errorf("%s: area-name fehlt", at))
-		case a.Name == OthersAreaName:
-			errs = append(errs, fmt.Errorf("%s: area-name %q ist reserviert", at, OthersAreaName))
-		case names[a.Name]:
-			errs = append(errs, fmt.Errorf("%s: area-name %q ist nicht eindeutig", at, a.Name))
-		}
-		names[a.Name] = true
-		if a.Label == "" {
-			errs = append(errs, fmt.Errorf("%s: area-label fehlt", at))
-		}
-		if len(a.LabelCombinations) == 0 {
-			errs = append(errs, fmt.Errorf("%s: label-combinations dürfen nicht leer sein", at))
-		}
-		for j, c := range a.LabelCombinations {
-			if len(c) == 0 {
-				errs = append(errs, fmt.Errorf("%s.label-combinations[%d]: leere Kombination würde alle Services treffen", at, j))
-			}
-		}
-	}
-	return errs
 }
 
 func validateLinks(links []Link, projects map[string]bool) []error {

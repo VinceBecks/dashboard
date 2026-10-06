@@ -5,49 +5,19 @@ metadata:
   namespace: feature-dashboard
 data:
   config.yaml: |
-    cluster:
-      dns-name: k8s-nodes.mycomp.de.local
     projects:
       - project-name: foo-projekt
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: foo-projekt
-        service-areas:
-          - area-name: business-services
-            area-label: Business
-            label-combinations:
-              - app.kubernetes.io/part-of: foo
-          - area-name: infrastructure-services
-            area-label: Infrastruktur
-            label-combinations:
-              - app.kubernetes.io/part-of: rabbitmq
-              - app.kubernetes.io/part-of: database
       - project-name: bar-projekt
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: bar
-        service-areas:
-          - area-name: business-services
-            area-label: Business
-            label-combinations:
-              - app.kubernetes.io/part-of: bar
-          - area-name: infrastructure-services
-            area-label: Infrastruktur
-            label-combinations:
-              - app.kubernetes.io/part-of: database
       - project-name: foobar-projekt
         namespace-labels:
           mycomp.de/is-feature-environment: true
           mycomp.de/project-name: foobar
-        service-areas:
-          - area-name: business-services
-            area-label: Business
-            label-combinations:
-              - app.kubernetes.io/part-of: foobar
-          - area-name: infrastructure-services
-            area-label: Infrastruktur
-            label-combinations:
-              - app.kubernetes.io/part-of: database
         link-variables-overrides:
           something: isNotHere
     actionHandlers:
@@ -62,12 +32,12 @@ data:
         action-title: NodePort-Service erstellen
         lucide-icon: network
         lucide-icon-color: blue
-        projects: [foo-projekt, bar-projekt, foobar-projekt]
+        projects: []  # NodePort-Services zeigt das Dashboard nicht mehr an
       - action-name: delete-node-port-service
         action-title: NodePort-Service löschen
         lucide-icon: trash-2
         lucide-icon-color: red
-        projects: [foo-projekt, bar-projekt, foobar-projekt]
+        projects: []  # NodePort-Services zeigt das Dashboard nicht mehr an
       - action-name: restart-service-replicas
         action-title: Alle Replika löschen (Neustart)
         lucide-icon: rotate-ccw
@@ -75,10 +45,6 @@ data:
         projects: [foo-projekt, bar-projekt, foobar-projekt]
     store:
       recreate-store-interval: 5m
-    frontend:
-      polling-intervals: [0s, 15s, 30s, 1m]
-      default-polling-interval: 0s
-      manual-refresh-cooldown: 3s
     link-variables:
       demoUrl: http://localhost:8080
       something: isHere

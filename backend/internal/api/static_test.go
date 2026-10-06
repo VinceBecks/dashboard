@@ -23,19 +23,19 @@ func TestStatic(t *testing.T) {
 
 	h := NewServer(store.New(), actions.NewRegistry(), nil, func() bool { return true }).WithStaticDir(dir).Handler()
 
-	if rec := do(h, "GET", "/assets/app-123.js", "", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "console.log") ||
+	if rec := do(h, "GET", "/assets/app-123.js", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "console.log") ||
 		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
 		t.Errorf("Asset: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
 	}
 	for _, p := range []string{"/", "/projects/foo/namespaces/bar"} {
-		if rec := do(h, "GET", p, "", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "index") {
+		if rec := do(h, "GET", p, ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "index") {
 			t.Errorf("%s: status %d, body %q", p, rec.Code, rec.Body)
 		}
 	}
-	if rec := do(h, "GET", "/api/unknown", "", ""); rec.Code != 404 {
+	if rec := do(h, "GET", "/api/unknown", ""); rec.Code != 404 {
 		t.Errorf("/api/unknown: status %d", rec.Code)
 	}
-	if rec := do(h, "GET", "/api/projects", "", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "projects") {
-		t.Errorf("/api/projects: status %d", rec.Code)
+	if rec := do(h, "GET", "/api/openapi.yaml", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "openapi") {
+		t.Errorf("/api/openapi.yaml: status %d", rec.Code)
 	}
 }

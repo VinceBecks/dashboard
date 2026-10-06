@@ -1,10 +1,13 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -30,11 +33,16 @@ func (p *podAction) Execute(context.Context, actions.StoredObject, map[string]an
 	return actions.Result{Success: true, Message: "ok"}
 }
 
-func setup(t *testing.T) (*store.Store, http.Handler, *podAction) {
+func setup(t *testing.T) (*store.Store, *Server, *podAction) {
 	t.Helper()
 	st := store.New()
 	err := st.Update(func(tx *store.Tx) error {
 		if err := tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "foo"}); err != nil {
+			return err
+		}
+		if _, err := tx.Put(model.KindService, "feat-1", "web", model.StoredService{
+			Meta: model.Meta{Name: "web", Namespace: "feat-1"}, Type: "ClusterIP", Replicas: []string{"web-1"},
+		}); err != nil {
 			return err
 		}
 		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "feat-1"}, Phase: "Running"})
@@ -49,91 +57,220 @@ func setup(t *testing.T) (*store.Store, http.Handler, *podAction) {
 	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Title: "Neustart", LucideIcon: "rotate-ccw", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
 		t.Fatal(err)
 	}
-	projects := []config.Project{
-		{Name: "foo", ServiceAreas: []config.ServiceArea{
-			{Name: "business", Label: "Business", LabelCombinations: []map[string]string{{"part-of": "shop"}}},
-		}},
-		{Name: "bar"},
-	}
-	return st, NewServer(st, reg, projects, func() bool { return true }).Handler(), action
+	projects := []config.Project{{Name: "foo"}, {Name: "bar"}}
+	return st, NewServer(st, reg, projects, func() bool { return true }), action
 }
 
-func do(h http.Handler, method, path, body, etag string) *httptest.ResponseRecorder {
+func do(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	if etag != "" {
-		req.Header.Set("If-None-Match", etag)
-	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
 }
 
-func TestProjects(t *testing.T) {
-	st, h, _ := setup(t)
-	rec := do(h, "GET", "/api/projects", "", "")
-	if rec.Code != 200 {
-		t.Fatalf("status = %d", rec.Code)
-	}
-	var resp ProjectsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+// subscribe meldet einen Client am Hub an und dekodiert den Snapshot.
+func subscribe(t *testing.T, srv *Server) (Snapshot, *Subscription, string) {
+	t.Helper()
+	sub, err := srv.hub.Subscribe()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Projects) != 2 || len(resp.Projects[0].Namespaces) != 1 || resp.Projects[1].Namespaces == nil {
-		t.Fatalf("resp = %+v", resp)
+	t.Cleanup(sub.Cancel)
+	var snap Snapshot
+	if err := json.Unmarshal(sub.Snapshot, &snap); err != nil {
+		t.Fatal(err)
 	}
-	etag := rec.Header().Get("ETag")
-	if rec := do(h, "GET", "/api/projects", "", etag); rec.Code != 304 || rec.Body.Len() != 0 {
-		t.Fatalf("304 erwartet, got %d", rec.Code)
-	}
+	return snap, sub, string(sub.Snapshot)
+}
 
-	// Pod-Änderung betrifft nur den Namespace-ETag, nicht die Projekt-Liste.
-	_ = st.Update(func(tx *store.Tx) error {
-		_, err := tx.Put(model.KindPod, "feat-1", "web-2", model.StoredPod{Meta: model.Meta{Name: "web-2"}})
-		return err
-	})
-	if rec := do(h, "GET", "/api/projects", "", etag); rec.Code != 304 {
-		t.Fatalf("304 erwartet, got %d", rec.Code)
-	}
-	_ = st.Update(func(tx *store.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
-	if rec := do(h, "GET", "/api/projects", "", etag); rec.Code != 200 {
-		t.Fatalf("200 erwartet, got %d", rec.Code)
+// sync gleicht den Hub mit dem Store ab (sonst Aufgabe von Hub.Run) und liefert die verteilten Events.
+func syncHub(srv *Server, sub *Subscription) []string {
+	srv.hub.mu.Lock()
+	srv.hub.syncLocked()
+	srv.hub.mu.Unlock()
+	var got []string
+	for {
+		select {
+		case ev := <-sub.Events:
+			got = append(got, ev.Type+" "+string(ev.Data))
+		default:
+			return got
+		}
 	}
 }
 
-func TestNamespace(t *testing.T) {
-	st, h, _ := setup(t)
-	rec := do(h, "GET", "/api/projects/foo/namespaces/feat-1", "", "")
-	if rec.Code != 200 {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+func TestSnapshot(t *testing.T) {
+	st, srv, _ := setup(t)
+	_ = st.Update(func(tx *store.Tx) error {
+		for _, svc := range []model.StoredService{
+			{Meta: model.Meta{Name: "shop-node-port"}, Type: "NodePort"},
+			{Meta: model.Meta{Name: "worker"}, Type: "ClusterIP"},
+		} {
+			if _, err := tx.Put(model.KindService, "feat-1", svc.Name, svc); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Put(model.KindIngress, "feat-1", "web", model.StoredIngress{Meta: model.Meta{Name: "web"}, Rules: []model.IngressRule{
+			{Host: "feat-1.example", Paths: []model.IngressPath{{Path: "/"}, {Path: "/api"}, {Path: "/"}}},
+			{Paths: []model.IngressPath{{Path: "/ohne-host"}}},
+		}})
+		return err
+	})
+	snap, _, raw := subscribe(t, srv)
+	if len(snap.Projects) != 2 || snap.Projects[0].Name != "foo" || len(snap.Projects[0].Namespaces) != 1 ||
+		snap.Projects[1].Name != "bar" || snap.Projects[1].Namespaces == nil {
+		t.Fatalf("snapshot = %s", raw)
 	}
-	var resp NamespaceResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+	var ns NamespaceDTO
+	if err := json.Unmarshal(snap.Projects[0].Namespaces[0], &ns); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Namespace.Name != "feat-1" || len(resp.Pods) != 1 || len(resp.Pods[0].Actions) != 1 || len(resp.Namespace.Actions) != 0 {
-		t.Fatalf("resp = %+v", resp)
+	if len(ns.Services) != 2 || ns.Services[0].Name != "web" || ns.Services[1].Name != "worker" {
+		t.Fatalf("nur ClusterIP-Services erwartet: %+v", ns.Services)
 	}
-	if !strings.Contains(rec.Body.String(), `"formFields":[{"id":"reason"`) {
-		t.Fatalf("Formular-Felder fehlen: %s", rec.Body)
+	if len(ns.Services[1].Pods) != 0 || ns.Services[1].Running {
+		t.Fatalf("worker ohne Pods darf nicht laufen: %+v", ns.Services[1])
 	}
-	etag := rec.Header().Get("ETag")
-	if rec := do(h, "GET", "/api/projects/foo/namespaces/feat-1", "", etag); rec.Code != 304 {
-		t.Fatalf("304 erwartet, got %d", rec.Code)
+	for _, want := range []string{
+		`{"kind":"namespace","name":"feat-1","parents":{"project":"foo"},"actions":[],"links":[],"services":[`,
+		`{"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"phase":"Running","ready":false,"containers":[],"actions":[{"id":"restart"`,
+		`"formFields":[{"id":"reason"`,
+		`{"kind":"ingress","name":"web","parents":{"project":"foo","namespace":"feat-1"},"urls":["https://feat-1.example/","https://feat-1.example/api"],"actions":[],"links":[]}`,
+		`"pods":[]`,
+	} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("%s fehlt in %s", want, raw)
+		}
 	}
-	_ = st.Update(func(tx *store.Tx) error { _, err := tx.Delete(model.KindPod, "feat-1", "web-1"); return err })
-	if rec := do(h, "GET", "/api/projects/foo/namespaces/feat-1", "", etag); rec.Code != 200 {
-		t.Fatalf("200 erwartet, got %d", rec.Code)
+	if strings.Contains(raw, "labels") || strings.Contains(raw, "rules") {
+		t.Errorf("Rohdaten dürfen nicht gesendet werden: %s", raw)
 	}
-	if rec := do(h, "GET", "/api/projects/bar/namespaces/feat-1", "", ""); rec.Code != 404 {
-		t.Fatalf("404 bei falschem Projekt erwartet, got %d", rec.Code)
+}
+
+func TestEvents(t *testing.T) {
+	st, srv, _ := setup(t)
+	_, sub, _ := subscribe(t, srv)
+	if got := syncHub(srv, sub); len(got) != 0 {
+		t.Fatalf("ohne Änderung keine Events erwartet: %v", got)
 	}
-	if rec := do(h, "GET", "/api/projects/foo/namespaces/nope", "", ""); rec.Code != 404 {
-		t.Fatalf("404 erwartet, got %d", rec.Code)
+
+	// Pod wird ready → upsert für Service (running) und Pod, Parent zuerst.
+	_ = st.Update(func(tx *store.Tx) error {
+		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "feat-1"}, Phase: "Running", Ready: true})
+		return err
+	})
+	got := syncHub(srv, sub)
+	want := []string{
+		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"actions":[],"links":[]}`,
+		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"phase":"Running","ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[]}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("events =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	// Service gelöscht → nur delete für den Service, der Pod fällt implizit mit weg.
+	_ = st.Update(func(tx *store.Tx) error { _, err := tx.Delete(model.KindService, "feat-1", "web"); return err })
+	got = syncHub(srv, sub)
+	if len(got) != 1 || got[0] != `delete {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"}}` {
+		t.Fatalf("events = %v", got)
+	}
+
+	// Projektwechsel → delete im alten, upsert im neuen Projekt.
+	_ = st.Update(func(tx *store.Tx) error {
+		return tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "bar"})
+	})
+	got = syncHub(srv, sub)
+	if len(got) != 2 || got[0] != `delete {"kind":"namespace","name":"feat-1","parents":{"project":"foo"}}` ||
+		!strings.HasPrefix(got[1], `upsert {"kind":"namespace","name":"feat-1","parents":{"project":"bar"}`) {
+		t.Fatalf("events = %v", got)
+	}
+
+	// Namespace entfernt → ein delete.
+	_ = st.Update(func(tx *store.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
+	got = syncHub(srv, sub)
+	if len(got) != 1 || got[0] != `delete {"kind":"namespace","name":"feat-1","parents":{"project":"bar"}}` {
+		t.Fatalf("events = %v", got)
+	}
+}
+
+func TestSlowSubscriberIsDropped(t *testing.T) {
+	st, srv, _ := setup(t)
+	_, sub, _ := subscribe(t, srv)
+	for i := range subscriberBuffer + 1 {
+		_ = st.Update(func(tx *store.Tx) error {
+			_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1"}, Phase: strconv.Itoa(i)})
+			return err
+		})
+		srv.hub.mu.Lock()
+		srv.hub.syncLocked()
+		srv.hub.mu.Unlock()
+	}
+	n := 0
+	for range sub.Events {
+		n++
+	}
+	if n != subscriberBuffer {
+		t.Fatalf("%d Events vor dem Schließen, want %d", n, subscriberBuffer)
+	}
+}
+
+func TestEventStream(t *testing.T) {
+	st, srv, _ := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go srv.Run(ctx)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/api/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if ct := res.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type = %q", ct)
+	}
+	r := bufio.NewReader(res.Body)
+	readEvent := func() string {
+		var lines []string
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				t.Fatal(err)
+			}
+			if line == "\n" {
+				return strings.Join(lines, "")
+			}
+			lines = append(lines, line)
+		}
+	}
+	if ev := readEvent(); !strings.HasPrefix(ev, "id: 1\nevent: snapshot\ndata: {\"projects\":[{\"name\":\"foo\"") {
+		t.Fatalf("erstes Event = %q", ev)
+	}
+	_ = st.Update(func(tx *store.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
+	want := "id: 2\nevent: delete\ndata: {\"kind\":\"namespace\",\"name\":\"feat-1\",\"parents\":{\"project\":\"foo\"}}\n"
+	if ev := readEvent(); ev != want {
+		t.Fatalf("zweites Event = %q", ev)
+	}
+
+	// Hub beendet → Stream endet.
+	cancel()
+	if _, err := io.ReadAll(r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEventsNotReady(t *testing.T) {
+	st, _, _ := setup(t)
+	h := NewServer(st, actions.NewRegistry(), nil, func() bool { return false }).Handler()
+	if rec := do(h, "GET", "/api/events", ""); rec.Code != 503 {
+		t.Fatalf("503 erwartet, got %d", rec.Code)
 	}
 }
 
 func TestAction(t *testing.T) {
-	_, h, action := setup(t)
+	_, srv, action := setup(t)
+	h := srv.Handler()
 	pod := `{"object":{"kind":"pod","namespace":"feat-1","name":"web-1"},"inputs":{"reason":"test"}}`
 	cases := []struct {
 		name, path, body string
@@ -148,7 +285,7 @@ func TestAction(t *testing.T) {
 		{"erfolgreich", "/api/actions/restart", pod, 200},
 	}
 	for _, c := range cases {
-		if rec := do(h, "PATCH", c.path, c.body, ""); rec.Code != c.status {
+		if rec := do(h, "PATCH", c.path, c.body); rec.Code != c.status {
 			t.Errorf("%s: status = %d, want %d (%s)", c.name, rec.Code, c.status, rec.Body)
 		}
 	}
@@ -158,39 +295,12 @@ func TestAction(t *testing.T) {
 }
 
 func TestDocsAndHealth(t *testing.T) {
-	_, h, _ := setup(t)
+	_, srv, _ := setup(t)
+	h := srv.Handler()
 	for _, path := range []string{"/healthz", "/readyz", "/api/openapi.yaml", "/api/swagger"} {
-		if rec := do(h, "GET", path, "", ""); rec.Code != 200 {
+		if rec := do(h, "GET", path, ""); rec.Code != 200 {
 			t.Errorf("%s: status = %d", path, rec.Code)
 		}
-	}
-}
-
-func TestNamespaceServiceAreas(t *testing.T) {
-	st, h, _ := setup(t)
-	_ = st.Update(func(tx *store.Tx) error {
-		for _, svc := range []model.StoredService{
-			{Meta: model.Meta{Name: "shop", Labels: map[string]string{"part-of": "shop"}}, Type: "ClusterIP"},
-			{Meta: model.Meta{Name: "debug"}, Type: "ClusterIP"},
-			{Meta: model.Meta{Name: "shop-node-port", Labels: map[string]string{"part-of": "shop"}}, Type: "NodePort"},
-		} {
-			if _, err := tx.Put(model.KindService, "feat-1", svc.Name, svc); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	rec := do(h, "GET", "/api/projects/foo/namespaces/feat-1", "", "")
-	var resp NamespaceResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	want := `"serviceAreas":[{"id":"business","label":"Business","services":["shop"]},{"id":"others","label":"Andere","services":["debug"]}]`
-	if !strings.Contains(rec.Body.String(), want) {
-		t.Fatalf("serviceAreas fehlen oder falsch: %s", rec.Body)
-	}
-	if len(resp.Services) != 3 {
-		t.Fatalf("services müssen unverändert vollständig sein: %d", len(resp.Services))
 	}
 }
 
@@ -214,9 +324,8 @@ links:
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewServer(st, actions.NewRegistry(), cfg.Projects, func() bool { return true }).WithLinks(reg).Handler()
-
-	body := do(h, "GET", "/api/projects/foo/namespaces/feat-1", "", "").Body.String()
+	srv := NewServer(st, actions.NewRegistry(), cfg.Projects, func() bool { return true }).WithLinks(reg)
+	_, _, body := subscribe(t, srv)
 	for _, want := range []string{
 		`"links":[{"id":"logs","title":"Logs","lucideIcon":"scroll-text","lucideIconColor":"","url":"https://kibana.example/namespace/feat-1"}]`,
 		`"url":"https://kibana.example/pod/web-1"`,
@@ -225,78 +334,27 @@ links:
 			t.Errorf("%s fehlt in %s", want, body)
 		}
 	}
-	if body := do(h, "GET", "/api/projects", "", "").Body.String(); !strings.Contains(body, `"url":"https://kibana.example/namespace/feat-1"`) {
-		t.Errorf("Namespace-Link fehlt in /api/projects: %s", body)
-	}
-
-	// Ohne Link-Registry ist links immer eine leere Liste.
-	_, plain, _ := setup(t)
-	if body := do(plain, "GET", "/api/projects/foo/namespaces/feat-1", "", "").Body.String(); !strings.Contains(body, `"links":[]`) {
-		t.Errorf("leere links erwartet: %s", body)
-	}
-}
-
-func TestCluster(t *testing.T) {
-	st, _, _ := setup(t)
-	h := NewServer(st, actions.NewRegistry(), nil, func() bool { return true }).
-		WithCluster(config.ClusterConfig{DNSName: "k8s-nodes.mycomp.de"}).Handler()
-	rec := do(h, "GET", "/api/cluster", "", "")
-	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"dnsName":"k8s-nodes.mycomp.de"}` {
-		t.Fatalf("status %d, body %s", rec.Code, rec.Body)
-	}
-	if rec := do(h, "GET", "/api/cluster", "", rec.Header().Get("ETag")); rec.Code != 304 {
-		t.Fatalf("304 erwartet, got %d", rec.Code)
-	}
-
-	// Ohne Konfiguration: leerer Name.
-	_, plain, _ := setup(t)
-	if body := do(plain, "GET", "/api/cluster", "", "").Body.String(); strings.TrimSpace(body) != `{"dnsName":""}` {
-		t.Fatalf("body %s", body)
-	}
-}
-
-func TestPolling(t *testing.T) {
-	st, _, _ := setup(t)
-	f := config.FrontendConfig{
-		PollingIntervals:       []config.Duration{config.NewDuration("0s"), config.NewDuration("1m")},
-		DefaultPollingInterval: config.NewDuration("1m"),
-		ManualRefreshCooldown:  config.NewDuration("2s"),
-	}
-	h := NewServer(st, actions.NewRegistry(), nil, func() bool { return true }).WithFrontend(f).Handler()
-	rec := do(h, "GET", "/api/polling", "", "")
-	want := `{"intervals":[{"value":"0s","milliseconds":0},{"value":"1m","milliseconds":60000}],` +
-		`"defaultInterval":"1m","manualRefreshCooldownMilliseconds":2000}`
-	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != want {
-		t.Fatalf("status %d, body %s", rec.Code, rec.Body)
-	}
-	if rec := do(h, "GET", "/api/polling", "", rec.Header().Get("ETag")); rec.Code != 304 {
-		t.Fatalf("304 erwartet, got %d", rec.Code)
-	}
-
-	// Ohne Konfiguration: Vorgaben.
-	_, plain, _ := setup(t)
-	if body := do(plain, "GET", "/api/polling", "", "").Body.String(); !strings.Contains(body, `"defaultInterval":"10s"`) {
-		t.Fatalf("body %s", body)
-	}
 }
 
 func TestActionsRespectProjects(t *testing.T) {
-	st, h, action := setup(t)
+	st, srv, action := setup(t)
 	// Namespace in Projekt bar; die Aktion "restart" ist nur für foo freigegeben.
 	_ = st.Update(func(tx *store.Tx) error {
 		if err := tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "bar-1"}, Project: "bar"}); err != nil {
 			return err
 		}
+		if _, err := tx.Put(model.KindService, "bar-1", "web", model.StoredService{Meta: model.Meta{Name: "web"}, Type: "ClusterIP", Replicas: []string{"web-1"}}); err != nil {
+			return err
+		}
 		_, err := tx.Put(model.KindPod, "bar-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "bar-1"}})
 		return err
 	})
-	var resp NamespaceResponse
-	_ = json.Unmarshal(do(h, "GET", "/api/projects/bar/namespaces/bar-1", "", "").Body.Bytes(), &resp)
-	if len(resp.Pods) != 1 || len(resp.Pods[0].Actions) != 0 {
-		t.Fatalf("keine Aktionen in Projekt bar erwartet: %+v", resp.Pods)
+	_, _, raw := subscribe(t, srv)
+	if !strings.Contains(raw, `{"kind":"pod","name":"web-1","parents":{"project":"bar","namespace":"bar-1","service":"web"},"phase":"","ready":false,"containers":[],"actions":[]`) {
+		t.Fatalf("keine Aktionen in Projekt bar erwartet: %s", raw)
 	}
 	body := `{"object":{"kind":"pod","namespace":"bar-1","name":"web-1"},"inputs":{"reason":"x"}}`
-	if rec := do(h, "PATCH", "/api/actions/restart", body, ""); rec.Code != 400 {
+	if rec := do(srv.Handler(), "PATCH", "/api/actions/restart", body); rec.Code != 400 {
 		t.Fatalf("400 erwartet, got %d: %s", rec.Code, rec.Body)
 	}
 	if action.calls != 0 {

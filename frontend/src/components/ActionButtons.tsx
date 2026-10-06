@@ -7,12 +7,13 @@ import { ActionIcon } from './ActionIcon';
 interface Props {
   actions: Action[];
   object: ObjectRef;
-  /** Wird nach einer ausgeführten Aktion aufgerufen, um die Daten sofort neu zu laden. */
-  onExecuted?: () => void;
 }
 
-/** Icon-Buttons für alle Aktionen eines Objekts – vollständig aus den Backend-Daten aufgebaut. */
-export function ActionButtons({ actions, object, onExecuted }: Props) {
+/**
+ * Icon-Buttons für alle Aktionen eines Objekts – vollständig aus den Backend-Daten aufgebaut. Änderungen am
+ * Cluster kommen anschließend über den Event-Stream, ein Neuladen ist nicht nötig.
+ */
+export function ActionButtons({ actions, object }: Props) {
   const [active, setActive] = useState<Action>();
   const [result, setResult] = useState<ActionResult>();
 
@@ -40,7 +41,6 @@ export function ActionButtons({ actions, object, onExecuted }: Props) {
           onResult={(r) => {
             setActive(undefined);
             setResult(r);
-            onExecuted?.();
           }}
         />
       )}

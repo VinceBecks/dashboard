@@ -2,8 +2,8 @@
 
 Ein Dashboard, in dem Software-Entwickler sehen, welche **Feature-Umgebungen** (Namespaces) sie in einem
 Kubernetes-Cluster hochgefahren haben und welche **Services, Ingresses und Pods** darin laufen. Über das Dashboard
-lassen sich außerdem **Aktionen** auf diesen Objekten auslösen, z. B. einen Pod löschen, einen NodePort-Service
-anlegen oder eine GitLab-Pipeline starten. Konfigurierbare **Links** springen von Objekten in andere Systeme, etwa
+lassen sich außerdem **Aktionen** auf diesen Objekten auslösen, z. B. einen Pod löschen, die Replicas eines
+Services neu starten oder eine GitLab-Pipeline starten. Konfigurierbare **Links** springen von Objekten in andere Systeme, etwa
 zu den Logs in Kibana.
 
 Das Projekt besteht aus zwei Teilen:
@@ -11,7 +11,12 @@ Das Projekt besteht aus zwei Teilen:
 | Teil     | Technik                                               | Ordner      |
 |----------|-------------------------------------------------------|-------------|
 | Backend  | Go, `client-go` v0.33 (Informer), `net/http`          | `backend/`  |
-| Frontend | React 19, TypeScript, Vite, MUI, React Router, Lucide | `frontend/` |
+| Frontend | React 19, TypeScript, Vite, MUI, Lucide               | `frontend/` |
+
+Das Dashboard ist eine einzige Seite: je Projekt eine Kachel pro Feature-Umgebung, darin je Anwendungs-Service ein
+grüner (mindestens ein Replica läuft) oder roter Punkt. Ein Klick auf einen Punkt zeigt die Details des Services
+mit seinen Replicas. Das Frontend lädt beim Aufruf den kompletten Stand und wird danach per **Server-Sent Events**
+aktuell gehalten.
 
 Im Cluster liefert das Backend auch das gebaute Frontend aus. Es gibt ein Image und genau ein Deployment mit **einem**
 Replica.
@@ -31,9 +36,7 @@ Replica.
     - [Mitgelieferte Aktionen](#mitgelieferte-aktionen)
     - [`links` und `link-variables`](#links-und-link-variables)
     - [Templates in der Konfiguration](#templates-in-der-konfiguration)
-    - [`cluster`](#cluster)
     - [`store`](#store)
-    - [`frontend`](#frontend)
     - [Prüfungen beim Start](#prüfungen-beim-start)
     - [Vollständiges Beispiel](#vollständiges-beispiel)
 6. [HTTP-API](#http-api)
@@ -91,9 +94,7 @@ Ein Helm-Chart mit einer Demo-Anwendung liegt unter `helpers/demo-app`.
 | Projekt            | In der `config.yaml` definiert. Hat mehrere Feature-Umgebungen.                                |
 | Feature-Umgebung   | Genau ein Namespace, der über seine Labels genau einem Projekt zugeordnet ist.                 |
 | Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                    |
-| NodePort-Service   | Ein Kubernetes-Service vom Typ `NodePort`. Erreichbar unter `<cluster.dns-name>:<nodePort>`.   |
 | Replica            | Ein Pod, der von einem Service über dessen Selector referenziert wird.                         |
-| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services, zugeordnet über Service-Labels.       |
 | Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts im In-Memory-Store.                 |
 | Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch einen ActionHandler. |
 | Link               | Ein konfigurierter Absprung von einem Objekt in ein anderes System (z. B. Kibana).             |
@@ -107,9 +108,9 @@ flowchart LR
     K8s[(Kubernetes API)] -- List + Watch --> Inf[Informer<br/>Namespace, Service,<br/>Ingress, Pod]
     Inf -- Events --> Proc[Event-Verarbeitung<br/>eine Goroutine]
     Proc -- Converter --> Store[(In-Memory-Store<br/>json.RawMessage)]
-    Store --> API[HTTP-API<br/>ETag / 304]
-    API --> FE[Frontend]
-    FE -- PATCH /api/actions --> API
+    Store -- Changes --> Hub[Event-Hub<br/>Diff je Namespace]
+    Hub -- Server-Sent Events --> FE[Frontend]
+    FE -- PATCH /api/actions --> API[HTTP-API]
     API --> Reg[ActionRegistry] --> H[ActionHandler] -- z . B . Pod löschen --> K8s
     H -- Pipeline starten --> GitLab[(GitLab)]
 ```
@@ -158,15 +159,14 @@ derselben Transaktion neu aufgelöst:
   bekommt eine Kopie.
 - **Nebenläufigkeit:** Ein `sync.RWMutex` schützt den Store. Änderungen laufen als Transaktion (`Store.Update`), damit
   Leser zusammengehörige Änderungen auf einmal sehen.
-- **Zeitstempel für ETags:** Der Store führt zwei Arten von Zeitstempeln. Gesetzt werden sie nur, wenn sich das
-  gespeicherte JSON tatsächlich ändert:
-    - einen für Änderungen an Namespaces von Projekten (hinzugefügt, geändert, entfernt),
-    - je Namespace einen für Änderungen an Objekten darin oder am Namespace selbst.
+- **Zeitstempel je Namespace:** Der Store führt je Namespace einen Zeitstempel für Änderungen an Objekten darin oder am
+  Namespace selbst. Gesetzt wird er nur, wenn sich das gespeicherte JSON tatsächlich ändert. Nach jeder Änderung
+  signalisiert der Store das dem Event-Hub (`Store.Changes`).
 - **Periodischer Neuaufbau** (`store.recreate-store-interval`):
     1. Das Backend startet frische Informer, baut daraus einen komplett neuen Store-Inhalt und tauscht ihn auf einmal
        aus.
     2. Zeitstempel ändern sich nur für Namespaces, deren Inhalt sich unterscheidet. Ein Neuaufbau ohne Änderungen löst
-       im Frontend also kein Neuladen aus.
+       also keine Events aus.
 
 ### Aktionen
 
@@ -191,7 +191,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `cmd/dashboard`                    | Start, Flags, Verdrahtung, Registrierung der Handler-Typen                 |
 | `internal/config`                  | `config.yaml` laden und prüfen                                             |
 | `internal/model`                   | Stored-Object-Strukturen                                                   |
-| `internal/project`                 | Namespace-Labels → Projekt; Zuordnung zu Service-Bereichen                 |
+| `internal/project`                 | Namespace-Labels → Projekt                                                 |
 | `internal/store`                   | In-Memory-Store, Transaktionen, Zeitstempel                                |
 | `internal/converter`               | k8s-Objekt → Stored-Object, Referenzauflösung                              |
 | `internal/kube`                    | Kubernetes-Client, Informer, Event-Verarbeitung, Neuaufbau                 |
@@ -203,7 +203,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
-| `internal/api`                     | HTTP-API, ETag/304, `openapi.yaml`, Swagger-UI, Auslieferung des Frontends |
+| `internal/api`                     | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, Auslieferung des Frontends |
 
 ---
 
@@ -241,13 +241,11 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 
 | Schlüssel        | Pflicht | Inhalt                                                               |
 |------------------|---------|----------------------------------------------------------------------|
-| `projects`       | ja      | Projekte, ihre Namespace-Labels, Service-Bereiche und Link-Variablen |
+| `projects`       | ja      | Projekte, ihre Namespace-Labels und Link-Variablen                   |
 | `actionHandlers` | nein    | Aktionen, die das Dashboard anbietet                                 |
 | `links`          | nein    | Links von Objekten in andere Systeme                                 |
 | `link-variables` | nein    | Statische Variablen für Link-Templates                               |
-| `cluster`        | nein    | Angaben zum Cluster, z. B. der DNS-Name der Nodes                    |
 | `store`          | nein    | Verhalten des In-Memory-Stores                                       |
-| `frontend`       | nein    | Wählbare Abfrage-Intervalle des Frontends, Default und Sperrzeit     |
 
 > **YAML-Hinweise**
 > - Unquotierte Werte wie `true` oder `8080` werden bei Labels und Variablen als Text gelesen. `true` passt also
@@ -264,14 +262,6 @@ projects:
     namespace-labels: # ALLE Labels müssen am Namespace gesetzt sein
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: foo-projekt
-    others-area-label: Andere                      # optional
-    service-areas: # optional
-      - area-name: business-services
-        area-label: Business
-        label-combinations:
-          - app.kubernetes.io/part-of: shop
-            app.kubernetes.io/component: backend
-          - app.kubernetes.io/part-of: billing
     link-variables-overrides: # optional
       kibanaDataView: logs-foo
 ```
@@ -280,34 +270,10 @@ projects:
 |----------------------------|---------|-----------------------------------------------------------------------------------------------------------------------------|
 | `project-name`             | ja      | Eindeutiger Name. Er wird in `projects` von Aktionen und Links referenziert.                                                |
 | `namespace-labels`         | ja      | Labels samt Werten, die ein Namespace **alle** tragen muss, um zum Projekt zu gehören. Darf nicht leer sein.                |
-| `service-areas`            | nein    | Teilt die Anwendungs-Services im Dashboard in Bereiche auf.                                                                 |
-| `others-area-label`        | nein    | Überschrift des Bereichs für nicht zugeordnete Services. Standard ist „Andere“, ohne `service-areas` „Anwendungs-Services“. |
 | `link-variables-overrides` | nein    | Überschreibt oder ergänzt die globalen `link-variables` für dieses Projekt.                                                 |
 
 **Zuordnung von Namespaces:** Passt ein Namespace zu mehreren Projekten, gewinnt das erste in der Reihenfolge der
 Config. Das Backend loggt dazu eine Warnung.
-
-#### Service-Bereiche (`service-areas`)
-
-Service-Bereiche gruppieren die **Anwendungs-Services (Typ `ClusterIP`)** auf der Namespace-Seite. Die NodePort-Liste
-ist davon nicht betroffen.
-
-| Feld                 | Pflicht | Bedeutung                                                        |
-|----------------------|---------|------------------------------------------------------------------|
-| `area-name`          | ja      | ID des Bereichs, eindeutig je Projekt. `others` ist reserviert.  |
-| `area-label`         | ja      | Überschrift im Dashboard                                         |
-| `label-combinations` | ja      | Liste von Label-Kombinationen. Keine Kombination darf leer sein. |
-
-Ein Service gehört zu einem Bereich, wenn er **alle Labels mindestens einer Kombination** trägt: ODER über die
-Einträge, UND innerhalb eines Eintrags.
-
-- **Mehrere Bereiche:** Ein Service kann in mehreren Bereichen stehen.
-- **Rest:** Services ohne passenden Bereich landen im Bereich `others`.
-- **Reihenfolge:** Die Bereiche erscheinen in der Reihenfolge der Config, `others` immer zuletzt.
-- **Leere Bereiche:** Konfigurierte Bereiche werden auch leer angezeigt. `others` erscheint nur, wenn er Services
-  enthält, oder wenn das Projekt keine Bereiche hat.
-
-Im Dashboard filtert eine Chip-Leiste die Bereiche, mit Mehrfachauswahl. Die Auswahl steht in der URL (`?area=<id>`).
 
 ### `actionHandlers`
 
@@ -341,16 +307,19 @@ Aktion Formular-Felder, stehen sie in diesem Dialog. Das Ergebnis erscheint als 
 | Handler-Typ                         | Objekt         | Wirkung                                                         |
 |-------------------------------------|----------------|-----------------------------------------------------------------|
 | `delete-pod`                        | Pod            | Löscht den Pod                                                  |
-| `node-port-service-on-service-base` | Service        | Erstellt zu einem ClusterIP-Service einen NodePort-Service      |
-| `delete-node-port-service`          | Service        | Löscht einen von der vorigen Aktion erstellten NodePort-Service |
+| `node-port-service-on-service-base` | Service        | Erstellt zu einem ClusterIP-Service einen NodePort-Service ¹    |
+| `delete-node-port-service`          | Service        | Löscht einen von der vorigen Aktion erstellten NodePort-Service ¹ |
 | `restart-service-replicas`          | Service        | Löscht alle Pods eines Services, damit sie neu starten          |
 | `gitlab-pipeline`                   | konfigurierbar | Startet eine GitLab-Pipeline, beliebig viele Aktionen möglich   |
 | `deploy-missing-services`           | Namespace      | Startet eine GitLab-Pipeline für fehlende Services              |
 
+¹ Das Dashboard zeigt keine NodePort-Services mehr an. Die beiden NodePort-Aktionen sind in den Beispiel-Configs daher
+mit `projects: []` deaktiviert; `delete-node-port-service` wäre in der Oberfläche nicht erreichbar.
+
 #### `delete-pod`
 
-Löscht den Pod, an dem die Aktion ausgelöst wird. Die Aktion erscheint auf der Rückseite der Service-Kachel, also
-nach einem Klick auf ein Replica.
+Löscht den Pod, an dem die Aktion ausgelöst wird. Die Aktion erscheint in den Service-Details (Klick auf den Punkt
+des Services) beim jeweiligen Replica.
 
 | `extra-handler-configs` | Standard | Bedeutung                                                  |
 |-------------------------|----------|------------------------------------------------------------|
@@ -492,8 +461,8 @@ genau wie bei [`gitlab-pipeline`](#gitlab-pipeline). Die gewählten Services ste
 
 Links erscheinen im Dashboard als Icon mit Tooltip und öffnen in einem neuen Tab:
 
-- bei Namespace, Ingresses und Services rechts neben den Aktionen, durch einen Trennstrich abgesetzt,
-- bei Pods neben dem Status in der Replica-Liste und auf der Rückseite der Service-Kachel.
+- bei Namespace und Ingresses auf der Kachel rechts neben den Aktionen, durch einen Trennstrich abgesetzt,
+- bei Services und Pods in den Service-Details (Klick auf den Punkt des Services), ebenfalls neben den Aktionen.
 
 ```yaml
 link-variables: # statische Werte, im Template unter .Vars
@@ -590,16 +559,6 @@ Templates in Links und bei `gitlab-pipeline` bzw. `deploy-missing-services` (`re
   bei `gitlab-pipeline` schlägt die Aktion mit einer Meldung fehl.
 - **Leerzeichen als `+`:** `urlquery` kodiert Leerzeichen als `+`. Das ist für Query-Parameter korrekt.
 
-### `cluster`
-
-```yaml
-cluster:
-  dns-name: k8s-nodes.mycomp.de     # DNS-Name oder IP der Nodes, ohne Schema und Port
-```
-
-`dns-name` ist optional und gilt für alle NodePort-Services. Das Frontend lädt ihn über `GET /api/cluster` und zeigt
-je Port `<dns-name>:<nodePort>` mit einem Kopieren-Button an. Ohne `dns-name` erscheint nur der NodePort.
-
 ### `store`
 
 ```yaml
@@ -611,35 +570,11 @@ store:
 |---------------------------|----------|----------------------------------------------------------------------------------------------------------------------------|
 | `recreate-store-interval` | `0`      | Abstand des periodischen Neuaufbaus. `0` schaltet ihn ab. Erlaubt sind `<n>m`, `<n>h` und `<n>d`, z. B. `30m`, `2h`, `1d`. |
 
-### `frontend`
-
-```yaml
-frontend:
-  polling-intervals: [0s, 5s, 10s, 30s, 1m]
-  default-polling-interval: 10s
-  manual-refresh-cooldown: 3s
-```
-
-| Feld                       | Standard                  | Bedeutung                                                                                       |
-|----------------------------|---------------------------|-------------------------------------------------------------------------------------------------|
-| `polling-intervals`        | `[0s, 5s, 10s, 30s, 1m]`  | Im Dropdown oben rechts wählbare Abfrage-Intervalle (Go-Dauern, z. B. `5s`, `1m`, `1m30s`).      |
-| `default-polling-interval` | `10s`                     | Intervall nach dem Laden des Frontends; muss in `polling-intervals` stehen.                     |
-| `manual-refresh-cooldown`  | `3s`                      | So lange ist der Aktualisieren-Button nach einem Klick gesperrt; mindestens `1s`.               |
-
-Der Wert `0s` ist speziell und erscheint im Dropdown als „Manuell“: Das Frontend fragt dann nicht automatisch ab,
-sondern zeigt ein Aktualisieren-Icon. Nur ein Klick darauf lädt die Daten der Seite neu. Danach ist das Icon für
-`manual-refresh-cooldown` gesperrt. Die Auswahl im Dropdown wird nicht gespeichert; nach dem Neuladen gilt wieder
-`default-polling-interval`. Das Frontend lädt die Werte über `GET /api/polling`.
-
 ### Prüfungen beim Start
 
 Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit einer Liste aller Probleme ab**:
 
 - **Projekte:** `project-name` ist gesetzt und eindeutig, `namespace-labels` sind nicht leer.
-- **Service-Bereiche:**
-    - `area-name` ist gesetzt, eindeutig je Projekt und nicht `others`.
-    - `area-label` ist gesetzt.
-    - Es gibt mindestens eine Label-Kombination, und keine Kombination ist leer.
 - **Aktionen:**
     - `action-name` ist gesetzt und eindeutig.
     - `projects` ist vorhanden und nennt nur bekannte Projekte.
@@ -651,10 +586,7 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
     - `projects` ist vorhanden und nennt nur bekannte Projekte.
     - Es gibt mindestens ein Target, nur gültige Objekt-Typen, und jedes Target hat eine `url`.
     - Alle Templates sind syntaktisch korrekt.
-- **Cluster:** `dns-name` ist ein gültiger DNS-Name oder eine IP.
 - **Store:** `recreate-store-interval` hat ein gültiges Format.
-- **Frontend:** `polling-intervals` ist nicht leer, ohne negative Werte und ohne Duplikate,
-  `default-polling-interval` steht darin, `manual-refresh-cooldown` ist mindestens `1s`.
 
 ### Vollständiges Beispiel
 
@@ -670,39 +602,43 @@ Die API ist in [`backend/internal/api/openapi.yaml`](backend/internal/api/openap
 Swagger-UI gibt es unter **`/api/swagger`**. Sie lädt ihre Skripte von unpkg.com, der Browser braucht dafür
 Internetzugang.
 
-| Methode | Pfad                                             | Zweck                                                            |
-|---------|--------------------------------------------------|------------------------------------------------------------------|
-| GET     | `/api/projects`                                  | Projekte und ihre Namespaces                                     |
-| GET     | `/api/projects/{project}/namespaces/{namespace}` | Namespace mit Services, Ingresses, Pods und Service-Bereichen    |
-| PATCH   | `/api/actions/{action-name}`                     | Aktion auf einem Objekt ausführen                                |
-| GET     | `/api/cluster`                                   | Statische Cluster-Angaben, z. B. `dnsName`                       |
-| GET     | `/api/polling`                                   | Wählbare Abfrage-Intervalle, Default und Sperrzeit fürs Frontend |
-| GET     | `/api/openapi.yaml`, `/api/swagger`              | API-Beschreibung                                                 |
-| GET     | `/healthz`                                       | Liveness, immer `200`                                            |
-| GET     | `/readyz`                                        | Readiness: `200` nach dem ersten Aufbau des Stores, vorher `503` |
+| Methode | Pfad                                | Zweck                                                                   |
+|---------|-------------------------------------|-------------------------------------------------------------------------|
+| GET     | `/api/events`                       | Server-Sent Events: zuerst der komplette Stand, danach nur Änderungen   |
+| PATCH   | `/api/actions/{action-name}`        | Aktion auf einem Objekt ausführen                                       |
+| GET     | `/api/openapi.yaml`, `/api/swagger` | API-Beschreibung                                                        |
+| GET     | `/healthz`                          | Liveness, immer `200`                                                   |
+| GET     | `/readyz`                           | Readiness: `200` nach dem ersten Aufbau des Stores, vorher `503`        |
 
-Jedes Objekt in den Antworten trägt `actions` (ID, Titel, Icon, Farbe, optional `formFields`) und `links` (ID,
-Titel, Icon, Farbe, `url`).
+Ältere Konfigurationen mit `service-areas`, `others-area-label`, `cluster` oder `frontend` starten weiterhin; diese
+Schlüssel werden ignoriert.
 
-### ETag und `304 Not Modified`
+### Server-Sent Events (`GET /api/events`)
 
-Die Daten-Endpunkte `/api/projects`, `/api/projects/{project}/namespaces/{namespace}`, `/api/cluster` und `/api/polling` liefern
-einen `ETag`. Schickt der Client ihn als `If-None-Match` zurück und hat sich
-nichts geändert, antwortet das Backend mit `304` ohne Body.
+| Event      | `data`                                         | Bedeutung                                         |
+|------------|------------------------------------------------|---------------------------------------------------|
+| `snapshot` | `{"projects": [...]}`                          | Immer das erste Event: der komplette Stand        |
+| `upsert`   | ein Objekt ohne Kind-Listen                    | Objekt neu oder geändert; vorhandene Kinder bleiben |
+| `delete`   | `{"kind": …, "name": …, "parents": {…}}`       | Objekt samt aller Kinder entfernen                |
 
-| Endpunkt                         | ETag basiert auf                                                    |
-|----------------------------------|---------------------------------------------------------------------|
-| `/api/projects`                  | letzter Änderung an Namespaces von Projekten                        |
-| `/api/projects/.../namespaces/…` | letzter Änderung im Namespace (Objekte darin oder Namespace selbst) |
-| `/api/cluster`, `/api/polling`   | Startzeitpunkt des Backends                                         |
+- **Hierarchie:** Projekt → Namespace → Services (→ Pods) und Ingresses. Ein Beispiel des Snapshots mit allen
+  Feldern steht in [`backend/internal/api/example-api.jsonc`](backend/internal/api/example-api.jsonc).
+- **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
+  `formFields`) und `links` (ID, Titel, Icon, Farbe, `url`), dazu je Typ:
+    - Service: `running`, also mindestens ein Replica ready. Gesendet werden nur Services vom Typ `ClusterIP`.
+    - Pod: `phase`, `ready`, `containers` (Name, Image). Pods hängen unter jedem Service, der sie referenziert.
+    - Ingress: `urls`, je Rule mit Host und je Pfad `https://<host><pfad>`.
+- **Parents:** Über `parents` (`project`, `namespace`, `service`) lässt sich jedes Event ohne weitere Daten
+  einsortieren.
+- **Reihenfolge:** `upsert` kommt Parent vor Kind, `delete` Kind vor Parent. Wird ein Parent gelöscht, kommt für
+  seine Kinder kein eigenes `delete`.
+- **Reconnect:** Bricht die Verbindung ab, verbindet sich der Browser selbst neu und erhält wieder einen `snapshot`.
+  Ist ein Client zu langsam, beendet das Backend seinen Stream; auch dann folgt ein Reconnect.
+- Alle 25 Sekunden kommt ein Kommentar `: ping`, damit Proxys die Verbindung offen halten.
 
 ```sh
-curl -i localhost:8080/api/projects                              # 200 + ETag: "1759...123"
-curl -i -H 'If-None-Match: "1759...123"' localhost:8080/api/projects   # 304
+curl -N localhost:8080/api/events
 ```
-
-Das Frontend fragt die Daten der aktuellen Seite im gewählten Intervall ab (siehe [`frontend`](#frontend)), die
-Cluster-Angaben alle 5 Minuten. `/api/polling` lädt es einmal beim Start.
 
 ### Aktion ausführen
 

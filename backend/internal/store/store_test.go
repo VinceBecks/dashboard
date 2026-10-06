@@ -17,19 +17,16 @@ func pod(name string) model.StoredPod {
 
 func TestPutAndTimestamps(t *testing.T) {
 	s := New()
-	p0 := s.ProjectsLastUpdated()
 	must(t, s.Update(func(tx *Tx) error { return tx.PutNamespace(ns("ns1", "foo")) }))
-	p1 := s.ProjectsLastUpdated()
-	if !p1.After(p0) {
-		t.Fatal("projects-Timestamp muss bei neuem Namespace steigen")
-	}
+	expectChange(t, s, true)
 	n1, _ := s.NamespaceLastUpdated("ns1")
 
-	// Gleicher Inhalt → keine Timestamp-Änderung.
+	// Gleicher Inhalt → keine Timestamp-Änderung, kein Signal.
 	must(t, s.Update(func(tx *Tx) error { return tx.PutNamespace(ns("ns1", "foo")) }))
-	if s.ProjectsLastUpdated() != p1 {
+	if n, _ := s.NamespaceLastUpdated("ns1"); n != n1 {
 		t.Fatal("unveränderter Namespace darf Timestamp nicht ändern")
 	}
+	expectChange(t, s, false)
 
 	// Pod in unbekanntem Namespace wird verworfen.
 	must(t, s.Update(func(tx *Tx) error {
@@ -45,9 +42,6 @@ func TestPutAndTimestamps(t *testing.T) {
 	if !n2.After(n1) {
 		t.Fatal("Namespace-Timestamp muss bei neuem Pod steigen")
 	}
-	if s.ProjectsLastUpdated() != p1 {
-		t.Fatal("Pod-Änderung darf projects-Timestamp nicht ändern")
-	}
 	must(t, s.Update(func(tx *Tx) error { _, err := tx.Put(model.KindPod, "ns1", "p1", pod("p1")); return err }))
 	if n, _ := s.NamespaceLastUpdated("ns1"); n != n2 {
 		t.Fatal("unveränderter Pod darf Timestamp nicht ändern")
@@ -57,9 +51,10 @@ func TestPutAndTimestamps(t *testing.T) {
 	if _, ok := s.NamespaceLastUpdated("ns1"); ok {
 		t.Fatal("Namespace muss entfernt sein")
 	}
-	if !s.ProjectsLastUpdated().After(p1) {
-		t.Fatal("projects-Timestamp muss beim Entfernen steigen")
+	if _, ok := s.NamespaceRevisions()["ns1"]; ok {
+		t.Fatal("NamespaceRevisions darf ns1 nicht mehr enthalten")
 	}
+	expectChange(t, s, true)
 }
 
 func TestReadsReturnCopies(t *testing.T) {
@@ -95,7 +90,7 @@ func TestReplaceAll(t *testing.T) {
 		_, err := tx.Put(model.KindPod, "ns1", "p1", pod("p1"))
 		return err
 	}))
-	p0 := s.ProjectsLastUpdated()
+	expectChange(t, s, true)
 	n1, _ := s.NamespaceLastUpdated("ns1")
 	n2, _ := s.NamespaceLastUpdated("ns2")
 
@@ -108,9 +103,7 @@ func TestReplaceAll(t *testing.T) {
 		return err
 	}))
 	s.ReplaceAll(fresh)
-	if s.ProjectsLastUpdated() != p0 {
-		t.Fatal("identischer Rebuild darf projects-Timestamp nicht ändern")
-	}
+	expectChange(t, s, false)
 	if n, _ := s.NamespaceLastUpdated("ns1"); n != n1 {
 		t.Fatal("identischer Rebuild darf Namespace-Timestamp nicht ändern")
 	}
@@ -125,9 +118,7 @@ func TestReplaceAll(t *testing.T) {
 	if _, ok := s.NamespaceLastUpdated("ns2"); ok {
 		t.Fatal("ns2 muss entfernt sein")
 	}
-	if !s.ProjectsLastUpdated().After(p0) {
-		t.Fatal("entfernter Namespace muss projects-Timestamp ändern")
-	}
+	expectChange(t, s, true)
 }
 
 func TestConcurrentAccess(t *testing.T) {
@@ -151,11 +142,26 @@ func TestConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for range 200 {
 				_, _, _, _ = s.Namespace("ns1")
-				_, _, _ = s.Namespaces()
+				_, _ = s.Namespaces()
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+// expectChange prüft, ob Changes signalisiert wurde, und leert den Kanal.
+func expectChange(t *testing.T, s *Store, want bool) {
+	t.Helper()
+	select {
+	case <-s.Changes():
+		if !want {
+			t.Fatal("unerwartetes Änderungs-Signal")
+		}
+	default:
+		if want {
+			t.Fatal("Änderungs-Signal fehlt")
+		}
+	}
 }
 
 func must(t *testing.T, err error) {
