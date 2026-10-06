@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -218,22 +219,18 @@ func (h *Hub) load(name string) (*nsState, bool, error) {
 	return &nsState{revision: revision, project: view.Namespace.Project, tree: raw, flat: flat}, true, nil
 }
 
-// diff liefert die Events, die old in next überführen: zuerst delete (Kind vor Parent, ohne Objekte, deren
-// Parent ohnehin gelöscht wird), dann upsert (Parent vor Kind).
+// diff liefert die Events, die old in next überführen: zuerst alle delete-, danach alle upsert-Events.
 func diff(old, next []flatObject) []Event {
-	nextData := make(map[string]json.RawMessage, len(next))
-	for _, o := range next {
-		nextData[o.key] = o.data
-	}
-	deleted := map[string]bool{}
-	for _, o := range old {
-		if _, ok := nextData[o.key]; !ok {
-			deleted[o.key] = true
-		}
-	}
+	return append(deleteEvents(old, next), upsertEvents(old, next)...)
+}
+
+// deleteEvents liefert ein delete-Event für jedes Objekt aus old, das in next fehlt. Die Events kommen Kind vor
+// Parent; Objekte, deren Parent ebenfalls gelöscht wird, entfallen, da der Client Kinder mit dem Parent entfernt.
+func deleteEvents(old, next []flatObject) []Event {
+	removed := removedKeys(old, next)
 	var events []Event
 	for _, o := range slices.Backward(old) {
-		if !deleted[o.key] || deleted[o.parentKey] {
+		if !removed[o.key] || removed[o.parentKey] { // objekt ist nicht entfernt worden, oder der ganze parent ist entfernt worden
 			continue
 		}
 		data, err := json.Marshal(o.header)
@@ -243,15 +240,40 @@ func diff(old, next []flatObject) []Event {
 		}
 		events = append(events, Event{Type: EventDelete, Data: data})
 	}
-	oldData := make(map[string]json.RawMessage, len(old))
-	for _, o := range old {
-		oldData[o.key] = o.data
-	}
+	return events
+}
+
+// upsertEvents liefert ein upsert-Event für jedes Objekt aus next, das neu ist oder sich gegenüber old geändert
+// hat, Parent vor Kind.
+func upsertEvents(old, next []flatObject) []Event {
+	before := dataByKey(old)
+	var events []Event
 	for _, o := range next {
-		if prev, ok := oldData[o.key]; ok && string(prev) == string(o.data) {
+		if prev, ok := before[o.key]; ok && bytes.Equal(prev, o.data) {
 			continue
 		}
 		events = append(events, Event{Type: EventUpsert, Data: o.data})
 	}
 	return events
+}
+
+// removedKeys liefert die Schlüssel der Objekte, die in old, aber nicht mehr in next vorkommen.
+func removedKeys(old, next []flatObject) map[string]bool {
+	remaining := dataByKey(next)
+	removed := map[string]bool{}
+	for _, o := range old {
+		if _, ok := remaining[o.key]; !ok {
+			removed[o.key] = true
+		}
+	}
+	return removed
+}
+
+// dataByKey indiziert die serialisierten Objekte über ihren Schlüssel.
+func dataByKey(objects []flatObject) map[string]json.RawMessage {
+	result := make(map[string]json.RawMessage, len(objects))
+	for _, o := range objects {
+		result[o.key] = o.data
+	}
+	return result
 }
