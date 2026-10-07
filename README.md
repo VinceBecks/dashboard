@@ -828,6 +828,7 @@ Die Manifeste liegen in `backend/deploy/`:
 | `rbac.yaml`                  | ServiceAccount, ClusterRole, ClusterRoleBinding                     |
 | `deployment.yaml`            | Deployment (1 Replica, Strategie `Recreate`) und Service            |
 | `gitlab-secret.example.yaml` | Muster für das Secret `feature-dashboard-gitlab` mit Trigger-Tokens |
+| `network.example.yaml`       | Muster für Proxy und Company-CA (ConfigMaps `feature-dashboard-network`, `company-ca`) |
 
 ```sh
 kubectl create namespace feature-dashboard
@@ -843,6 +844,32 @@ kubectl apply -f backend/deploy/gitlab-secret.example.yaml
 - **Proben:** Liveness prüft `/healthz`, Readiness prüft `/readyz`.
 - **Ein Replica:** Das Backend muss **immer auf genau ein Replica** laufen: Es ist der einzige Schreiber der
   Pipeline-ConfigMap, und jede Replica hielte einen eigenen Informer-Cache und eigene Event-Streams.
+
+### Proxy und Company-CA
+
+Läuft die ausgehende Kommunikation über einen Proxy mit eigener Company-CA, braucht das Backend keinen Code und
+keine Config-Änderung, nur zwei optionale ConfigMaps (Muster: `backend/deploy/network.example.yaml`):
+
+```sh
+kubectl -n feature-dashboard create configmap company-ca --from-file=company-ca.crt=/pfad/zur/company-ca.pem
+kubectl apply -f backend/deploy/network.example.yaml   # vorher Proxy-Adresse und NO_PROXY anpassen
+kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backend
+```
+
+- **Proxy:** Die ConfigMap `feature-dashboard-network` wird per `envFrom` geladen und setzt `HTTPS_PROXY`,
+  `HTTP_PROXY` und `NO_PROXY`. Alle ausgehenden HTTP-Aufrufe (GitLab-Trigger und Pipeline-Status) laufen darüber.
+- **Company-CA:** Die ConfigMap `company-ca` wird unter `/etc/company-ca` eingehängt. `SSL_CERT_DIR=/etc/ssl/certs:/etc/company-ca`
+  lässt das Backend den System-CAs des Images **und** der Company-CA vertrauen.
+- **`NO_PROXY` nicht vergessen:** Auch der Kubernetes-Client beachtet `HTTPS_PROXY`. Ohne Ausnahme liefen Informer und
+  Aktionen über den Proxy. In `NO_PROXY` gehören mindestens die IP des API-Servers (`KUBERNETES_SERVICE_HOST`, bzw.
+  der Service-CIDR) sowie `.svc` und `.cluster.local`. CIDR-Angaben sind erlaubt.
+- **Image bauen hinter dem Proxy:** `make docker COMPANY_CA=/pfad/zur/company-ca.pem` übergibt die CA als
+  BuildKit-Secret (sie landet in keinem Layer) für `npm ci` und `go mod download`. `HTTP_PROXY`, `HTTPS_PROXY` und
+  `NO_PROXY` aus der Umgebung werden als Build-Args durchgereicht.
+- **Lokal (`make run`):** Unter macOS und Windows nutzt Go den System-Zertifikatsspeicher; ist die Company-CA dort
+  installiert, ist nichts zu tun. Unter Linux z. B. `SSL_CERT_DIR=/etc/ssl/certs:/pfad/zum/ca-verzeichnis make run`.
+- **Browser:** Das Frontend spricht nur mit dem Backend. Die Swagger-UI unter `/api/swagger` lädt ihre Skripte von
+  unpkg.com; dafür muss der Browser selbst der Company-CA vertrauen.
 
 ### Benötigte Rechte (ClusterRole)
 
@@ -870,7 +897,7 @@ Alle Befehle laufen über das `Makefile` im Repository-Root:
 | `make run`          | Frontend bauen, Backend lokal starten und das Frontend mit ausliefern               |
 | `make backend-run`  | Nur das Backend starten (`CONFIG=…`, `STATIC_DIR=…`, `KUBECONFIG=…` überschreibbar) |
 | `make frontend-dev` | Vite-Dev-Server mit Weiterleitung von `/api` an `localhost:8080`                    |
-| `make docker`       | Image bauen (`IMAGE=…` überschreibbar)                                              |
+| `make docker`       | Image bauen (`IMAGE=…` überschreibbar, `COMPANY_CA=…` für den Build hinter dem Proxy) |
 | `make clean`        | Build-Artefakte löschen                                                             |
 
 Einzelschritte gibt es als `backend-build|test|vet|run` und `frontend-install|dev|build|test|lint`. Die

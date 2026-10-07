@@ -71,6 +71,26 @@ data:
         lucide-icon: rotate-ccw
         lucide-icon-color: orange
         projects: [foo-projekt, bar-projekt, foobar-projekt]
+      # Startet eine GitLab-Pipeline für den Namespace; Tokens aus dem Secret feature-dashboard-gitlab.
+      - action-name: redeploy-namespace
+        handler: gitlab-pipeline
+        action-title: Feature-Umgebung neu deployen
+        lucide-icon: rocket
+        lucide-icon-color: green
+        projects: [foo-projekt]
+        extra-handler-configs:
+          gitlab-url: https://gitlab.mycomp.de
+          project: team/foo-deploy
+          ref: main
+          token-env: GITLAB_TRIGGER_TOKEN_FOO
+          status-token-env: GITLAB_READ_TOKEN_FOO
+          applies-to: [namespace]
+          timeout: 15s
+          variables:
+            NAMESPACE: "{{ .Namespace }}"
+            PROJECT: "{{ .Project }}"
+            ORGANIZATION_UNIT: '{{ index .Labels "mycomp.de/organization-unit" }}'
+            ACTION: redeploy
     copy-commands:
       - command-id: pod-shell                 # je Container ein Befehl, da das Template .Container nutzt
         title: Shell im Pod öffnen

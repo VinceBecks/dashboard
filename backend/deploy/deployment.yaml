@@ -25,6 +25,10 @@ spec:
             - secretRef:
                 name: feature-dashboard-gitlab
                 optional: true
+            # Proxy und Company-CA (HTTPS_PROXY, NO_PROXY, SSL_CERT_DIR), siehe network.example.yaml.
+            - configMapRef:
+                name: feature-dashboard-network
+                optional: true
           env:
             # Namespace der ConfigMap mit den laufenden Pipelines (pipelines.configmap-namespace).
             - name: POD_NAMESPACE
@@ -41,10 +45,18 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/dashboard
+            - name: company-ca
+              mountPath: /etc/company-ca
+              readOnly: true
       volumes:
         - name: config
           configMap:
             name: feature-dashboard
+        # Company-CA (PEM); ohne die ConfigMap bleibt das Verzeichnis leer und es gelten nur die System-CAs.
+        - name: company-ca
+          configMap:
+            name: company-ca
+            optional: true
 ---
 apiVersion: v1
 kind: Service

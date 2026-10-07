@@ -2,6 +2,9 @@
 # Relative Pfade in CONFIG und STATIC_DIR beziehen sich auf das Repository-Root.
 
 IMAGE      ?= feature-dashboard-backend:latest
+# Optional für make docker hinter dem Firmen-Proxy: Pfad zur Company-CA (PEM). HTTP_PROXY, HTTPS_PROXY und NO_PROXY
+# werden aus der Umgebung übernommen, falls gesetzt.
+COMPANY_CA ?=
 CONFIG     ?= backend/config.example.yaml
 STATIC_DIR ?=
 KUBECONFIG ?= $(HOME)/.kube/config
@@ -25,8 +28,12 @@ lint: backend-vet frontend-lint
 run: frontend-build
 	$(MAKE) backend-run STATIC_DIR=frontend/dist
 
+comma := ,
+DOCKER_PROXY_ARGS := $(foreach v,HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy,$(if $($(v)),--build-arg $(v)))
+
 docker:
-	docker build -t $(IMAGE) .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_PROXY_ARGS) \
+		$(if $(COMPANY_CA),--secret id=company_ca$(comma)src=$(COMPANY_CA)) -t $(IMAGE) .
 
 clean:
 	rm -rf backend/bin frontend/dist

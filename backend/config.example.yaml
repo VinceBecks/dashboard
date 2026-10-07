@@ -86,6 +86,28 @@ actionHandlers:
       variables:
         NAMESPACE: "{{ .Namespace }}"
         SERVICES: '{{ join .Services "," }}'
+  # Startet eine GitLab-Pipeline für den Namespace (Handler-Typ gitlab-pipeline). Die Pipeline-Variablen sind
+  # Go-Templates mit den Daten des Namespaces; verfügbar sind .Kind .Name .Namespace .Project .Labels .Annotations.
+  # Nutzt dasselbe Trigger-Token wie deploy-missing-services.
+  - action-name: redeploy-namespace
+    handler: gitlab-pipeline
+    action-title: Feature-Umgebung neu deployen
+    lucide-icon: rocket
+    lucide-icon-color: green
+    projects: [foo-projekt]
+    extra-handler-configs:
+      gitlab-url: https://gitlab.mycomp.de
+      project: team/foo-deploy                      # Projekt-ID oder Pfad
+      ref: main                                     # Branch/Tag, Template erlaubt (z. B. "feature/{{ .Namespace }}")
+      token-env: GITLAB_TRIGGER_TOKEN_FOO
+      # status-token-env: GITLAB_READ_TOKEN_FOO     # optional: laufende Pipeline am Namespace anzeigen
+      applies-to: [namespace]                       # Aktion erscheint nur an Namespaces
+      timeout: 15s
+      variables:
+        NAMESPACE: "{{ .Namespace }}"
+        PROJECT: "{{ .Project }}"
+        ORGANIZATION_UNIT: '{{ index .Labels "mycomp.de/organization-unit" }}'
+        ACTION: redeploy
 
 link-variables:
   demoUrl: http://localhost:8080

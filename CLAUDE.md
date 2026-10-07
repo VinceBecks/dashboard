@@ -17,6 +17,10 @@ hochgefahren haben und welche Services darin laufen.
 - Backend: Go, Code liegt in `backend/`, läuft im Cluster und ist immer auf genau ein replica skaliert
 - Frontend: React + TypeScript, Code liegt in `frontend/`
 - Keine Authentifizierung im Dashboard
+- Ausgehende Kommunikation läuft über einen Proxy mit eigener Company-CA. Kein eigener TLS-/Proxy-Code: HTTP-Clients
+  nutzen den Standard-Transport von Go (`HTTPS_PROXY`/`NO_PROXY`, System-CAs plus `SSL_CERT_DIR`); konfiguriert wird
+  über `backend/deploy/network.example.yaml`. Neue HTTP-Clients ebenso bauen (kein eigener `Transport` ohne Proxy/CA).
+  `NO_PROXY` muss den Kubernetes-API-Server ausnehmen, da client-go `HTTPS_PROXY` ebenfalls beachtet.
 
 ## Aktueller Stand
 Backend und Frontend sind implementiert (Plan Backend: `plans/backend-implementierung.md`, Umstellung auf
@@ -56,7 +60,7 @@ Alle Befehle laufen über das `Makefile` im Repository-Root:
 | `make lint`         | `go vet` und ESLint                                                                       |
 | `make build`        | Backend-Binary nach `backend/bin/dashboard`, Frontend-Build nach `frontend/dist/`         |
 | `make run`          | Frontend bauen, Backend lokal starten und das Frontend mit ausliefern (Port 8080)         |
-| `make docker`       | Image mit Backend + Frontend bauen (`IMAGE=...` überschreibbar); Manifeste in `backend/deploy/` |
+| `make docker`       | Image mit Backend + Frontend bauen (`IMAGE=...`, optional `COMPANY_CA=...` hinter dem Proxy); Manifeste in `backend/deploy/` |
 | `make backend-run`  | Nur das Backend lokal starten                                                             |
 | `make frontend-dev` | Vite-Dev-Server; `/api` wird an das lokale Backend auf `localhost:8080` weitergeleitet    |
 
