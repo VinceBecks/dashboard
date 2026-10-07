@@ -4,7 +4,7 @@ metadata:
   name: feature-dashboard-backend
   namespace: feature-dashboard
 spec:
-  replicas: 1 # Immer genau ein Replica: einziger Schreiber der Pipeline-ConfigMap, ein Informer-Cache.
+  replicas: 1 # Immer genau ein Replica: Zustand (laufende Pipelines) und Event-Streams liegen im Speicher.
   strategy:
     type: Recreate
   selector:
@@ -29,12 +29,6 @@ spec:
             - configMapRef:
                 name: feature-dashboard-network
                 optional: true
-          env:
-            # Namespace der ConfigMap mit den laufenden Pipelines (pipelines.configmap-namespace).
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
           ports:
             - name: http
               containerPort: 8080

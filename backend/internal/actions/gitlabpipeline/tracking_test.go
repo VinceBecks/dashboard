@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"k8s.io/client-go/kubernetes/fake"
-
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/pipelines"
 )
@@ -51,10 +49,7 @@ func trackedHandler(t *testing.T, gitlabURL string, state *pipelines.State, stat
 
 func TestExecuteRemembersPipelineWithStatusToken(t *testing.T) {
 	srv := trackingGitLab(t, map[string]string{"4711": "running"})
-	state := pipelines.NewState(fake.NewClientset(), "dash", "pipelines")
-	if err := state.Load(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	state := pipelines.NewState()
 	h, err := trackedHandler(t, srv.URL, state, "GITLAB_READ_TEST")
 	if err != nil {
 		t.Fatal(err)
@@ -83,8 +78,7 @@ func TestExecuteRemembersPipelineWithStatusToken(t *testing.T) {
 
 func TestExecuteWithoutStatusTokenRemembersNothing(t *testing.T) {
 	srv := trackingGitLab(t, nil)
-	state := pipelines.NewState(fake.NewClientset(), "dash", "pipelines")
-	_ = state.Load(context.Background())
+	state := pipelines.NewState()
 	h, err := trackedHandler(t, srv.URL, state, "")
 	if err != nil {
 		t.Fatal(err)

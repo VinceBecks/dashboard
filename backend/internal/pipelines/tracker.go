@@ -49,7 +49,7 @@ func NewTracker(state *State, interval time.Duration) *Tracker {
 	return &Tracker{state: state, interval: interval}
 }
 
-// Run prüft bis ctx endet. Nach einem Neustart setzt er einfach mit den geladenen Einträgen fort.
+// Run prüft bis ctx endet.
 func (t *Tracker) Run(ctx context.Context) {
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
@@ -72,9 +72,7 @@ func (t *Tracker) CheckOnce(ctx context.Context) {
 		if !t.finished(ctx, e) {
 			continue
 		}
-		if err := t.state.Remove(ctx, e.Ref(), e.Action); err != nil {
-			slog.Warn("Beendete Pipeline nicht entfernt", "action", e.Action, "object", e.Ref(), "pipeline", e.ID, "error", err)
-		}
+		t.state.Remove(e.Ref(), e.Action)
 	}
 }
 

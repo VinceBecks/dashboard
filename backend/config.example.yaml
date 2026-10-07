@@ -158,8 +158,6 @@ cluster:
   dns-name: demo-cluster-control-plane   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
 
 
-# Optional; ohne Angabe gelten die hier gezeigten Werte.
+# Optional; ohne Angabe gilt der hier gezeigte Wert.
 pipelines:
-  # configmap-namespace: feature-dashboard     # Standard: POD_NAMESPACE, sonst feature-dashboard
-  configmap-name: feature-dashboard-pipelines
-  poll-interval: 15s
+  poll-interval: 15s   # so oft wird der Status laufender Pipelines bei GitLab abgefragt

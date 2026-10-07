@@ -111,7 +111,7 @@ flowchart LR
     K8s[(Kubernetes API)] -- List + Watch --> Inf[Informer-Cache<br/>Namespace, Service,<br/>Ingress, Pod]
     Inf -- Events: Revision je Namespace --> Hub[Event-Hub<br/>Diff je Namespace]
     Inf -- Lister + Converter --> Hub
-    Pip[(Pipeline-ConfigMap)] -- Changes --> Hub
+    Pip[Laufende Pipelines<br/>im Speicher] -- Changes --> Hub
     Hub -- Server-Sent Events --> FE[Frontend]
     FE -- PATCH /api/actions --> API[HTTP-API]
     API --> Reg[ActionRegistry] --> H[ActionHandler] -- z . B . Pod löschen --> K8s
@@ -197,7 +197,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
 | `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
-| `internal/pipelines`               | Laufende GitLab-Pipelines: Ablage in einer ConfigMap, Status-Abfrage       |
+| `internal/pipelines`               | Laufende GitLab-Pipelines im Speicher, Status-Abfrage                      |
 | `internal/api`                     | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, Auslieferung des Frontends |
 
 ---
@@ -220,8 +220,7 @@ Ablauf beim Start:
 1. Die Konfiguration wird gelesen und vollständig geprüft. Bei einem Fehler bricht der Start ab, siehe
    [Prüfungen beim Start](#prüfungen-beim-start).
 2. Die Handler aller aktiven Aktionen werden erzeugt und konfiguriert, die Link-Templates werden geparst.
-3. Die ConfigMap mit den laufenden Pipelines wird gelesen bzw. angelegt.
-4. Der HTTP-Server startet sofort. `/readyz` meldet `200`, sobald der Informer-Cache synchronisiert ist. Ist der
+3. Der HTTP-Server startet sofort. `/readyz` meldet `200`, sobald der Informer-Cache synchronisiert ist. Ist der
    Cluster nicht erreichbar, versuchen die Informer es selbstständig weiter.
 
 Bei `SIGINT`/`SIGTERM` fährt das Backend geordnet herunter.
@@ -459,7 +458,8 @@ oder an einem seiner Replicas eine Pipeline läuft.
 - Alle `pipelines.poll-interval` fragt das Backend `GET {gitlab-url}/api/v4/projects/{project}/pipelines/{id}` mit
   dem Lese-Token ab. Beendete Pipelines (`success`, `failed`, `canceled`, `skipped`) und unbekannte (404)
   verschwinden. Ist GitLab nicht erreichbar, bleibt die Markierung bis zur nächsten erfolgreichen Abfrage.
-- Ein Neustart verliert nichts: Die Pipelines liegen in einer ConfigMap (siehe [`pipelines`](#pipelines)).
+- Die laufenden Pipelines liegen nur im Speicher. Nach einem Neustart des Backends ist der Stand leer, bereits
+  laufende Pipelines werden dann nicht mehr markiert.
 - Das Trigger-Token kann keinen Status lesen, deshalb ist ein zweites Token nötig.
 
 #### `deploy-missing-services`
@@ -651,21 +651,15 @@ cluster:
 ### `pipelines`
 
 ```yaml
-pipelines:                                    # optional, gezeigt sind die Standardwerte
-  configmap-namespace: feature-dashboard
-  configmap-name: feature-dashboard-pipelines
+pipelines:                                    # optional, gezeigt ist der Standardwert
   poll-interval: 15s
 ```
 
-| Feld                  | Standard                                | Bedeutung                                                  |
-|-----------------------|-----------------------------------------|------------------------------------------------------------|
-| `configmap-namespace` | `POD_NAMESPACE`, sonst `feature-dashboard` | Namespace der ConfigMap mit den laufenden Pipelines     |
-| `configmap-name`      | `feature-dashboard-pipelines`           | Name der ConfigMap                                         |
-| `poll-interval`       | `15s`                                   | Abstand der Status-Abfragen bei GitLab, mindestens `5s`    |
+| Feld            | Standard | Bedeutung                                               |
+|-----------------|----------|---------------------------------------------------------|
+| `poll-interval` | `15s`    | Abstand der Status-Abfragen bei GitLab, mindestens `5s` |
 
-Das Backend legt die ConfigMap beim Start selbst an, falls sie fehlt, und schreibt jede Änderung sofort zurück
-(Schlüssel `pipelines.json`). Sie steht absichtlich **nicht** in den Deploy-Manifesten: Würde ArgoCD sie verwalten,
-setzte Self-Heal den Inhalt zurück. Ist sie beim Start nicht lesbar, startet das Backend nicht.
+Die laufenden Pipelines liegen nur im Speicher des Backends. Nach einem Neustart ist der Stand leer.
 
 ### Prüfungen beim Start
 
@@ -843,8 +837,8 @@ kubectl apply -f backend/deploy/gitlab-secret.example.yaml
 - **Secret:** Das Secret `feature-dashboard-gitlab` wird per `envFrom` als Umgebungsvariablen geladen. Es ist
   optional, das Backend startet also auch ohne dieses Secret.
 - **Proben:** Liveness prüft `/healthz`, Readiness prüft `/readyz`.
-- **Ein Replica:** Das Backend muss **immer auf genau ein Replica** laufen: Es ist der einzige Schreiber der
-  Pipeline-ConfigMap, und jede Replica hielte einen eigenen Informer-Cache und eigene Event-Streams.
+- **Ein Replica:** Das Backend muss **immer auf genau ein Replica** laufen: Laufende Pipelines liegen im Speicher, und
+  jede Replica hielte einen eigenen Informer-Cache und eigene Event-Streams.
 
 ### Proxy und Company-CA
 
@@ -880,9 +874,6 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
 | `services`                        | get, list, watch, create, delete | Informer, NodePort-Service erstellen und löschen   |
 | `pods`                            | get, list, watch, delete         | Informer, `delete-pod`, `restart-service-replicas` |
 | `ingresses` (`networking.k8s.io`) | get, list, watch                 | Informer                                           |
-
-Zusätzlich eine `Role` im Namespace `feature-dashboard` für die Pipeline-ConfigMap: `configmaps` `create` sowie
-`get`/`update` auf `feature-dashboard-pipelines`. Das Deployment setzt `POD_NAMESPACE` per Downward-API.
 
 ---
 

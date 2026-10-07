@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/kubernetes/fake"
-
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/copycommands"
@@ -462,10 +460,7 @@ func TestPipelines(t *testing.T) {
 	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "deploy", Title: "Deployen", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
 		t.Fatal(err)
 	}
-	state := pipelines.NewState(fake.NewClientset(), "dash", "pipelines")
-	if err := state.Load(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	state := pipelines.NewState()
 	srv := NewServer(st, reg, []config.Project{{Name: "foo"}}, func() bool { return true }).WithPipelines(state)
 	_, sub, raw := subscribe(t, srv)
 	if !strings.Contains(raw, `"parents":{"project":"foo"},"actions":[],"links":[],"copyCommands":[],"pipelines":[]`) {
@@ -473,18 +468,15 @@ func TestPipelines(t *testing.T) {
 	}
 
 	started := time.Date(2026, 10, 6, 14, 0, 0, 0, time.UTC)
-	err := state.Set(context.Background(), pipelines.Entry{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1",
+	state.Set(pipelines.Entry{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1",
 		Action: "deploy", ID: 4711, WebURL: "https://gitlab.example/p/-/pipelines/4711", StartedAt: started})
-	if err != nil {
-		t.Fatal(err)
-	}
 	got := syncHub(srv, sub)
 	if len(got) != 1 || !strings.HasPrefix(got[0], `upsert {"kind":"namespace","name":"feat-1"`) ||
 		!strings.Contains(got[0], `"pipelines":[{"action":"deploy","title":"Deployen","url":"https://gitlab.example/p/-/pipelines/4711","startedAt":"2026-10-06T14:00:00Z"}]`) {
 		t.Fatalf("events = %v", got)
 	}
 
-	_ = state.Remove(context.Background(), model.ObjectRef{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1"}, "deploy")
+	state.Remove(model.ObjectRef{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1"}, "deploy")
 	got = syncHub(srv, sub)
 	if len(got) != 1 || !strings.Contains(got[0], `"pipelines":[]`) {
 		t.Fatalf("events = %v", got)

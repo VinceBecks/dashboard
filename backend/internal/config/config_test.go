@@ -284,14 +284,14 @@ func TestPipelines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := cfg.Pipelines; p.ConfigMapName != DefaultPipelinesConfigMap || p.Poll() != 15*time.Second || p.ConfigMapNamespace != "" {
+	if p := cfg.Pipelines; p.Poll() != 15*time.Second {
 		t.Fatalf("Standardwerte = %+v", p)
 	}
-	cfg, err = parse([]byte("pipelines: {configmap-namespace: dash, configmap-name: pl, poll-interval: 1m}\n"))
+	cfg, err = parse([]byte("pipelines: {poll-interval: 1m}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := cfg.Pipelines; p.ConfigMapNamespace != "dash" || p.ConfigMapName != "pl" || p.Poll() != time.Minute {
+	if p := cfg.Pipelines; p.Poll() != time.Minute {
 		t.Fatalf("Pipelines = %+v", p)
 	}
 	for _, invalid := range []string{"1s", "abc", "-5s"} {

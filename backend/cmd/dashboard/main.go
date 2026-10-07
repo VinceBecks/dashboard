@@ -40,18 +40,6 @@ func main() {
 	}
 }
 
-// pipelinesNamespace liefert den Namespace der Pipeline-ConfigMap: aus der config.yaml, sonst den eigenen
-// Namespace (POD_NAMESPACE per Downward-API), sonst „feature-dashboard“.
-func pipelinesNamespace(c config.PipelinesConfig) string {
-	if c.ConfigMapNamespace != "" {
-		return c.ConfigMapNamespace
-	}
-	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
-		return ns
-	}
-	return "feature-dashboard"
-}
-
 func run(configPath, listen, kubeconfig, staticDir string) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -73,11 +61,8 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	// Einzige Datenquelle ist der Informer-Cache; es gibt keine eigene Kopie der Objekte.
 	cluster := kube.NewCluster(client, project.NewMatcher(cfg.Projects))
 
-	// Laufende Pipelines liegen in einer ConfigMap im Dashboard-Namespace und überstehen so einen Neustart.
-	pipelineState := pipelines.NewState(client, pipelinesNamespace(cfg.Pipelines), cfg.Pipelines.ConfigMapName)
-	if err := pipelineState.Load(context.Background()); err != nil {
-		return err
-	}
+	// Laufende Pipelines liegen nur im Speicher; nach einem Neustart ist der Stand leer.
+	pipelineState := pipelines.NewState()
 
 	registry := actions.NewRegistry()
 	// Neue ActionHandler hier registrieren und in der config.yaml aktivieren.

@@ -49,19 +49,14 @@ type CommandTarget struct {
 	Command string `yaml:"command"`
 }
 
-// PipelinesConfig legt fest, wo das Backend laufende GitLab-Pipelines ablegt und wie oft es ihren Status abfragt.
+// PipelinesConfig legt fest, wie oft das Backend den Status laufender GitLab-Pipelines abfragt.
 type PipelinesConfig struct {
-	// ConfigMapNamespace ist der Namespace der ConfigMap; leer heißt: POD_NAMESPACE bzw. „feature-dashboard“.
-	ConfigMapNamespace string `yaml:"configmap-namespace"`
-	// ConfigMapName ist der Name der ConfigMap, Standard DefaultPipelinesConfigMap.
-	ConfigMapName string `yaml:"configmap-name"`
 	// PollInterval ist der Abstand der Status-Abfragen (Go-Dauer), Standard DefaultPipelinesPollInterval.
 	PollInterval string `yaml:"poll-interval"`
 }
 
 // Standardwerte für PipelinesConfig.
 const (
-	DefaultPipelinesConfigMap    = "feature-dashboard-pipelines"
 	DefaultPipelinesPollInterval = "15s"
 	minPipelinesPollInterval     = 5 * time.Second
 )
@@ -73,9 +68,6 @@ func (p PipelinesConfig) Poll() time.Duration {
 }
 
 func (p *PipelinesConfig) applyDefaults() {
-	if p.ConfigMapName == "" {
-		p.ConfigMapName = DefaultPipelinesConfigMap
-	}
 	if p.PollInterval == "" {
 		p.PollInterval = DefaultPipelinesPollInterval
 	}

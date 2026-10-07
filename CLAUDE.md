@@ -47,7 +47,7 @@ Backend-Pakete (`backend/`):
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
 | `internal/copycommands`       | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
-| `internal/pipelines`          | Laufende GitLab-Pipelines je Objekt und Aktion (`State`, Ablage in einer ConfigMap) und `Tracker` (Status-Abfrage, entfernt beendete) |
+| `internal/pipelines`          | Laufende GitLab-Pipelines je Objekt und Aktion (`State`, nur im Speicher) und `Tracker` (Status-Abfrage, entfernt beendete) |
 | `internal/api`                | HTTP-API, DTOs (`dto.go`), Event-Hub und SSE (`events.go`), `openapi.yaml`, `example-api.jsonc`, Swagger-UI |
 
 ## Build, Test, Start
@@ -124,7 +124,8 @@ Da bei jedem Aufbau alles neu berechnet wird, gibt es keine inkrementell gepfleg
 - Die Event-Handler merken sich nur, welcher Projekt-Namespace sich geändert hat (`NamespaceRevisions`, Signal über
   `Changes()`); Objekte in anderen Namespaces kosten nur einen Map-Lookup. Lesen: `Namespace(name)` (komplette
   `NamespaceView`), `Get(ref)`, `Services(namespace)`.
-- Alle Daten liegen in-memory; einzige Persistenz ist die Pipeline-ConfigMap (siehe unten).
+- Alle Daten liegen in-memory; es gibt keine Persistenz. Auch die laufenden Pipelines (siehe unten) gehen bei einem
+  Neustart verloren.
 
 #### Konvertierte Informationen je Objekt
 
@@ -281,15 +282,12 @@ Der `Tracker` fragt den Status alle `pipelines.poll-interval` ab und entfernt be
 canceled, skipped) sowie unbekannte. Ohne `status-token-env` wird nichts gemerkt.
 
 ```yaml
-pipelines:                                    # optional, gezeigt sind die Standardwerte
-  configmap-namespace: feature-dashboard      # Standard: POD_NAMESPACE (Downward-API), sonst feature-dashboard
-  configmap-name: feature-dashboard-pipelines
+pipelines:                                    # optional, gezeigt ist der Standardwert
   poll-interval: 15s                          # mindestens 5s
 ```
 
-- Ablage in der ConfigMap (`pipelines.json`), damit ein Neustart nichts verliert. Das Backend legt sie selbst an; sie
-  steht **nicht** in den Manifesten, damit ArgoCD sie nicht zurücksetzt. Kein Informer auf ConfigMaps: Das Backend
-  (genau ein Replica) ist der einzige Schreiber, liest sie beim Start und schreibt jede Änderung zurück.
+- Die laufenden Pipelines liegen **nur im Speicher** (`pipelines.State`). Nach einem Neustart des Backends ist der
+  Stand leer; bereits laufende Pipelines werden dann nicht mehr markiert. Das ist bewusst so entschieden.
 - Zustand nie an Objekten der Feature-Umgebungen ablegen (Annotations o. Ä.): Sie werden per ArgoCD mit auto-sync
   und self-heal verwaltet, fremde Änderungen werden zurückgesetzt.
 - Änderungen an `State` lösen Events aus wie Änderungen im Cluster (der Event-Hub beachtet beide Revisionen je
@@ -475,8 +473,8 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 - Nur Namespace, Service, Ingress und Pod beobachten; nur Kern-Informationen übernehmen.
 - Einzige Datenquelle ist der Informer-Cache (`kube.Cluster`); keinen eigenen Store und keine Kopie daneben aufbauen.
   Lister-Objekte nie verändern.
-- Einzige Persistenz ist die Pipeline-ConfigMap (`internal/pipelines`); sie wird nicht per Informer beobachtet.
-  Keinen Zustand an ArgoCD-verwalteten Objekten ablegen.
+- Keine Persistenz: Eigener Zustand (laufende Pipelines in `internal/pipelines`) liegt nur im Speicher. Keinen
+  Zustand an ArgoCD-verwalteten Objekten ablegen.
 - Aktionslogik gehört ins Backend in genau einen ActionHandler, nie ins Frontend.
 - Projekte, Labels und aktive Aktionen kommen aus der `config.yaml`, nicht aus dem Code.
 - Ändert ein ActionHandler den Cluster, kommt die Änderung ausschließlich über die Informer-Events ins Dashboard.

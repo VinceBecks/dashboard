@@ -147,7 +147,7 @@ func (t *Trigger) PipelineStatus(ctx context.Context, id int) (string, error) {
 }
 
 // Run rendert ref und Variablen mit data und löst die Pipeline aus. Bei aktivem Track merkt es sich die gestartete
-// Pipeline am Objekt aus data; schlägt das fehl, bleibt die Aktion erfolgreich und die Meldung nennt den Grund.
+// Pipeline am Objekt aus data.
 func (t *Trigger) Run(ctx context.Context, data objecttemplate.Data) actions.Result {
 	form := url.Values{}
 	form.Set("token", t.token)
@@ -189,13 +189,10 @@ func (t *Trigger) Run(ctx context.Context, data objecttemplate.Data) actions.Res
 	}
 	result := actions.Result{Success: true, Message: fmt.Sprintf("Pipeline #%d gestartet: %s", pipeline.ID, pipeline.WebURL)}
 	if t.pipelines != nil {
-		err := t.pipelines.Set(ctx, pipelines.Entry{
+		t.pipelines.Set(pipelines.Entry{
 			Kind: data.Kind, Namespace: data.Namespace, Name: data.Name, Action: t.action,
 			ID: pipeline.ID, Project: t.project, WebURL: pipeline.WebURL, StartedAt: time.Now().UTC().Truncate(time.Second),
 		})
-		if err != nil {
-			result.Message += fmt.Sprintf(" (wird im Dashboard nicht angezeigt: %v)", err)
-		}
 	}
 	return result
 }
