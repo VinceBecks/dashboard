@@ -1,6 +1,6 @@
 // Package pipelines merkt sich die vom Dashboard gestarteten, noch laufenden GitLab-Pipelines je Objekt und Aktion.
 //
-// Der Stand liegt im Speicher (als JSON-Bytes, wie im Store) und wird bei jeder Änderung in eine ConfigMap im
+// Der Stand liegt im Speicher (als JSON-Bytes, damit Leser immer Kopien bekommen) und wird bei jeder Änderung in eine ConfigMap im
 // Dashboard-Namespace geschrieben, damit er einen Neustart übersteht. Die ConfigMap legt das Backend selbst an; sie
 // steht nicht in den Deploy-Manifesten, damit ArgoCD sie nicht zurücksetzt. Sie wird nicht per Informer beobachtet:
 // Das Backend läuft mit genau einer Replica und ist ihr einziger Schreiber.

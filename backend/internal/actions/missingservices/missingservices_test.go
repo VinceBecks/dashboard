@@ -13,7 +13,7 @@ import (
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/model"
-	"feature-dashboard/internal/store"
+	"feature-dashboard/internal/testsource"
 )
 
 const token = "glptt-secret-token"
@@ -32,10 +32,10 @@ func fakeGitLab(t *testing.T) (*httptest.Server, *url.Values) {
 	return srv, &last
 }
 
-func newStore(t *testing.T, services ...string) *store.Store {
+func newStore(t *testing.T, services ...string) *testsource.Source {
 	t.Helper()
-	st := store.New()
-	err := st.Update(func(tx *store.Tx) error {
+	st := testsource.New()
+	err := st.Update(func(tx *testsource.Tx) error {
 		if err := tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "foo"}); err != nil {
 			return err
 		}

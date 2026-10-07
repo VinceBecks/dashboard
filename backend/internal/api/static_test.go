@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"feature-dashboard/internal/actions"
-	"feature-dashboard/internal/store"
+	"feature-dashboard/internal/testsource"
 )
 
 func TestStatic(t *testing.T) {
@@ -21,7 +21,7 @@ func TestStatic(t *testing.T) {
 	must(os.MkdirAll(filepath.Join(dir, "assets"), 0o755))
 	must(os.WriteFile(filepath.Join(dir, "assets", "app-123.js"), []byte("console.log(1)"), 0o644))
 
-	h := NewServer(store.New(), actions.NewRegistry(), nil, func() bool { return true }).WithStaticDir(dir).Handler()
+	h := NewServer(testsource.New(), actions.NewRegistry(), nil, func() bool { return true }).WithStaticDir(dir).Handler()
 
 	if rec := do(h, "GET", "/assets/app-123.js", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "console.log") ||
 		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {

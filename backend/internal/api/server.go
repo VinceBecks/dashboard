@@ -17,7 +17,6 @@ import (
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/pipelines"
-	"feature-dashboard/internal/store"
 )
 
 //go:embed openapi.yaml
@@ -25,7 +24,7 @@ var openAPISpec []byte
 
 // Server beantwortet die HTTP-Anfragen des Dashboards.
 type Server struct {
-	store     *store.Store
+	source    Source
 	registry  *actions.Registry
 	ready     func() bool
 	staticDir string
@@ -39,18 +38,30 @@ type Server struct {
 	hub       *Hub
 }
 
-// NewServer erzeugt den Server. ready meldet, ob der Store initial befüllt ist.
-func NewServer(st *store.Store, registry *actions.Registry, projects []config.Project, ready func() bool) *Server {
-	s := &Server{store: st, registry: registry, ready: ready}
+// Source ist die Datenquelle des Servers, im Betrieb der Informer-Cache (kube.Cluster).
+type Source interface {
+	// Changes signalisiert Änderungen; welche Namespaces betroffen sind, zeigt NamespaceRevisions.
+	Changes() <-chan struct{}
+	// NamespaceRevisions liefert je Projekt-Namespace den Zeitpunkt der letzten Änderung.
+	NamespaceRevisions() map[string]time.Time
+	// Namespace liefert alle konvertierten Objekte eines Projekt-Namespaces.
+	Namespace(name string) (model.NamespaceView, time.Time, bool, error)
+	// Get liest ein einzelnes Objekt in out (*model.Stored*).
+	Get(ref model.ObjectRef, out any) (bool, error)
+}
+
+// NewServer erzeugt den Server. ready meldet, ob der Informer-Cache synchronisiert ist.
+func NewServer(source Source, registry *actions.Registry, projects []config.Project, ready func() bool) *Server {
+	s := &Server{source: source, registry: registry, ready: ready}
 	s.projects = make(map[string]config.Project, len(projects))
 	for _, p := range projects {
 		s.projects[p.Name] = p
 	}
-	s.hub = newHub(st, projects, s.buildNamespace)
+	s.hub = newHub(source, projects, s.buildNamespace)
 	return s
 }
 
-// Run verteilt Store-Änderungen an die Clients von GET /api/events, bis ctx endet. Danach werden alle
+// Run verteilt Änderungen an die Clients von GET /api/events, bis ctx endet. Danach werden alle
 // Event-Streams beendet, damit der HTTP-Server herunterfahren kann.
 func (s *Server) Run(ctx context.Context) {
 	s.hub.Run(ctx)
@@ -69,7 +80,7 @@ func (s *Server) WithCluster(c config.ClusterConfig) *Server {
 }
 
 // WithPipelines lässt den Server an jedem Objekt dessen laufende Pipelines ausliefern. Änderungen daran lösen
-// Events aus wie Änderungen im Store.
+// Events aus wie Änderungen im Cluster.
 func (s *Server) WithPipelines(p *pipelines.State) *Server {
 	s.pipelines = p
 	s.hub.extra = p
@@ -124,7 +135,7 @@ const pingInterval = 25 * time.Second
 // upsert- und delete-Events. Ein Reconnect erhält immer einen neuen Snapshot; Last-Event-ID wird ignoriert.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if !s.ready() {
-		writeError(w, http.StatusServiceUnavailable, errors.New("store ist noch nicht befüllt"))
+		writeError(w, http.StatusServiceUnavailable, errors.New("informer-Cache ist noch nicht synchronisiert"))
 		return
 	}
 	sub, err := s.hub.Subscribe()
@@ -247,7 +258,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// load liest das referenzierte Objekt als Kopie aus dem Store.
+// load liest das referenzierte Objekt als Kopie aus der Datenquelle.
 func (s *Server) load(ref model.ObjectRef) (actions.StoredObject, bool, error) {
 	var obj any
 	switch ref.Kind {
@@ -262,13 +273,13 @@ func (s *Server) load(ref model.ObjectRef) (actions.StoredObject, bool, error) {
 	default:
 		return actions.StoredObject{}, false, errors.New("ungültiger Objekt-Typ")
 	}
-	found, err := s.store.Get(ref, obj)
+	found, err := s.source.Get(ref, obj)
 	if err != nil || !found {
 		return actions.StoredObject{}, found, err
 	}
 	var ns model.StoredNamespace
 	nsRef := model.ObjectRef{Kind: model.KindNamespace, Namespace: ref.Namespace, Name: ref.Namespace}
-	if found, err := s.store.Get(nsRef, &ns); err != nil || !found {
+	if found, err := s.source.Get(nsRef, &ns); err != nil || !found {
 		return actions.StoredObject{}, found, err
 	}
 	return actions.StoredObject{Ref: ref, Object: deref(obj), Project: ns.Project}, true, nil

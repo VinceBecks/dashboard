@@ -43,7 +43,7 @@ paths:
                 event: delete
                 data: {"kind":"namespace","name":"foo-feature-123","parents":{"project":"foo-projekt"}}
         '503':
-          description: Store wird noch aufgebaut oder Server fährt herunter
+          description: Informer-Cache wird noch synchronisiert oder Server fährt herunter
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -51,7 +51,7 @@ paths:
     patch:
       summary: Aktion auf einem Objekt ausführen
       description: |
-        Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die Informer-Events im Store
+        Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die Informer-Events
         und kommen dann als Events über `GET /api/events`.
       parameters:
         - { name: action, in: path, required: true, description: Aktion-ID, schema: { type: string } }
@@ -85,8 +85,8 @@ paths:
     get:
       summary: Readiness
       responses:
-        '200': { description: Store ist initial befüllt }
-        '503': { description: Store wird noch aufgebaut }
+        '200': { description: Informer-Cache ist synchronisiert }
+        '503': { description: Informer-Cache wird noch synchronisiert }
   /api/openapi.yaml:
     get:
       summary: Diese Spezifikation

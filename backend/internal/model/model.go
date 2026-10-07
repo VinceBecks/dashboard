@@ -103,11 +103,15 @@ type IngressPath struct {
 	Backend  IngressBackend `json:"backend"`
 }
 
-// IngressBackend referenziert einen Service-Port.
+// IngressBackend nennt den Service, an den ein Pfad weiterleitet.
 type IngressBackend struct {
-	ServiceName       string `json:"serviceName"`
-	ServicePortName   string `json:"servicePortName,omitempty"`
-	ServicePortNumber *int32 `json:"servicePortNumber,omitempty"`
-	// ResolvedServicePortNumber ist die aufgelöste Service-Port-Nummer, nil wenn nicht auflösbar.
-	ResolvedServicePortNumber *int32 `json:"resolvedServicePortNumber,omitempty"`
+	ServiceName string `json:"serviceName"`
+}
+
+// NamespaceView sind alle konvertierten Objekte eines Namespaces, jeweils nach Name sortiert.
+type NamespaceView struct {
+	Namespace StoredNamespace
+	Services  []StoredService
+	Ingresses []StoredIngress
+	Pods      []StoredPod
 }

@@ -1,9 +1,14 @@
-// Package converter wandelt Kubernetes-Objekte in Stored-Objects um und löst Referenzen auf.
+// Package converter wandelt Kubernetes-Objekte aus dem Informer-Cache in Stored-Objects um und löst Referenzen auf.
+//
+// Die Eingaben stammen aus den Listern und zeigen direkt in den Cache: Sie werden nur gelesen, nie verändert. Alle
+// Maps werden geklont, damit niemand über ein Stored-Object den Cache verändert.
 package converter
 
 import (
 	"maps"
+	"slices"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -43,7 +48,7 @@ func Pod(p *corev1.Pod) model.StoredPod {
 	return sp
 }
 
-// Service konvertiert einen Service ohne Referenzen aufzulösen (siehe ResolveService).
+// Service konvertiert einen Service ohne Referenzen aufzulösen (siehe ResolveService und NamespaceView).
 func Service(s *corev1.Service) model.StoredService {
 	ss := model.StoredService{
 		Meta:     meta(s.Name, s.Namespace, s.Labels, s.Annotations),
@@ -69,7 +74,7 @@ func Service(s *corev1.Service) model.StoredService {
 	return ss
 }
 
-// Ingress konvertiert einen Ingress ohne Referenzen aufzulösen (siehe ResolveIngress).
+// Ingress konvertiert einen Ingress.
 func Ingress(i *networkingv1.Ingress) model.StoredIngress {
 	si := model.StoredIngress{
 		Meta:  meta(i.Name, i.Namespace, i.Labels, i.Annotations),
@@ -85,12 +90,6 @@ func Ingress(i *networkingv1.Ingress) model.StoredIngress {
 				}
 				if svc := p.Backend.Service; svc != nil {
 					path.Backend.ServiceName = svc.Name
-					if svc.Port.Name != "" {
-						path.Backend.ServicePortName = svc.Port.Name
-					} else {
-						n := svc.Port.Number
-						path.Backend.ServicePortNumber = &n
-					}
 				}
 				rule.Paths = append(rule.Paths, path)
 			}
@@ -152,36 +151,6 @@ func protocolEqual(a, b string) bool {
 	return a == b
 }
 
-// ResolveIngress löst die Service-Port-Nummern der Ingress-Backends auf.
-func ResolveIngress(ing *model.StoredIngress, services []model.StoredService) {
-	byName := make(map[string]model.StoredService, len(services))
-	for _, s := range services {
-		byName[s.Name] = s
-	}
-	for ri := range ing.Rules {
-		for pi := range ing.Rules[ri].Paths {
-			b := &ing.Rules[ri].Paths[pi].Backend
-			b.ResolvedServicePortNumber = nil
-			if b.ServicePortNumber != nil {
-				v := *b.ServicePortNumber
-				b.ResolvedServicePortNumber = &v
-				continue
-			}
-			svc, ok := byName[b.ServiceName]
-			if !ok || b.ServicePortName == "" {
-				continue
-			}
-			for _, p := range svc.Ports {
-				if p.Name == b.ServicePortName {
-					v := p.Port
-					b.ResolvedServicePortNumber = &v
-					break
-				}
-			}
-		}
-	}
-}
-
 func matches(labels, selector map[string]string) bool {
 	for k, v := range selector {
 		if labels[k] != v {
@@ -189,4 +158,32 @@ func matches(labels, selector map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// NamespaceView konvertiert alle Objekte eines Namespaces und löst bei den Services Replicas und benannte
+// targetPorts über die Pods auf. Das Ergebnis ist je Typ nach Name sortiert.
+func NamespaceView(ns *corev1.Namespace, project string, pods []*corev1.Pod, services []*corev1.Service, ingresses []*networkingv1.Ingress) model.NamespaceView {
+	v := model.NamespaceView{
+		Namespace: Namespace(ns, project),
+		Pods:      make([]model.StoredPod, 0, len(pods)),
+		Services:  make([]model.StoredService, 0, len(services)),
+		Ingresses: make([]model.StoredIngress, 0, len(ingresses)),
+	}
+	for _, p := range pods {
+		v.Pods = append(v.Pods, Pod(p))
+	}
+	for _, s := range services {
+		v.Services = append(v.Services, Service(s))
+	}
+	for _, i := range ingresses {
+		v.Ingresses = append(v.Ingresses, Ingress(i))
+	}
+	byName := func(a, b model.Meta) int { return strings.Compare(a.Name, b.Name) }
+	slices.SortFunc(v.Pods, func(a, b model.StoredPod) int { return byName(a.Meta, b.Meta) })
+	slices.SortFunc(v.Services, func(a, b model.StoredService) int { return byName(a.Meta, b.Meta) })
+	slices.SortFunc(v.Ingresses, func(a, b model.StoredIngress) int { return byName(a.Meta, b.Meta) })
+	for i := range v.Services {
+		ResolveService(&v.Services[i], v.Pods)
+	}
+	return v
 }

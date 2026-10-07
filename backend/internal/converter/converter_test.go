@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"feature-dashboard/internal/model"
-	"feature-dashboard/internal/store"
 )
 
 func testPod(name string, port int32) *corev1.Pod {
@@ -52,61 +51,26 @@ func testIngress() *networkingv1.Ingress {
 	}
 }
 
-func newStore(t *testing.T) *store.Store {
-	s := store.New()
-	err := s.Update(func(tx *store.Tx) error {
-		return tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "ns1"}, Project: "foo"})
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s
+func namespace() *corev1.Namespace {
+	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns1", Labels: map[string]string{"a": "b"}}}
 }
 
-func update(t *testing.T, s *store.Store, fn func(tx *store.Tx) error) {
-	t.Helper()
-	if err := s.Update(fn); err != nil {
-		t.Fatal(err)
-	}
+func view(pods ...*corev1.Pod) model.NamespaceView {
+	return NamespaceView(namespace(), "foo", pods, []*corev1.Service{testService()}, []*networkingv1.Ingress{testIngress()})
 }
 
-func getService(t *testing.T, s *store.Store) model.StoredService {
-	t.Helper()
-	var svc model.StoredService
-	if ok, err := s.Get(model.ObjectRef{Kind: model.KindService, Namespace: "ns1", Name: "web"}, &svc); !ok || err != nil {
-		t.Fatalf("Service fehlt: %v", err)
-	}
-	return svc
-}
-
-func getIngress(t *testing.T, s *store.Store) model.StoredIngress {
-	t.Helper()
-	var ing model.StoredIngress
-	if ok, err := s.Get(model.ObjectRef{Kind: model.KindIngress, Namespace: "ns1", Name: "web"}, &ing); !ok || err != nil {
-		t.Fatalf("Ingress fehlt: %v", err)
-	}
-	return ing
-}
-
-func TestServiceResolutionFollowsPods(t *testing.T) {
-	s := newStore(t)
-	update(t, s, func(tx *store.Tx) error { return ApplyService(tx, testService()) })
-	update(t, s, func(tx *store.Tx) error { return ApplyIngress(tx, testIngress()) })
-
-	svc := getService(t, s)
+func TestNamespaceViewResolvesServices(t *testing.T) {
+	// Ohne Pods: kein Replica, benannter targetPort nicht auflösbar, fehlender targetPort = Service-Port.
+	svc := view().Services[0]
 	if svc.Ports[0].ResolvedTargetPort != nil || len(svc.Replicas) != 0 {
 		t.Fatalf("ohne Pods darf nichts aufgelöst sein: %+v", svc)
 	}
 	if got := *svc.Ports[1].ResolvedTargetPort; got != 9090 {
 		t.Errorf("fehlender targetPort muss Service-Port ergeben, got %d", got)
 	}
-	if got := *getIngress(t, s).Rules[0].Paths[0].Backend.ResolvedServicePortNumber; got != 80 {
-		t.Errorf("Ingress-Port = %d", got)
-	}
 
-	// Pod-Create löst den Service neu auf.
-	update(t, s, func(tx *store.Tx) error { return ApplyPod(tx, testPod("web-1", 8080)) })
-	svc = getService(t, s)
+	// Mit Pod: Replica und Port aus dem Container.
+	svc = view(testPod("web-1", 8080)).Services[0]
 	if svc.Ports[0].ResolvedTargetPort == nil || *svc.Ports[0].ResolvedTargetPort != 8080 {
 		t.Fatalf("targetPort nicht aufgelöst: %+v", svc.Ports[0])
 	}
@@ -114,31 +78,41 @@ func TestServiceResolutionFollowsPods(t *testing.T) {
 		t.Fatalf("Replicas = %v", svc.Replicas)
 	}
 
-	// Pod-Update ändert die aufgelöste Port-Nummer.
-	update(t, s, func(tx *store.Tx) error { return ApplyPod(tx, testPod("web-1", 8081)) })
-	if got := *getService(t, s).Ports[0].ResolvedTargetPort; got != 8081 {
-		t.Fatalf("targetPort nach Pod-Update = %d", got)
+	// Geänderter Container-Port ändert die Auflösung.
+	if got := *view(testPod("web-1", 8081)).Services[0].Ports[0].ResolvedTargetPort; got != 8081 {
+		t.Fatalf("targetPort = %d", got)
 	}
 
-	// Pod-Delete entfernt Replica und Auflösung.
-	update(t, s, func(tx *store.Tx) error { return Remove(tx, model.KindPod, "ns1", "web-1") })
-	svc = getService(t, s)
-	if svc.Ports[0].ResolvedTargetPort != nil || len(svc.Replicas) != 0 {
-		t.Fatalf("nach Pod-Delete: %+v", svc)
-	}
-
-	// Service-Delete entfernt Ingress-Auflösung.
-	update(t, s, func(tx *store.Tx) error { return Remove(tx, model.KindService, "ns1", "web") })
-	if getIngress(t, s).Rules[0].Paths[0].Backend.ResolvedServicePortNumber != nil {
-		t.Fatal("Ingress-Port darf ohne Service nicht aufgelöst sein")
+	// Pods, die der Selector nicht trifft, sind keine Replicas.
+	other := testPod("db-1", 5432)
+	other.Labels = map[string]string{"app": "db"}
+	if svc := view(other).Services[0]; len(svc.Replicas) != 0 || svc.Ports[0].ResolvedTargetPort != nil {
+		t.Fatalf("fremder Pod: %+v", svc)
 	}
 }
 
-func TestObjectsOutsideKnownNamespacesAreDropped(t *testing.T) {
-	s := store.New()
-	update(t, s, func(tx *store.Tx) error { return ApplyPod(tx, testPod("web-1", 8080)) })
-	if _, ok := s.NamespaceLastUpdated("ns1"); ok {
-		t.Fatal("Namespace darf nicht entstehen")
+func TestNamespaceViewSortsAndConverts(t *testing.T) {
+	v := view(testPod("web-2", 8080), testPod("web-1", 8080))
+	if v.Namespace.Name != "ns1" || v.Namespace.Project != "foo" || v.Namespace.Labels["a"] != "b" {
+		t.Fatalf("Namespace = %+v", v.Namespace)
+	}
+	if v.Pods[0].Name != "web-1" || v.Pods[1].Name != "web-2" {
+		t.Fatalf("Pods nicht sortiert: %v, %v", v.Pods[0].Name, v.Pods[1].Name)
+	}
+	if got := v.Services[0].Replicas; len(got) != 2 || got[0] != "web-1" {
+		t.Fatalf("Replicas = %v", got)
+	}
+	if r := v.Ingresses[0].Rules[0]; r.Host != "web.example" || r.Paths[0].Path != "/" || r.Paths[0].Backend.ServiceName != "web" {
+		t.Fatalf("Ingress = %+v", v.Ingresses[0])
+	}
+}
+
+func TestConversionDoesNotShareMaps(t *testing.T) {
+	ns := namespace()
+	v := NamespaceView(ns, "foo", nil, nil, nil)
+	v.Namespace.Labels["a"] = "geändert"
+	if ns.Labels["a"] != "b" {
+		t.Fatal("Stored-Object darf den Cache nicht verändern")
 	}
 }
 

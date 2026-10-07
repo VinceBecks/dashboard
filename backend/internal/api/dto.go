@@ -14,7 +14,6 @@ import (
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/project"
-	"feature-dashboard/internal/store"
 )
 
 // Parents ordnen ein Objekt in die Hierarchie Projekt → Namespace → Service ein.
@@ -105,7 +104,7 @@ type IngressDTO struct {
 
 // buildNamespace baut den kompletten Teilbaum eines Namespaces. Pods werden unter jedem Service eingehängt, der
 // sie referenziert; Pods ohne Service und Services, die nicht vom Typ ClusterIP sind, entfallen.
-func (s *Server) buildNamespace(view store.NamespaceView) NamespaceDTO {
+func (s *Server) buildNamespace(view model.NamespaceView) NamespaceDTO {
 	ns := view.Namespace
 	project := ns.Project
 	nsParents := Parents{Project: project, Namespace: ns.Name}

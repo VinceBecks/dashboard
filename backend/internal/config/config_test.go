@@ -19,6 +19,7 @@ actionHandlers:
     projects: [foo-projekt]
     extra-handler-configs:
       force-delete: true
+# Der frühere Abschnitt store wird ignoriert (YAML-Prüfung nicht strikt).
 store:
   recreate-store-interval: 2d
 `
@@ -34,24 +35,6 @@ func TestParse(t *testing.T) {
 	a := cfg.ActionHandlers[0]
 	if a.Title != "Pod Löschen" || a.Extra["force-delete"] != true || len(a.Projects) != 1 || a.Projects[0] != "foo-projekt" {
 		t.Errorf("unerwarteter ActionHandler: %+v", a)
-	}
-	if cfg.Store.RecreateInterval.Duration() != 48*time.Hour {
-		t.Errorf("interval = %v", cfg.Store.RecreateInterval.Duration())
-	}
-}
-
-func TestParseInterval(t *testing.T) {
-	cases := map[string]time.Duration{"0": 0, "15m": 15 * time.Minute, "1h": time.Hour, "1d": 24 * time.Hour}
-	for in, want := range cases {
-		got, err := ParseInterval(in)
-		if err != nil || got != want {
-			t.Errorf("ParseInterval(%q) = %v, %v; want %v", in, got, err, want)
-		}
-	}
-	for _, in := range []string{"1s", "abc", "-1h", "h"} {
-		if _, err := ParseInterval(in); err == nil {
-			t.Errorf("ParseInterval(%q): Fehler erwartet", in)
-		}
 	}
 }
 
@@ -250,7 +233,7 @@ func TestClusterDNSName(t *testing.T) {
 			t.Errorf("%q: Fehler erwartet", invalid)
 		}
 	}
-	if _, err := Parse([]byte("store:\n  recreate-store-interval: 1h\n")); err == nil {
+	if _, err := Parse([]byte("projects: []\n")); err == nil {
 		t.Error("ohne cluster: Fehler erwartet")
 	}
 }
@@ -297,7 +280,7 @@ func TestCopyCommandsValidation(t *testing.T) {
 }
 
 func TestPipelines(t *testing.T) {
-	cfg, err := parse([]byte("store: {recreate-store-interval: 1h}\n"))
+	cfg, err := parse([]byte("projects: []\n"))
 	if err != nil {
 		t.Fatal(err)
 	}

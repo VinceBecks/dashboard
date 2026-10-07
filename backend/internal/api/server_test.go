@@ -20,7 +20,7 @@ import (
 	"feature-dashboard/internal/links"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/pipelines"
-	"feature-dashboard/internal/store"
+	"feature-dashboard/internal/testsource"
 )
 
 type podAction struct{ calls int }
@@ -38,10 +38,10 @@ func (p *podAction) Execute(context.Context, actions.StoredObject, map[string]an
 	return actions.Result{Success: true, Message: "ok"}
 }
 
-func setup(t *testing.T) (*store.Store, *Server, *podAction) {
+func setup(t *testing.T) (*testsource.Source, *Server, *podAction) {
 	t.Helper()
-	st := store.New()
-	err := st.Update(func(tx *store.Tx) error {
+	st := testsource.New()
+	err := st.Update(func(tx *testsource.Tx) error {
 		if err := tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "foo"}); err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func syncHub(srv *Server, sub *Subscription) []string {
 
 func TestSnapshot(t *testing.T) {
 	st, srv, _ := setup(t)
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		for _, svc := range []model.StoredService{
 			{Meta: model.Meta{Name: "shop-node-port"}, Type: "NodePort", Ports: []model.ServicePort{
 				{Name: "http", Port: 80, NodePort: 30080}, {Name: "intern", Port: 9090}, {Name: "admin", Port: 8081, NodePort: 30081},
@@ -165,7 +165,7 @@ func TestEvents(t *testing.T) {
 	}
 
 	// Pod wird ready → upsert für Service (running) und Pod, Parent zuerst.
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1", Namespace: "feat-1"}, Ready: true})
 		return err
 	})
@@ -179,7 +179,7 @@ func TestEvents(t *testing.T) {
 	}
 
 	// NodePort-Service angelegt und wieder gelöscht.
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		_, err := tx.Put(model.KindService, "feat-1", "web-node-port", model.StoredService{
 			Meta: model.Meta{Name: "web-node-port"}, Type: "NodePort", Ports: []model.ServicePort{{Port: 80, NodePort: 30080}},
 		})
@@ -189,7 +189,7 @@ func TestEvents(t *testing.T) {
 	if len(got) != 1 || got[0] != `upsert {"kind":"node-port-service","name":"web-node-port","parents":{"project":"foo","namespace":"feat-1"},"addresses":["nodes.example:30080"],"actions":[],"links":[],"copyCommands":[],"pipelines":[]}` {
 		t.Fatalf("events = %v", got)
 	}
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		_, err := tx.Delete(model.KindService, "feat-1", "web-node-port")
 		return err
 	})
@@ -199,14 +199,14 @@ func TestEvents(t *testing.T) {
 	}
 
 	// Service gelöscht → nur delete für den Service, der Pod fällt implizit mit weg.
-	_ = st.Update(func(tx *store.Tx) error { _, err := tx.Delete(model.KindService, "feat-1", "web"); return err })
+	_ = st.Update(func(tx *testsource.Tx) error { _, err := tx.Delete(model.KindService, "feat-1", "web"); return err })
 	got = syncHub(srv, sub)
 	if len(got) != 1 || got[0] != `delete {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"}}` {
 		t.Fatalf("events = %v", got)
 	}
 
 	// Projektwechsel → delete im alten, upsert im neuen Projekt.
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		return tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "bar"})
 	})
 	got = syncHub(srv, sub)
@@ -216,10 +216,26 @@ func TestEvents(t *testing.T) {
 	}
 
 	// Namespace entfernt → ein delete.
-	_ = st.Update(func(tx *store.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
+	_ = st.Update(func(tx *testsource.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
 	got = syncHub(srv, sub)
 	if len(got) != 1 || got[0] != `delete {"kind":"namespace","name":"feat-1","parents":{"project":"bar"}}` {
 		t.Fatalf("events = %v", got)
+	}
+}
+
+func TestFullResyncSendsOnlyRealDifferences(t *testing.T) {
+	_, srv, _ := setup(t)
+	_, sub, _ := subscribe(t, srv)
+	srv.hub.mu.Lock()
+	srv.hub.forgetRevisionsLocked()
+	srv.hub.mu.Unlock()
+	if got := syncHub(srv, sub); len(got) != 0 {
+		t.Fatalf("Neuaufbau ohne Änderungen darf keine Events erzeugen: %v", got)
+	}
+	for _, ns := range srv.hub.namespaces {
+		if ns.revision.IsZero() {
+			t.Fatal("nach dem Neuaufbau muss die Revision wieder gesetzt sein")
+		}
 	}
 }
 
@@ -227,7 +243,7 @@ func TestSlowSubscriberIsDropped(t *testing.T) {
 	st, srv, _ := setup(t)
 	_, sub, _ := subscribe(t, srv)
 	for i := range subscriberBuffer + 1 {
-		_ = st.Update(func(tx *store.Tx) error {
+		_ = st.Update(func(tx *testsource.Tx) error {
 			_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{Meta: model.Meta{Name: "web-1"}, Containers: []model.Container{{Name: "app", Image: strconv.Itoa(i)}}})
 			return err
 		})
@@ -262,7 +278,7 @@ func TestServiceAreas(t *testing.T) {
 	}
 
 	// Label-Änderung am Service → upsert mit neuen Bereichen (mehrfach, Config-Reihenfolge).
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		_, err := tx.Put(model.KindService, "feat-1", "web", model.StoredService{
 			Meta: model.Meta{Name: "web", Labels: map[string]string{"part-of": "shop", "monitored": "true"}},
 			Type: "ClusterIP", Replicas: []string{"web-1"},
@@ -308,7 +324,7 @@ func TestEventStream(t *testing.T) {
 	if ev := readEvent(); !strings.HasPrefix(ev, "id: 1\nevent: snapshot\ndata: {\"projects\":[{\"name\":\"foo\"") {
 		t.Fatalf("erstes Event = %q", ev)
 	}
-	_ = st.Update(func(tx *store.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
+	_ = st.Update(func(tx *testsource.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
 	want := "id: 2\nevent: delete\ndata: {\"kind\":\"namespace\",\"name\":\"feat-1\",\"parents\":{\"project\":\"foo\"}}\n"
 	if ev := readEvent(); ev != want {
 		t.Fatalf("zweites Event = %q", ev)
@@ -400,7 +416,7 @@ links:
 
 func TestCopyCommands(t *testing.T) {
 	st, _, _ := setup(t)
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		_, err := tx.Put(model.KindPod, "feat-1", "web-1", model.StoredPod{
 			Meta:       model.Meta{Name: "web-1", Namespace: "feat-1"},
 			Containers: []model.Container{{Name: "app"}, {Name: "sidecar"}},
@@ -478,7 +494,7 @@ func TestPipelines(t *testing.T) {
 func TestActionsRespectProjects(t *testing.T) {
 	st, srv, action := setup(t)
 	// Namespace in Projekt bar; die Aktion "restart" ist nur für foo freigegeben.
-	_ = st.Update(func(tx *store.Tx) error {
+	_ = st.Update(func(tx *testsource.Tx) error {
 		if err := tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "bar-1"}, Project: "bar"}); err != nil {
 			return err
 		}

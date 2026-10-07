@@ -38,7 +38,6 @@ Replica.
     - [`copy-commands`](#copy-commands)
     - [Templates in der Konfiguration](#templates-in-der-konfiguration)
     - [`cluster`](#cluster)
-    - [`store`](#store)
     - [`pipelines`](#pipelines)
     - [Prüfungen beim Start](#prüfungen-beim-start)
     - [Vollständiges Beispiel](#vollständiges-beispiel)
@@ -99,7 +98,7 @@ Ein Helm-Chart mit einer Demo-Anwendung liegt unter `helpers/demo-app`.
 | Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                    |
 | Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services; im Dashboard ein Reiter der Kachel.   |
 | Replica            | Ein Pod, der von einem Service über dessen Selector referenziert wird.                         |
-| Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts im In-Memory-Store.                 |
+| Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts, beim Lesen aus dem Informer-Cache erzeugt. |
 | Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch einen ActionHandler. |
 | Link               | Ein konfigurierter Absprung von einem Objekt in ein anderes System (z. B. Kibana).             |
 
@@ -109,10 +108,10 @@ Ein Helm-Chart mit einer Demo-Anwendung liegt unter `helpers/demo-app`.
 
 ```mermaid
 flowchart LR
-    K8s[(Kubernetes API)] -- List + Watch --> Inf[Informer<br/>Namespace, Service,<br/>Ingress, Pod]
-    Inf -- Events --> Proc[Event-Verarbeitung<br/>eine Goroutine]
-    Proc -- Converter --> Store[(In-Memory-Store<br/>json.RawMessage)]
-    Store -- Changes --> Hub[Event-Hub<br/>Diff je Namespace]
+    K8s[(Kubernetes API)] -- List + Watch --> Inf[Informer-Cache<br/>Namespace, Service,<br/>Ingress, Pod]
+    Inf -- Events: Revision je Namespace --> Hub[Event-Hub<br/>Diff je Namespace]
+    Inf -- Lister + Converter --> Hub
+    Pip[(Pipeline-ConfigMap)] -- Changes --> Hub
     Hub -- Server-Sent Events --> FE[Frontend]
     FE -- PATCH /api/actions --> API[HTTP-API]
     API --> Reg[ActionRegistry] --> H[ActionHandler] -- z . B . Pod löschen --> K8s
@@ -123,54 +122,44 @@ flowchart LR
 
 - Das Backend nutzt die **Informer-API** von `client-go` (`SharedInformerFactory`). Es werden genau vier
   Objekt-Typen beobachtet: **Namespace, Service, Ingress (`networking.k8s.io/v1`) und Pod**, clusterweit.
-- **Ein Event trägt nur den Schlüssel des Objekts.** Den aktuellen Zustand liest die Verarbeitung zum Zeitpunkt der
-  Verarbeitung aus dem Informer-Cache. Ist das Objekt dort nicht mehr vorhanden, wird es aus dem Store entfernt.
-- **Alle Events und Neuaufbauten laufen nacheinander in einer einzigen Goroutine.** Abhängige Änderungen können sich
-  dadurch nicht überholen.
-- **Nur Feature-Umgebungen werden verarbeitet.** Ein Namespace gehört zu einem Projekt, wenn er *alle* in
-  `namespace-labels` genannten Labels mit genau diesen Werten trägt. Objekte in anderen Namespaces werden verworfen.
-    - Bekommt ein Namespace nachträglich die passenden Labels, übernimmt das Backend sofort alle seine Objekte.
-    - Verliert er sie, verschwindet er samt Inhalt aus dem Store.
+- **Der Informer-Cache ist die einzige Datenquelle** (`kube.Cluster`). Es gibt keinen eigenen Store und keine Kopie
+  der Objekte. Der Cache ist durch List/Watch mit `resourceVersion` und Relist nach Watch-Abbruch konsistent.
+- **Schlanker Cache:** Ein Transform reduziert die Objekte beim Einlesen auf die genutzten Felder. Bei Pods bleiben
+  Container (Name, Image, Ports) und die Ready-Condition; managedFields entfallen bei allen Typen.
+- **Events markieren nur:** Ein Event merkt sich lediglich, dass sich ein Projekt-Namespace geändert hat (Revision je
+  Namespace). Objekte in anderen Namespaces kosten nur einen Map-Lookup.
+- **Nur Feature-Umgebungen:** Ein Namespace gehört zu einem Projekt, wenn er *alle* in `namespace-labels` genannten
+  Labels mit genau diesen Werten trägt. Objekte in anderen Namespaces werden nicht ausgeliefert.
+    - Bekommt ein Namespace nachträglich die passenden Labels, liefert das Backend sofort alle seine Objekte aus.
+    - Verliert er sie, verschwindet er samt Inhalt aus dem Dashboard.
 
 ### Converter und Referenzauflösung
 
-Von jedem Objekt werden nur Kern-Informationen übernommen:
+Beim Aufbau eines Namespaces konvertiert der Converter die Objekte aus dem Cache. Übernommen werden nur
+Kern-Informationen:
 
-| Objekt    | Gespeichert                                                                                              |
-|-----------|----------------------------------------------------------------------------------------------------------|
-| alle      | Name, Namespace, Labels, Annotations                                                                     |
-| Namespace | zusätzlich das zugeordnete Projekt                                                                       |
-| Pod       | Ready-Zustand, Container (Name, Image, Ports)                                                            |
-| Service   | Typ, Selector, Ports (Name, Protokoll, Port, Target-Port, aufgelöster Target-Port, NodePort), Replicas   |
-| Ingress   | je Regel: Host und je Pfad: Pfad-Typ, Pfad, Backend (Service, Port-Name/-Nummer, aufgelöste Port-Nummer) |
+| Objekt    | Übernommen                                                                                             |
+|-----------|--------------------------------------------------------------------------------------------------------|
+| alle      | Name, Namespace, Labels, Annotations                                                                   |
+| Namespace | zusätzlich das zugeordnete Projekt                                                                     |
+| Pod       | Ready-Zustand, Container (Name, Image, Ports)                                                          |
+| Service   | Typ, Selector, Ports (Name, Protokoll, Port, Target-Port, aufgelöster Target-Port, NodePort), Replicas |
+| Ingress   | je Regel: Host und je Pfad: Pfad-Typ, Pfad, Backend-Service                                            |
 
-Beim Konvertieren werden **Referenzen aufgelöst**:
+Dabei werden **Referenzen aufgelöst**: Die *Replicas* eines Services sind die Pods im Namespace, deren Labels den
+Selector erfüllen. Ein benannter `targetPort` (z. B. `http`) wird über die Container-Ports dieser Pods zur
+Port-Nummer aufgelöst. Weil bei jedem Aufbau alles neu berechnet wird, gibt es keine inkrementell gepflegten,
+abhängigen Objekte.
 
-- **Service:** Die *Replicas* sind die Pods im Namespace, deren Labels den Selector erfüllen. Ein benannter
-  `targetPort` (z. B. `http`) wird über die Container-Ports dieser Pods zur Port-Nummer aufgelöst.
-- **Ingress:** Ein Backend, das den Service-Port per Name referenziert, bekommt die Port-Nummer des Services.
+### Event-Hub
 
-Eine Änderung an einem Objekt kann dadurch andere Stored-Objects betreffen. Deshalb wird nach jeder Änderung in
-derselben Transaktion neu aufgelöst:
-
-- Nach einem Pod-Event: alle Services und danach alle Ingresses des Namespaces.
-- Nach einem Service-Event: alle Ingresses des Namespaces.
-
-### In-Memory-Store
-
-- **Alles liegt im Speicher, es gibt keine Datenbank.** Gespeichert wird als `json.RawMessage`. Beim Schreiben wird
-  serialisiert, beim Lesen deserialisiert. So hält niemand einen Pointer auf den Zustand im Store, und jeder Leser
-  bekommt eine Kopie.
-- **Nebenläufigkeit:** Ein `sync.RWMutex` schützt den Store. Änderungen laufen als Transaktion (`Store.Update`), damit
-  Leser zusammengehörige Änderungen auf einmal sehen.
-- **Zeitstempel je Namespace:** Der Store führt je Namespace einen Zeitstempel für Änderungen an Objekten darin oder am
-  Namespace selbst. Gesetzt wird er nur, wenn sich das gespeicherte JSON tatsächlich ändert. Nach jeder Änderung
-  signalisiert der Store das dem Event-Hub (`Store.Changes`).
-- **Periodischer Neuaufbau** (`store.recreate-store-interval`):
-    1. Das Backend startet frische Informer, baut daraus einen komplett neuen Store-Inhalt und tauscht ihn auf einmal
-       aus.
-    2. Zeitstempel ändern sich nur für Namespaces, deren Inhalt sich unterscheidet. Ein Neuaufbau ohne Änderungen löst
-       also keine Events aus.
+- Der Hub baut jeden Namespace, dessen Revision (im Cluster oder bei den laufenden Pipelines) sich geändert hat, neu
+  auf und vergleicht das Ergebnis Objekt für Objekt mit dem zuletzt verschickten Stand. Verschickt werden nur echte
+  Unterschiede.
+- **Sicherheitsnetz:** Einmal pro Stunde baut er alle Namespaces neu auf. Auch dabei entstehen Events nur für
+  tatsächliche Unterschiede.
+- **Nebenläufigkeit:** Lister-Objekte zeigen in den Cache und werden nie verändert; nur `kube` und `converter` greifen
+  auf sie zu, der Converter klont alle Maps.
 
 ### Aktionen
 
@@ -179,8 +168,8 @@ derselben Transaktion neu aufgelöst:
 - **Sichtbarkeit:** Ob eine Aktion an einem Objekt angeboten wird, entscheiden zwei Stellen. Zuerst prüft die
   Registry das Projekt (`projects`), dann entscheidet der Handler selbst (`IsApplicable`). Benötigt der Handler
   Eingaben, beschreibt er sie als Formular-Felder, und das Frontend baut daraus generisch ein Formular.
-- **Kein Schreiben in den Store:** Ein Handler verändert nur den Cluster oder ein externes System. Die Änderung
-  kommt ausschließlich über die Informer-Events in den Store.
+- **Kein eigener Zustand:** Ein Handler verändert nur den Cluster oder ein externes System. Die Änderung kommt
+  ausschließlich über die Informer-Events ins Dashboard.
 
 ### Links
 
@@ -194,11 +183,11 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 |------------------------------------|----------------------------------------------------------------------------|
 | `cmd/dashboard`                    | Start, Flags, Verdrahtung, Registrierung der Handler-Typen                 |
 | `internal/config`                  | `config.yaml` laden und prüfen                                             |
-| `internal/model`                   | Stored-Object-Strukturen                                                   |
+| `internal/model`                   | Stored-Object-Strukturen, `NamespaceView`                                  |
 | `internal/project`                 | Namespace-Labels → Projekt                                                 |
-| `internal/store`                   | In-Memory-Store, Transaktionen, Zeitstempel                                |
-| `internal/converter`               | k8s-Objekt → Stored-Object, Referenzauflösung                              |
-| `internal/kube`                    | Kubernetes-Client, Informer, Event-Verarbeitung, Neuaufbau                 |
+| `internal/converter`               | k8s-Objekt → Stored-Object, Referenzauflösung beim Aufbau                  |
+| `internal/kube`                    | Kubernetes-Client, Informer-Cache als Datenquelle, Revisionen je Namespace |
+| `internal/testsource`              | In-Memory-Datenquelle für Tests                                            |
 | `internal/actions`                 | Handler-Interface, ActionRegistry, Prüfung der Formular-Eingaben           |
 | `internal/actions/deletepod`       | Aktion `delete-pod`                                                        |
 | `internal/actions/nodeportservice` | Aktionen `node-port-service-on-service-base`, `delete-node-port-service`   |
@@ -231,9 +220,9 @@ Ablauf beim Start:
 1. Die Konfiguration wird gelesen und vollständig geprüft. Bei einem Fehler bricht der Start ab, siehe
    [Prüfungen beim Start](#prüfungen-beim-start).
 2. Die Handler aller aktiven Aktionen werden erzeugt und konfiguriert, die Link-Templates werden geparst.
-3. Der HTTP-Server startet sofort. `/readyz` meldet erst nach dem ersten erfolgreichen Aufbau des Stores `200`.
-   Schlägt der Aufbau fehl, etwa wegen eines nicht erreichbaren Clusters, versucht das Backend es alle 10 Sekunden
-   erneut. Für die Synchronisierung der Informer gilt ein Timeout von 2 Minuten.
+3. Die ConfigMap mit den laufenden Pipelines wird gelesen bzw. angelegt.
+4. Der HTTP-Server startet sofort. `/readyz` meldet `200`, sobald der Informer-Cache synchronisiert ist. Ist der
+   Cluster nicht erreichbar, versuchen die Informer es selbstständig weiter.
 
 Bei `SIGINT`/`SIGTERM` fährt das Backend geordnet herunter.
 
@@ -253,7 +242,6 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 | `link-variables` | nein    | Statische Variablen für Link-Templates und Kopier-Befehle            |
 | `copy-commands`  | nein    | Befehle (z. B. `kubectl exec`), die das Dashboard zum Kopieren anbietet |
 | `cluster`        | ja      | Angaben zum Cluster: der DNS-Name der Nodes für NodePort-Adressen    |
-| `store`          | nein    | Verhalten des In-Memory-Stores                                       |
 | `pipelines`      | nein    | Ablage und Status-Abfrage laufender GitLab-Pipelines                 |
 
 > **YAML-Hinweise**
@@ -659,17 +647,6 @@ cluster:
 `dns-name` ist Pflicht und gilt für alle NodePort-Services. Das Backend berechnet daraus je Port die Adresse
 `<dns-name>:<nodePort>`; das Dashboard zeigt sie auf der Kachel des Namespaces mit einem Kopieren-Button an.
 
-### `store`
-
-```yaml
-store:
-  recreate-store-interval: 1h
-```
-
-| Feld                      | Standard | Bedeutung                                                                                                                  |
-|---------------------------|----------|----------------------------------------------------------------------------------------------------------------------------|
-| `recreate-store-interval` | `0`      | Abstand des periodischen Neuaufbaus. `0` schaltet ihn ab. Erlaubt sind `<n>m`, `<n>h` und `<n>d`, z. B. `30m`, `2h`, `1d`. |
-
 ### `pipelines`
 
 ```yaml
@@ -715,7 +692,6 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
     - Es gibt mindestens ein Target, nur gültige Objekt-Typen, und jedes Target hat ein nicht leeres `command`.
     - Alle Templates sind syntaktisch korrekt.
 - **Cluster:** `dns-name` ist gesetzt und ein gültiger DNS-Name oder eine IP.
-- **Store:** `recreate-store-interval` hat ein gültiges Format.
 - **Pipelines:** `poll-interval` ist eine Go-Dauer von mindestens `5s`; Env-Variablen aus `status-token-env` sind
   gesetzt.
 
@@ -739,7 +715,7 @@ Internetzugang.
 | PATCH   | `/api/actions/{action-name}`        | Aktion auf einem Objekt ausführen                                       |
 | GET     | `/api/openapi.yaml`, `/api/swagger` | API-Beschreibung                                                        |
 | GET     | `/healthz`                          | Liveness, immer `200`                                                   |
-| GET     | `/readyz`                           | Readiness: `200` nach dem ersten Aufbau des Stores, vorher `503`        |
+| GET     | `/readyz`                           | Readiness: `200`, sobald der Informer-Cache synchronisiert ist, vorher `503` |
 
 Ältere Konfigurationen mit `frontend` starten weiterhin; der Schlüssel wird ignoriert. `cluster.dns-name` ist dagegen
 Pflicht.
@@ -820,8 +796,8 @@ Backend-Daten.
     - **Objekt:** `obj.Object` ist eine Kopie vom Typ `model.StoredNamespace`, `StoredService`, `StoredIngress` oder
       `StoredPod`. `obj.Project` enthält das Projekt.
     - **Abhängigkeiten:** Über `actions.Deps` bekommt der Handler den Kubernetes-Client (`Client`) und einen
-      Lesezugriff auf den Store (`Store`).
-    - **Kein Schreiben in den Store:** Der Handler ändert nur den Cluster bzw. das externe System. Der Store
+      Lesezugriff auf den Informer-Cache (`Store`, Schnittstelle `actions.ObjectReader`).
+    - **Kein eigener Zustand:** Der Handler ändert nur den Cluster bzw. das externe System. Das Dashboard
       aktualisiert sich über die Informer-Events.
     - **Formular-Felder:** Mögliche Typen sind `text`, `number`, `select` und `multi-select`, mit `ID`, `Label`,
       `IsRequired`, `Description` und bei Auswahlfeldern `Options`.
@@ -865,7 +841,8 @@ kubectl apply -f backend/deploy/gitlab-secret.example.yaml
 - **Secret:** Das Secret `feature-dashboard-gitlab` wird per `envFrom` als Umgebungsvariablen geladen. Es ist
   optional, das Backend startet also auch ohne dieses Secret.
 - **Proben:** Liveness prüft `/healthz`, Readiness prüft `/readyz`.
-- **Ein Replica:** Das Backend muss **immer auf genau ein Replica** laufen, weil der Store im Speicher liegt.
+- **Ein Replica:** Das Backend muss **immer auf genau ein Replica** laufen: Es ist der einzige Schreiber der
+  Pipeline-ConfigMap, und jede Replica hielte einen eigenen Informer-Cache und eigene Event-Streams.
 
 ### Benötigte Rechte (ClusterRole)
 
@@ -920,6 +897,6 @@ Umsetzungspläne in `plans/`.
 | `WARN Link konnte nicht erzeugt werden … map has no entry for key`        | Die Variable fehlt in `link-variables` bzw. `link-variables-overrides`.                                                                                                |
 | Link-URL enthält Leerzeichen bzw. ist kaputt                              | Blockstil `>-` statt `\|-` verwendet, oder ein Wert wurde nicht mit `urlquery`/`pathescape` kodiert.                                                                   |
 | Namespace erscheint nicht im Dashboard                                    | Labels prüfen: Der Namespace muss **alle** `namespace-labels` eines Projekts mit genau diesen Werten tragen.                                                           |
-| `/readyz` liefert dauerhaft `503`                                         | Der Cluster ist nicht erreichbar, oder Rechte fehlen. Log prüfen: `initialer Aufbau des Stores fehlgeschlagen`.                                                        |
+| `/readyz` liefert dauerhaft `503`                                         | Der Cluster ist nicht erreichbar, oder Rechte fehlen. Log prüfen: `Informer-Cache nicht synchronisiert` bzw. Fehler der Informer (Rechte, Erreichbarkeit).                                                        |
 | Aktion fehlt an einem Objekt                                              | Das Projekt steht nicht in `projects` der Aktion, oder der Handler hält sie nicht für anwendbar (Bedingungen siehe [Mitgelieferte Aktionen](#mitgelieferte-aktionen)). |
 | Kopieren-Button tut nichts                                                | Ohne HTTPS greift ein Ausweichweg über ein Textfeld. Manche Browser blockieren auch diesen.                                                                            |

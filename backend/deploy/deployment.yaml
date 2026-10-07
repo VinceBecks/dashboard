@@ -4,7 +4,7 @@ metadata:
   name: feature-dashboard-backend
   namespace: feature-dashboard
 spec:
-  replicas: 1 # Der Store ist in-memory: immer genau ein Replica.
+  replicas: 1 # Immer genau ein Replica: einziger Schreiber der Pipeline-ConfigMap, ein Informer-Cache.
   strategy:
     type: Recreate
   selector:

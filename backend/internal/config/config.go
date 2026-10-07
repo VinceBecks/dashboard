@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 type Config struct {
 	Projects       []Project             `yaml:"projects"`
 	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
-	Store          StoreConfig           `yaml:"store"`
 	Cluster        ClusterConfig         `yaml:"cluster"`
 	Pipelines      PipelinesConfig       `yaml:"pipelines"`
 	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt per link-variables-overrides
@@ -175,49 +173,6 @@ func (a ActionHandlerConfig) HandlerType() string {
 		return a.Handler
 	}
 	return a.Name
-}
-
-// StoreConfig konfiguriert den In-Memory-Store.
-type StoreConfig struct {
-	RecreateInterval Interval `yaml:"recreate-store-interval"`
-}
-
-// Interval ist eine Dauer in Minuten (m), Stunden (h) oder Tagen (d). 0 bedeutet deaktiviert.
-type Interval time.Duration
-
-// Duration liefert das Interval als time.Duration.
-func (i Interval) Duration() time.Duration { return time.Duration(i) }
-
-// UnmarshalYAML parst Werte wie "0", "30m", "2h" oder "1d".
-func (i *Interval) UnmarshalYAML(node *yaml.Node) error {
-	d, err := ParseInterval(node.Value)
-	if err != nil {
-		return err
-	}
-	*i = Interval(d)
-	return nil
-}
-
-// ParseInterval parst "0" oder "<n>m", "<n>h", "<n>d".
-func ParseInterval(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" || s == "0" {
-		return 0, nil
-	}
-	unit := s[len(s)-1]
-	n, err := strconv.Atoi(s[:len(s)-1])
-	if err != nil || n < 0 {
-		return 0, fmt.Errorf("ungültiges Interval %q: erwartet 0 oder <Zahl>m|h|d", s)
-	}
-	switch unit {
-	case 'm':
-		return time.Duration(n) * time.Minute, nil
-	case 'h':
-		return time.Duration(n) * time.Hour, nil
-	case 'd':
-		return time.Duration(n) * 24 * time.Hour, nil
-	}
-	return 0, fmt.Errorf("ungültiges Interval %q: erwartet 0 oder <Zahl>m|h|d", s)
 }
 
 // Load liest die Konfiguration aus der angegebenen Datei.

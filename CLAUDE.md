@@ -29,11 +29,11 @@ Backend-Pakete (`backend/`):
 |-------------------------------|---------------------------------------------------------------------------|
 | `cmd/dashboard`               | Startup, Wiring, Registrierung der ActionHandler                          |
 | `internal/config`             | `config.yaml` laden/validieren                                            |
-| `internal/model`              | Stored-Object-Structs                                                     |
+| `internal/model`              | Stored-Object-Structs, `NamespaceView`                                    |
 | `internal/project`            | Namespace-Labels → Projekt                                                |
-| `internal/store`              | In-Memory-Store (`json.RawMessage`), Transaktionen, Timestamps            |
-| `internal/converter`          | k8s-Objekt → Stored-Object, Referenzauflösung inkl. abhängiger Objekte    |
-| `internal/kube`               | Informer, Event-Verarbeitung (eine Goroutine), periodischer Full-Rebuild  |
+| `internal/converter`          | k8s-Objekt (aus dem Lister) → Stored-Object; `NamespaceView` löst Replicas und targetPorts beim Aufbau auf |
+| `internal/kube`               | `Cluster`: Informer-Cache als einzige Datenquelle, Lister-Zugriff, Revisionen je Projekt-Namespace, Trim-Transform |
+| `internal/testsource`         | In-Memory-Datenquelle nur für Tests (erfüllt `api.Source` und `actions.ObjectReader`) |
 | `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
 | `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
 | `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht) |
@@ -80,7 +80,7 @@ Aktionen), `src/hooks/useDashboardEvents.ts` (EventSource auf `GET /api/events`)
 | Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                          |
 | Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services, zugeordnet über Service-Labels; ein Reiter. |
 | Replica            | Ein Pod, der von einem Anwendungs-Service referenziert wird.                                         |
-| Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts im In-Memory-Store.                       |
+| Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts, beim Lesen aus dem Informer-Cache erzeugt. |
 | Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch genau einen ActionHandler. |
 
 Ob ein Namespace eine Feature-Umgebung ist und zu welchem Projekt er gehört, wird ausschließlich über Labels am
@@ -94,7 +94,6 @@ Namespace bestimmt. Welche Labels für welches Projekt gelten, steht in der `con
 
 - Es wird die Bibliothek `client-go` verwendet
 - Das Backend nutzt die Informer-API von `client-go` (`SharedInformerFactory`, Event-Handler, Lister), um stets aktuell zu sein.
-- In einem definierbaren Interval wird der komplette store geleert und neu befüllt, um regelmäßig einen sauberen Stand zu haben, der nicht durch Fehler bei der Erfassung vorgekommen ist. Der Interval ist konfigurierbar über die `config.yaml`  
 - Relevant sind nur vier Objekt-Typen: **Namespace, Service, Ingress, Pod**. Keine weiteren Typen beobachten.
 - Von diesen Objekten werden nur wenige Kern-Informationen übernommen, nicht das vollständige Objekt.
 - Es werden nur Objekte verarbeitet, die zu einem Projekt gehören (erkennbar an den Labels ihres Namespaces). Alles
@@ -104,30 +103,28 @@ Namespace bestimmt. Welche Labels für welches Projekt gelten, steht in der `con
 
 ### Converter
 
-Bei jedem Create/Update/Delete eines relevanten Objekts wird es in die Stored-Object-Struktur konvertiert und im Store
-abgelegt bzw. daraus entfernt.
+Der Converter (`internal/converter`) wandelt die Objekte aus den Listern in Stored-Objects um. `NamespaceView`
+konvertiert alle Objekte eines Namespaces und löst dabei Referenzen auf: Replicas eines Services (Pods, die der
+Selector trifft) und benannte targetPorts (`targetPort: http` → Port-Nummer aus den Container-Ports der Replicas).
+Da bei jedem Aufbau alles neu berechnet wird, gibt es keine inkrementell gepflegten, abhängigen Objekte.
 
-Beim Konvertieren werden Referenzen aufgelöst. Beispiel: Referenziert ein Service den Container-Port per Name
-(`targetPort: http`), wird die zugehörige Port-Nummer ermittelt und zusätzlich am Stored-Service gespeichert.
+### Datenquelle: Informer-Cache (`kube.Cluster`)
 
-Daraus folgt: Eine Änderung an einem Objekt kann ein anderes Stored-Object betreffen (z. B. ändert ein Pod-Update die
-aufgelöste Port-Nummer eines Service). Das beim Implementieren von Converter-Logik berücksichtigen.
+- Einzige Datenquelle ist der Informer-Cache von client-go. Es gibt **keinen eigenen Store** und keine Kopie der
+  Objekte daneben, auch keinen periodischen Neuaufbau: Der Informer ist durch List/Watch mit `resourceVersion` und
+  Relist nach Watch-Abbruch konsistent, und der Event-Hub vergleicht das Ergebnis.
+- Lister liefern Pointer in den Cache: **Lister-Objekte nie verändern**, nur über den `converter` lesen (er klont
+  Maps). Zugriff auf Lister nur in `kube` und `converter`.
+- Ein Transform (`trim`) reduziert den Cache auf die genutzten Felder (bei Pods: Container mit Name/Image/Ports,
+  Ready-Condition; bei allen ohne managedFields). Werden weitere Felder gebraucht, `trim` erweitern.
+- Die Event-Handler merken sich nur, welcher Projekt-Namespace sich geändert hat (`NamespaceRevisions`, Signal über
+  `Changes()`); Objekte in anderen Namespaces kosten nur einen Map-Lookup. Lesen: `Namespace(name)` (komplette
+  `NamespaceView`), `Get(ref)`, `Services(namespace)`.
+- Alle Daten liegen in-memory; einzige Persistenz ist die Pipeline-ConfigMap (siehe unten).
 
-### In-Memory-Store
+#### Konvertierte Informationen je Objekt
 
-- Alle Stored-Objects liegen ausschließlich in-memory. Keine Datenbank, keine Persistenz.
-- Gespeichert wird als `json.RawMessage`. **Das ist Absicht:** Durch Serialisierung beim Schreiben und Deserialisierung
-  beim Lesen entstehen immer Kopien. Niemand hält einen Pointer auf den Zustand im Store.
-- Deshalb: keine Pointer auf Structs im Store ablegen und keine Caches mit deserialisierten Objekten daneben aufbauen,
-  die diese Garantie unterlaufen.
-- Der Store wird nebenläufig gelesen (HTTP) und geschrieben (Informer-Events) und muss entsprechend
-  abgesichert sein.
-- Der Store merkt sich je Namespace, wann zuletzt der Namespace selbst oder ein Objekt darin hinzugefügt/verändert/
-  entfernt wurde (`NamespaceRevisions`), und signalisiert Änderungen über `Changes()`. Darauf baut der Event-Hub auf.
-
-#### Gespeicherte Informationen je Objekt
-
-Je Objekt werden folgende Informationen gespeichert:
+Je Objekt werden folgende Informationen übernommen:
 
 - Name
 - Labels
@@ -156,7 +153,7 @@ Zusätzliche Informationen für Ingresses:
     - host + je path:
         - pathType
         - path
-        - backend (inkl. aufgelöster Service-Port-Number)
+        - backend (Service-Name)
 
 ### Konfiguration (`config.yaml`)
 
@@ -164,11 +161,10 @@ Wird beim Startup einmal eingelesen. Enthält:
 
 1. Die Projekte und die für sie relevanten Namespace-Labels.
 2. Die ActionHandler und ob sie aktiviert sind.
-3. Store konfiguration
-4. Cluster-Angaben (Pflicht)
-5. Links (optional)
-6. Kopier-Befehle (optional)
-7. Ablage laufender Pipelines (optional)
+3. Cluster-Angaben (Pflicht)
+4. Links (optional)
+5. Kopier-Befehle (optional)
+6. Ablage laufender Pipelines (optional)
 
 Beispiel für Projekte:
 
@@ -203,8 +199,7 @@ projects:
 ```
 
   Ein Service kann in mehreren Bereichen liegen; nicht zugeordnete Services gehören zu `others`. Die Zuordnung
-  berechnet das Backend beim Aufbau der DTOs (`project.ServiceAreaIDs`, `areas` am Service); der Store bleibt
-  unverändert. Gleiche Bereiche in mehreren Projekten per YAML-Anker (`&name` / `*name`) wiederverwenden.
+  berechnet das Backend beim Aufbau der DTOs (`project.ServiceAreaIDs`, `areas` am Service). Gleiche Bereiche in mehreren Projekten per YAML-Anker (`&name` / `*name`) wiederverwenden.
 
 Beispiel für ActionHandler:
 
@@ -293,7 +288,7 @@ pipelines:                                    # optional, gezeigt sind die Stand
   (genau ein Replica) ist der einzige Schreiber, liest sie beim Start und schreibt jede Änderung zurück.
 - Zustand nie an Objekten der Feature-Umgebungen ablegen (Annotations o. Ä.): Sie werden per ArgoCD mit auto-sync
   und self-heal verwaltet, fremde Änderungen werden zurückgesetzt.
-- Änderungen an `State` lösen Events aus wie Änderungen im Store (der Event-Hub beachtet beide Revisionen je
+- Änderungen an `State` lösen Events aus wie Änderungen im Cluster (der Event-Hub beachtet beide Revisionen je
   Namespace).
 
 
@@ -359,12 +354,6 @@ copy-commands:
 - Templates werden beim Start geparst (Fehler → Startabbruch); lässt sich ein Befehl für ein Objekt nicht rendern,
   wird nur dieser weggelassen.
 
-Beispiel für store-konfiguration
-```yaml
-store:
-  recreate-store-interval: 1h
-```
-
 Beispiel für Cluster-Angaben (Pflicht):
 
 ```yaml
@@ -376,7 +365,6 @@ cluster:
   `<dns-name>:<node-port>` und sendet sie als `addresses` am NodePort-Service. Fehlt `dns-name`, startet das Backend
   nicht.
 
-- `recreate-store-interval` häufigkeit in der, der komplette store erneuert wird. Möglich ist auch eine '0' einzutragen, um das Verhalten zu disablen. Ansonsten sind möglich Minuten, Stunden oder Tage anzugeben
 
 ### Aktionen
 
@@ -386,8 +374,8 @@ cluster:
 - Der ActionHandler entscheidet selbst:
     1. ob er für ein konkretes Objekt *applicable* ist,
     2. ob er zum Ausführen zusätzliche Eingaben vom Nutzer braucht, und wenn ja, welche Formular-Felder.
-- Ein ActionHandler kann Veränderungen in Kubernetes vornehmen (Pods löschen, Service erstellen, ...). Diese werden aber
-  nicht von der Aktion im Store verändert. Die Veränderung kommt nur über die Informer-Events.
+- Ein ActionHandler kann Veränderungen in Kubernetes vornehmen (Pods löschen, Service erstellen, ...). Die Aktion
+  ändert keinen Zustand im Backend; die Veränderung kommt nur über die Informer-Events.
 - Ein ActionHandler gibt ein Result zurück, welches zeigt, ob die Aktion erfolgreich ausgeführt wurde oder nicht
 
 Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Registry registrieren, Eintrag in der
@@ -426,15 +414,17 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 
 #### Event-Mechanismus
 
-- Der Event-Hub (`internal/api/events.go`) wartet auf `store.Changes()`, baut jeden Namespace mit geändertem
-  Zeitstempel neu als DTO-Teilbaum auf und vergleicht ihn Objekt für Objekt (JSON-Bytes) mit dem zuletzt
-  verschickten Stand. So werden auch abgeleitete Änderungen (`running`, URLs, Anwendbarkeit von Aktionen) und der
-  periodische Neuaufbau erfasst.
+- Der Event-Hub (`internal/api/events.go`) liest über die Schnittstelle `api.Source` (im Betrieb `kube.Cluster`).
+  Er wartet auf `Changes()`, baut jeden Namespace mit geänderter Revision neu als DTO-Teilbaum auf und vergleicht ihn
+  Objekt für Objekt (JSON-Bytes) mit dem zuletzt verschickten Stand. So werden auch abgeleitete Änderungen
+  (`running`, URLs, Anwendbarkeit von Aktionen) erfasst.
+- Einmal pro Stunde baut der Hub alle Namespaces neu auf (`fullResyncInterval`), als Sicherheitsnetz gegen verpasste
+  Signale; Events entstehen dabei nur für echte Unterschiede.
 - `upsert` enthält das Objekt ohne Kind-Listen und kommt Parent vor Kind; `delete` enthält `kind`, `name`,
   `parents`, kommt Kind vor Parent und entfällt für Kinder eines ebenfalls gelöschten Parents.
 - Snapshot und Abo entstehen unter demselben Lock, dazwischen geht kein Event verloren. Ein Reconnect erhält immer
   einen neuen Snapshot (`Last-Event-ID` wird ignoriert). Zu langsame Clients werden getrennt und verbinden sich neu.
-- Der Hub hält nur JSON-Bytes, keine deserialisierten Objekte (Store-Garantie).
+- Der Hub hält nur JSON-Bytes der zuletzt verschickten DTOs, keine Kopie der Kubernetes-Objekte.
 
 ## Frontend
 
@@ -475,13 +465,14 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 
 ## Leitplanken für Änderungen
 
-- Nur Namespace, Service, Ingress und Pod beobachten; nur Kern-Informationen speichern.
-- Store-Inhalte bleiben `json.RawMessage`.
-- Einzige Persistenz außerhalb des Stores ist die Pipeline-ConfigMap (`internal/pipelines`); sie wird nicht per
-  Informer beobachtet. Keinen Zustand an ArgoCD-verwalteten Objekten ablegen.
+- Nur Namespace, Service, Ingress und Pod beobachten; nur Kern-Informationen übernehmen.
+- Einzige Datenquelle ist der Informer-Cache (`kube.Cluster`); keinen eigenen Store und keine Kopie daneben aufbauen.
+  Lister-Objekte nie verändern.
+- Einzige Persistenz ist die Pipeline-ConfigMap (`internal/pipelines`); sie wird nicht per Informer beobachtet.
+  Keinen Zustand an ArgoCD-verwalteten Objekten ablegen.
 - Aktionslogik gehört ins Backend in genau einen ActionHandler, nie ins Frontend.
 - Projekte, Labels und aktive Aktionen kommen aus der `config.yaml`, nicht aus dem Code.
-- Ändert ein ActionHandler den Cluster, muss der Store konsistent mitgeführt werden.
+- Ändert ein ActionHandler den Cluster, kommt die Änderung ausschließlich über die Informer-Events ins Dashboard.
 
 ## Getroffene Entscheidungen
 
@@ -493,10 +484,9 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 - Service-Bereiche sind Reiter in der Namespace-Kachel (kein seitenweiter Filter). NodePort-Services kommen als eigenes Attribut `nodePortServices` mit fertigen Adressen;
   `cluster.dns-name` ist dafür Pflicht.
 - Aktionen werden im Frontend immer über einen Dialog bestätigt; Formular-Felder erscheinen darin, falls vorhanden.
-- Informer-Event zu einem Objekt, das bereits im Store liegt: immer überschreiben; Timestamps (und damit Events)
-  ändern sich nur, wenn sich das gespeicherte JSON tatsächlich ändert.
-- Periodischer Neuaufbau: frische Informer, kompletter neuer Store-Inhalt, atomarer Austausch;
-  Timestamps nur für Namespaces mit abweichendem Inhalt.
+- Kein eigener Store und kein periodischer Neuaufbau mit frischen Informern (Plan
+  `plans/informer-cache-statt-store.md`): Der Informer-Cache ist konsistent, der Event-Hub baut geänderte
+  Namespaces neu auf und verschickt nur echte Unterschiede; stündlich gleicht er zusätzlich alles ab.
 
 ## Noch nicht festgelegt
 

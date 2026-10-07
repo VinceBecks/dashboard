@@ -49,8 +49,8 @@ type Result struct {
 	Message string `json:"message"`
 }
 
-// Handler setzt genau eine Aktion um. Er verändert nur den Cluster, nie den Store;
-// der Store wird ausschließlich über die Informer-Events aktualisiert.
+// Handler setzt genau eine Aktion um. Er verändert nur den Cluster (oder ein externes System); das Dashboard
+// aktualisiert sich ausschließlich über die Informer-Events.
 type Handler interface {
 	// Configure übernimmt die handler-spezifischen extra-handler-configs.
 	Configure(extra map[string]any) error
@@ -62,8 +62,8 @@ type Handler interface {
 	Execute(ctx context.Context, obj StoredObject, inputs map[string]any) Result
 }
 
-// ObjectReader liest Stored-Objects als Kopie aus dem Store (siehe store.Store.Get und store.Store.Services).
-// Handler dürfen den Store nur lesen; Änderungen kommen ausschließlich über die Informer-Events.
+// ObjectReader liest Stored-Objects aus dem Informer-Cache (siehe kube.Cluster.Get und kube.Cluster.Services).
+// Die Werte sind Kopien; Änderungen kommen ausschließlich über die Informer-Events.
 type ObjectReader interface {
 	Get(ref model.ObjectRef, out any) (bool, error)
 	// Services liefert alle Services eines Namespaces (leer, wenn der Namespace unbekannt ist).

@@ -107,7 +107,7 @@ func (h *Handler) Execute(ctx context.Context, obj actions.StoredObject, inputs 
 		}
 	}
 
-	// Der Basis-Service wird frisch gelesen: Die ownerReference braucht seine UID, und der Store-Stand kann
+	// Der Basis-Service wird frisch gelesen: Die ownerReference braucht seine UID, und der Cache-Stand kann
 	// veraltet sein.
 	current, err := h.client.CoreV1().Services(obj.Ref.Namespace).Get(ctx, base.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {

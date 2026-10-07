@@ -13,7 +13,7 @@ import (
 	"feature-dashboard/internal/actions"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/model"
-	"feature-dashboard/internal/store"
+	"feature-dashboard/internal/testsource"
 )
 
 const (
@@ -41,8 +41,8 @@ func obj(svc model.StoredService) actions.StoredObject {
 
 func setup(t *testing.T, services ...model.StoredService) (*actions.Registry, *fake.Clientset) {
 	t.Helper()
-	st := store.New()
-	err := st.Update(func(tx *store.Tx) error {
+	st := testsource.New()
+	err := st.Update(func(tx *testsource.Tx) error {
 		if err := tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1"}, Project: "foo"}); err != nil {
 			return err
 		}

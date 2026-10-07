@@ -133,8 +133,6 @@ copy-commands:
 cluster:
   dns-name: demo-cluster-control-plane   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
 
-store:
-  recreate-store-interval: 1h
 
 # Optional; ohne Angabe gelten die hier gezeigten Werte.
 pipelines:

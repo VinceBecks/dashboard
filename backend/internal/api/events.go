@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"feature-dashboard/internal/config"
-	"feature-dashboard/internal/store"
+	"feature-dashboard/internal/model"
 )
 
 // Event-Typen auf GET /api/events.
@@ -64,7 +64,7 @@ func serviceAreas(p config.Project) []AreaDTO {
 }
 
 // nsState ist der zuletzt verschickte Stand eines Namespaces. Er besteht nur aus JSON-Bytes, damit niemand
-// deserialisierte Objekte neben dem Store hält.
+// deserialisierte Objekte neben dem Informer-Cache hält.
 type nsState struct {
 	revision time.Time
 	// extraRevision ist die Revision der Zusatzdaten (laufende Pipelines) beim Aufbau.
@@ -74,13 +74,13 @@ type nsState struct {
 	flat          []flatObject
 }
 
-// Hub vergleicht den Store nach jeder Änderung mit dem zuletzt verschickten Stand und verteilt die Unterschiede
+// Hub vergleicht die Datenquelle nach jeder Änderung mit dem zuletzt verschickten Stand und verteilt die Unterschiede
 // als upsert-/delete-Events an alle verbundenen Clients.
 type Hub struct {
-	store    *store.Store
-	build    func(store.NamespaceView) NamespaceDTO
+	source   Source
+	build    func(model.NamespaceView) NamespaceDTO
 	projects []config.Project
-	// extra liefert Daten außerhalb des Stores, die in die Objekte einfließen (laufende Pipelines); nil heißt keine.
+	// extra liefert Daten außerhalb des Clusters, die in die Objekte einfließen (laufende Pipelines); nil heißt keine.
 	extra RevisionSource
 
 	mu          sync.Mutex
@@ -104,9 +104,9 @@ type Subscription struct {
 	hub      *Hub
 }
 
-func newHub(st *store.Store, projects []config.Project, build func(store.NamespaceView) NamespaceDTO) *Hub {
+func newHub(source Source, projects []config.Project, build func(model.NamespaceView) NamespaceDTO) *Hub {
 	return &Hub{
-		store:       st,
+		source:      source,
 		build:       build,
 		projects:    projects,
 		namespaces:  map[string]*nsState{},
@@ -121,16 +121,35 @@ func (h *Hub) Run(ctx context.Context) {
 	if h.extra != nil {
 		extraChanges = h.extra.Changes()
 	}
+	resync := time.NewTicker(fullResyncInterval)
+	defer resync.Stop()
 	for {
+		full := false
 		select {
 		case <-ctx.Done():
 			return
-		case <-h.store.Changes():
+		case <-h.source.Changes():
 		case <-extraChanges:
+		case <-resync.C:
+			full = true
 		}
 		h.mu.Lock()
+		if full {
+			h.forgetRevisionsLocked()
+		}
 		h.syncLocked()
 		h.mu.Unlock()
+	}
+}
+
+// fullResyncInterval: So oft baut der Hub alle Namespaces neu auf, unabhängig von Revisionen. Ein Sicherheitsnetz
+// gegen verpasste Signale; Events entstehen dabei nur für tatsächliche Unterschiede.
+const fullResyncInterval = time.Hour
+
+// forgetRevisionsLocked sorgt dafür, dass der nächste Abgleich jeden Namespace neu aufbaut.
+func (h *Hub) forgetRevisionsLocked() {
+	for _, ns := range h.namespaces {
+		ns.revision, ns.extraRevision = time.Time{}, time.Time{}
 	}
 }
 
@@ -202,7 +221,7 @@ func (h *Hub) snapshotLocked() Snapshot {
 
 // syncLocked gleicht alle Namespaces ab, deren Zeitstempel sich geändert hat, und verteilt die Unterschiede.
 func (h *Hub) syncLocked() {
-	revisions := h.store.NamespaceRevisions()
+	revisions := h.source.NamespaceRevisions()
 	extra := h.extraRevisions()
 	var events []Event
 	for _, name := range slices.Sorted(maps.Keys(h.namespaces)) {
@@ -245,7 +264,7 @@ func (h *Hub) syncLocked() {
 }
 
 func (h *Hub) load(name string, extraRevision time.Time) (*nsState, bool, error) {
-	view, revision, ok, err := h.store.Namespace(name)
+	view, revision, ok, err := h.source.Namespace(name)
 	if err != nil || !ok {
 		return nil, ok, err
 	}
