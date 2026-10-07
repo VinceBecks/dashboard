@@ -74,6 +74,18 @@ describe('NamespaceCard', () => {
     );
   });
 
+  it('zeigt Ingress-URLs unter dem Namen des Ingress, bei mehreren URLs mit Index', () => {
+    const ns = namespace([]);
+    const single = { ...ns.ingresses![0], name: 'rabbitmq', urls: ['https://mq.example/'] };
+    const multi = { ...ns.ingresses![0], name: 'web' };
+    render(<NamespaceCard namespace={{ ...ns, ingresses: [single, multi] }} />);
+    expect(screen.getByText('rabbitmq')).toBeInTheDocument();
+    expect(screen.getByText('web-1')).toBeInTheDocument();
+    expect(screen.getByText('web-2')).toBeInTheDocument();
+    expect(screen.queryByText('web')).not.toBeInTheDocument();
+    expect(screen.getByText('web-2').nextElementSibling).toHaveAttribute('href', 'https://feat-1.example/api');
+  });
+
   it('zeigt einen Hinweis ohne Services', () => {
     render(<NamespaceCard namespace={namespace([])} />);
     expect(screen.getByText('Keine Anwendungs-Services')).toBeInTheDocument();

@@ -76,6 +76,17 @@ var Funcs = template.FuncMap{
 	"replace":    func(s, old, new string) string { return strings.ReplaceAll(s, old, new) },
 	"join":       func(elems []string, sep string) string { return strings.Join(elems, sep) },
 	"shellquote": ShellQuote,
+	// trimproject ist hier nur ein Platzhalter für das Parsen; Render bindet es an das Projekt des Objekts.
+	"trimproject": func(s string) string { return s },
+}
+
+// TrimProject entfernt den Projektnamen samt Bindestrich als Präfix, z. B. "myproject-foo-bar" im Projekt
+// "myproject" zu "foo-bar". Ohne dieses Präfix (oder ohne Projekt) bleibt s unverändert.
+func TrimProject(s, project string) string {
+	if project == "" {
+		return s
+	}
+	return strings.TrimPrefix(s, project+"-")
 }
 
 // ShellQuote setzt s für POSIX-Shells in einfache Anführungszeichen; enthaltene Hochkommas werden maskiert,
@@ -93,10 +104,16 @@ func Parse(name, text string) (*template.Template, error) {
 	return t, nil
 }
 
-// Render führt ein Template aus.
+// Render führt ein Template aus. Funktionen, die vom Objekt abhängen (trimproject), werden dafür an eine Kopie des
+// Templates gebunden; das geparste Template selbst bleibt unverändert und kann nebenläufig genutzt werden.
 func Render(t *template.Template, data Data) (string, error) {
+	bound, err := t.Clone()
+	if err != nil {
+		return "", fmt.Errorf("template %s: %w", t.Name(), err)
+	}
+	bound.Funcs(template.FuncMap{"trimproject": func(s string) string { return TrimProject(s, data.Project) }})
 	var sb strings.Builder
-	if err := t.Execute(&sb, data); err != nil {
+	if err := bound.Execute(&sb, data); err != nil {
 		return "", fmt.Errorf("template %s: %w", t.Name(), err)
 	}
 	return sb.String(), nil

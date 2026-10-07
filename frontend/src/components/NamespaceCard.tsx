@@ -35,10 +35,15 @@ export function NamespaceCard({ namespace, serviceAreas = [] }: Props) {
 
           {ingresses.map((ing) => (
             <Stack key={ing.name} spacing={0.5}>
-              {ing.urls.map((url) => (
-                <Link key={url} href={url} target="_blank" rel="noopener noreferrer" variant="body2" sx={{ wordBreak: 'break-all' }}>
-                  {url}
-                </Link>
+              {ing.urls.map((url, i) => (
+                <Stack key={url} spacing={0}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    {ingressLabel(ing.name, i, ing.urls.length)}
+                  </Typography>
+                  <Link href={url} target="_blank" rel="noopener noreferrer" variant="body2" sx={{ wordBreak: 'break-all' }}>
+                    {url}
+                  </Link>
+                </Stack>
               ))}
               <ObjectButtons object={ing} />
             </Stack>
@@ -110,4 +115,11 @@ function ServiceAreaTabs({ groups, onSelect }: { groups: AreaGroup[]; onSelect: 
       <ServiceDots services={active.services} onSelect={onSelect} />
     </Box>
   );
+}
+
+/**
+ * Label einer Ingress-URL: der Name des Ingress-Objekts; hat es mehrere URLs, mit Index ab 1 (rabbitmq-1, rabbitmq-2).
+ */
+function ingressLabel(name: string, index: number, count: number): string {
+  return count > 1 ? `${name}-${index + 1}` : name;
 }

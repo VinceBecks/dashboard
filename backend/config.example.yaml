@@ -108,6 +108,8 @@ actionHandlers:
         PROJECT: "{{ .Project }}"
         ORGANIZATION_UNIT: '{{ index .Labels "mycomp.de/organization-unit" }}'
         ACTION: redeploy
+        # trimproject entfernt "<project-name>-" als Präfix, z. B. "foo-projekt-login" → "login".
+        FEATURE: "{{ trimproject .Namespace }}"
 
 link-variables:
   demoUrl: http://localhost:8080

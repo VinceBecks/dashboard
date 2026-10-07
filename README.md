@@ -625,6 +625,7 @@ Templates in Links, Kopier-Befehlen und bei `gitlab-pipeline` bzw. `deploy-missi
 | `replace`    | `{{ replace "app.kubernetes.io" "." "_" }}` | `app_kubernetes_io`              |
 | `join`       | `{{ join .Liste ", " }}`                    | verbindet eine Liste von Strings |
 | `shellquote` | `{{ shellquote "it's" }}`                   | `'it'\''s'` (ein Shell-Argument)  |
+| `trimproject` | `{{ trimproject .Namespace }}`             | entfernt `<project-name>-` als Präfix: `myproject-foo-bar` → `foo-bar` (Projekt `myproject`); ohne dieses Präfix unverändert |
 
 **Fallstricke:**
 

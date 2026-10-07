@@ -328,7 +328,9 @@ links:
 - Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars`
   `.Services` (nur bei `deploy-missing-services` gefüllt) `.Container` (nur bei Kopier-Befehlen für Pods).
 - Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, `range`, …): `rison`, `pathescape`,
-  `replace`, `join`, `shellquote`.
+  `replace`, `join`, `shellquote`, `trimproject` (entfernt `<project-name>-` als Präfix, z. B.
+  `{{ trimproject .Namespace }}`: „myproject-foo-bar“ → „foo-bar“; ohne dieses Präfix unverändert). `trimproject`
+  bindet `objecttemplate.Render` je Aufruf an das Projekt des Objekts.
 - Gemeinsame URL-Teile mehrerer Targets (z. B. die Kibana-Discover-Basis) in `link-variables` auslagern.
 - Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
   (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
@@ -448,7 +450,8 @@ Frontend eine Information, wird die API erweitert.
 Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
 
 - Je Projekt (Reihenfolge der `config.yaml`) ein Abschnitt mit einer Kachel je Namespace (`NamespaceCard`).
-- Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (mit deren Aktionen/Links), die
+- Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (je URL ein Label mit dem Namen
+  des Ingress, bei mehreren URLs mit Index: `rabbitmq` bzw. `web-1`, `web-2`; dazu die Aktionen/Links des Ingress), die
   NodePort-Services (Name, Aktionen/Links, je Adresse ein Kopieren-Button, `CopyButton`) und je Anwendungs-Service
   ein Punkt – grün, wenn mindestens ein Replica läuft, sonst rot.
 - Die Punkte stehen in Reitern je Service-Bereich (`ServiceAreaTabs` in `NamespaceCard`, Gruppierung in
