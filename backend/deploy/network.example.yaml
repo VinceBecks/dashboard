@@ -1,0 +1,33 @@
+# Beispiel: Betrieb hinter dem Firmen-Proxy mit eigener Company-CA.
+# Beide ConfigMaps sind optional; das Deployment lädt sie, wenn sie existieren (Neustart nach Änderungen nötig).
+#
+# Wer nutzt was?
+# - GitLab-Aufrufe (gitlab-pipeline, deploy-missing-services, Pipeline-Status) gehen über HTTPS_PROXY und vertrauen
+#   allen CAs aus SSL_CERT_DIR.
+# - Der Kubernetes-Client (Informer, Aktionen) beachtet HTTPS_PROXY ebenfalls. Der API-Server muss daher in NO_PROXY
+#   stehen, sonst laufen auch diese Verbindungen über den Proxy. Er vertraut weiter der CA des ServiceAccounts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feature-dashboard-network
+  namespace: feature-dashboard
+data:
+  HTTPS_PROXY: "http://proxy.mycomp.de:3128"
+  HTTP_PROXY: "http://proxy.mycomp.de:3128"
+  # API-Server (KUBERNETES_SERVICE_HOST, meist die erste IP des Service-CIDR) und clusterinterne Namen ausnehmen.
+  # CIDR-Angaben sind erlaubt.
+  NO_PROXY: "10.96.0.0/12,10.244.0.0/16,.svc,.cluster.local,localhost,127.0.0.1"
+  # System-CAs des Images plus die eingehängte Company-CA (Go liest alle Zertifikate aus diesen Verzeichnissen).
+  SSL_CERT_DIR: "/etc/ssl/certs:/etc/company-ca"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: company-ca
+  namespace: feature-dashboard
+data:
+  # Root- (und ggf. Intermediate-)Zertifikat des Proxys im PEM-Format; mehrere Zertifikate in einer Datei sind erlaubt.
+  company-ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    <Company-CA im PEM-Format>
+    -----END CERTIFICATE-----
