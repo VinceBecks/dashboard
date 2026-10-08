@@ -300,3 +300,46 @@ func TestPipelines(t *testing.T) {
 		}
 	}
 }
+
+func TestTeams(t *testing.T) {
+	cfg, err := parse([]byte(`
+teams:
+  label-key: mycomp.de/team
+  teams:
+    - {team-id: checkout, team-label: Team Checkout}
+    - {team-id: search, team-label: Team Suche}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Teams.LabelKey != "mycomp.de/team" || len(cfg.Teams.Teams) != 2 {
+		t.Fatalf("Teams = %+v", cfg.Teams)
+	}
+	if team, ok := cfg.Teams.Find("search"); !ok || team.Label != "Team Suche" {
+		t.Fatalf("Find = %+v, %v", team, ok)
+	}
+	if _, ok := cfg.Teams.Find("gibts-nicht"); ok {
+		t.Fatal("unbekanntes Team darf nicht gefunden werden")
+	}
+	// Ohne Abschnitt: keine Teams, kein Fehler.
+	if cfg, err := parse([]byte("projects: []\n")); err != nil || len(cfg.Teams.Teams) != 0 {
+		t.Fatalf("ohne teams: %+v, %v", cfg.Teams, err)
+	}
+}
+
+func TestTeamsValidation(t *testing.T) {
+	cases := map[string]string{
+		"label-key fehlt":       "teams: [{team-id: a, team-label: A}]",
+		"ungültiger label-key":  "label-key: 'kein gültiger key'\n  teams: [{team-id: a, team-label: A}]",
+		"keine Teams":           "label-key: mycomp.de/team",
+		"team-id fehlt":         "label-key: mycomp.de/team\n  teams: [{team-label: A}]",
+		"doppelte team-id":      "label-key: mycomp.de/team\n  teams: [{team-id: a, team-label: A}, {team-id: a, team-label: B}]",
+		"ungültiger Label-Wert": "label-key: mycomp.de/team\n  teams: [{team-id: '-', team-label: A}]",
+		"team-label fehlt":      "label-key: mycomp.de/team\n  teams: [{team-id: a}]",
+	}
+	for name, teams := range cases {
+		if _, err := parse([]byte("teams:\n  " + teams + "\n")); err == nil {
+			t.Errorf("%s: Fehler erwartet", name)
+		}
+	}
+}

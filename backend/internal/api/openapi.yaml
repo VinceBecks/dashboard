@@ -214,6 +214,11 @@ components:
         - $ref: '#/components/schemas/ObjectBase'
         - type: object
           properties:
+            team:
+              type: string
+              description: |
+                ID des zugeordneten Teams (`Snapshot.teams`), aus dem Label `teams.label-key` am Namespace. Fehlt ohne
+                Team oder bei einem nicht konfigurierten Wert.
             services:
               type: array
               items: { $ref: '#/components/schemas/ServiceObject' }
@@ -287,10 +292,20 @@ components:
       properties:
         id: { type: string, description: '`area-name` aus der config.yaml oder `others`' }
         label: { type: string }
+    Team:
+      type: object
+      required: [id, label]
+      properties:
+        id: { type: string, description: '`team-id` aus der config.yaml (Wert des Team-Labels am Namespace)' }
+        label: { type: string }
     Snapshot:
       type: object
-      required: [projects]
+      required: [teams, projects]
       properties:
+        teams:
+          type: array
+          description: Konfigurierte Entwickler-Teams (Abschnitt `teams`); Grundlage des Team-Filters. Statisch.
+          items: { $ref: '#/components/schemas/Team' }
         projects:
           type: array
           description: Alle Projekte in der Reihenfolge der config.yaml, auch ohne Namespaces.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"feature-dashboard/internal/actions"
+	"feature-dashboard/internal/actions/assignteam"
 	"feature-dashboard/internal/actions/deletepod"
 	"feature-dashboard/internal/actions/gitlabpipeline"
 	"feature-dashboard/internal/actions/missingservices"
@@ -72,7 +73,8 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	registry.Register(gitlabpipeline.HandlerType, gitlabpipeline.New)
 	registry.Register(restartservice.ActionName, restartservice.New)
 	registry.Register(missingservices.HandlerType, missingservices.New)
-	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: cluster, Pipelines: pipelineState}); err != nil {
+	registry.Register(assignteam.HandlerType, assignteam.New)
+	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: cluster, Pipelines: pipelineState, Teams: cfg.Teams}); err != nil {
 		return err
 	}
 
@@ -88,7 +90,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	go pipelines.NewTracker(pipelineState, cfg.Pipelines.Poll()).Run(ctx)
 
 	apiServer := api.NewServer(cluster, registry, cfg.Projects, cluster.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).
-		WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster).WithPipelines(pipelineState)
+		WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster).WithPipelines(pipelineState).WithTeams(cfg.Teams)
 	// Endet ctx, beendet der Hub alle Event-Streams; erst dann kann srv.Shutdown abschließen.
 	go apiServer.Run(ctx)
 	// Kein WriteTimeout: GET /api/events hält die Verbindung dauerhaft offen.

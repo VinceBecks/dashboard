@@ -84,6 +84,10 @@ export const serviceAreas: ServiceArea[] = [
 
 export function snapshot(): Snapshot {
   return {
+    teams: [
+      { id: 'checkout', label: 'Team Checkout' },
+      { id: 'search', label: 'Team Suche' },
+    ],
     projects: [
       {
         name: 'foo',

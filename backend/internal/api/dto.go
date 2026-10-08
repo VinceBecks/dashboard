@@ -57,6 +57,8 @@ const KindNodePortService model.Kind = "node-port-service"
 // NamespaceDTO ist eine Feature-Umgebung mit ihren Anwendungs-Services, NodePort-Services und Ingresses.
 type NamespaceDTO struct {
 	ObjectHeader
+	// Team ist die ID des zugeordneten Teams (Snapshot.Teams); leer ohne oder mit unbekanntem Team.
+	Team string `json:"team,omitempty"`
 	ObjectExtras
 	Services         []ServiceDTO         `json:"services,omitzero"`
 	NodePortServices []NodePortServiceDTO `json:"nodePortServices,omitzero"`
@@ -110,6 +112,7 @@ func (s *Server) buildNamespace(view model.NamespaceView) NamespaceDTO {
 	nsParents := Parents{Project: project, Namespace: ns.Name}
 	dto := NamespaceDTO{
 		ObjectHeader:     ObjectHeader{Kind: model.KindNamespace, Name: ns.Name, Parents: Parents{Project: project}},
+		Team:             s.teamOf(ns),
 		ObjectExtras:     s.extras(model.KindNamespace, ns.Name, ns.Name, ns, project),
 		Services:         []ServiceDTO{},
 		NodePortServices: []NodePortServiceDTO{},
@@ -140,6 +143,17 @@ func (s *Server) buildNamespace(view model.NamespaceView) NamespaceDTO {
 		})
 	}
 	return dto
+}
+
+// teamOf liefert die ID des konfigurierten Teams, dem der Namespace per Label zugeordnet ist, sonst "".
+func (s *Server) teamOf(ns model.StoredNamespace) string {
+	if s.teams.LabelKey == "" {
+		return ""
+	}
+	if team, ok := s.teams.Find(ns.Labels[s.teams.LabelKey]); ok {
+		return team.ID
+	}
+	return ""
 }
 
 // buildService baut einen Anwendungs-Service mit den Replicas, die er referenziert.

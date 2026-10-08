@@ -43,6 +43,7 @@ Backend-Pakete (`backend/`):
 | `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht) |
 | `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
 | `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar |
+| `internal/actions/assignteam` | ActionHandler `assign-team`: ordnet einen Namespace einem Team zu (setzt/entfernt das Label `teams.label-key` per Merge-Patch) |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
@@ -169,7 +170,8 @@ Wird beim Startup einmal eingelesen. Enthält:
 3. Cluster-Angaben (Pflicht)
 4. Links (optional)
 5. Kopier-Befehle (optional)
-6. Ablage laufender Pipelines (optional)
+6. Abfrage laufender Pipelines (optional)
+7. Entwickler-Teams (optional)
 
 Beispiel für Projekte:
 
@@ -358,6 +360,24 @@ copy-commands:
 - Templates werden beim Start geparst (Fehler → Startabbruch); lässt sich ein Befehl für ein Objekt nicht rendern,
   wird nur dieser weggelassen.
 
+Beispiel für Entwickler-Teams (optional):
+
+```yaml
+teams:
+  label-key: mycomp.de/team           # Label am Namespace; Wert = team-id
+  teams:
+    - team-id: checkout               # eindeutig, gültiger Label-Wert
+      team-label: Team Checkout
+```
+
+- Ein Namespace gehört zu einem Team, wenn sein Label `label-key` die `team-id` trägt. Die Aktion `assign-team`
+  (Handler-Typ gleichen Namens, keine `extra-handler-configs`) bietet am Namespace ein Single-Select mit allen Teams
+  und „Kein Team“ an und setzt bzw. entfernt das Label per Merge-Patch (RBAC: `patch` auf `namespaces`).
+- Die API liefert die Teams im Snapshot (`teams`) und am Namespace die Team-ID (`team`, nur für konfigurierte Teams).
+  Das Frontend zeigt je Projekt einen Team-Filter (Chips, Mehrfachauswahl, „Ohne Team“; Auswahl in der URL als
+  `?team.<projekt>=<team-id>`) und das Team an der Kachel.
+- Die Namespaces werden nicht per ArgoCD self-heal verwaltet; das Label bleibt daher bestehen.
+
 Beispiel für Cluster-Angaben (Pflicht):
 
 ```yaml
@@ -403,6 +423,7 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
   Service-Typen werden nicht gesendet. Ingresses liefern fertige `https://<host><path>`-URLs (`urls`).
 - Jedes Objekt kennt seine Parents bis zum Projekt (`parents.project`, `.namespace`, `.service`), damit ein Event
   ohne weitere Daten einsortiert werden kann.
+- Der Snapshot enthält die konfigurierten Teams (`teams`), jeder Namespace seine Team-ID (`team`, optional).
 - Jedes Objekt trägt `links` und `copyCommands` (je Befehl `id`, `title`, `lucideIcon`, `lucideIconColor`, `command`)
   sowie `pipelines` (laufende Pipelines: `action`, `title`, `url`, `startedAt`).
 - Jedes Objekt trägt die Liste der Aktionen, die auf ihm ausführbar sind. Je Aktion:
@@ -447,7 +468,9 @@ Frontend eine Information, wird die API erweitert.
 
 Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
 
-- Je Projekt (Reihenfolge der `config.yaml`) ein Abschnitt mit einer Kachel je Namespace (`NamespaceCard`).
+- Je Projekt (Reihenfolge der `config.yaml`) ein Abschnitt mit einer Kachel je Namespace (`NamespaceCard`). Sind
+  Teams konfiguriert, steht darüber ein Team-Filter (`TeamFilter`, Chips je Team plus „Ohne Team“, Mehrfachauswahl,
+  Auswahl in der URL); die Kachel zeigt das zugeordnete Team als Chip.
 - Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (je URL ein Label mit dem Namen
   des Ingress, bei mehreren URLs mit Index: `rabbitmq` bzw. `web-1`, `web-2`; dazu die Aktionen/Links des Ingress), die
   NodePort-Services (Name, Aktionen/Links, je Adresse ein Kopieren-Button, `CopyButton`) und je Anwendungs-Service

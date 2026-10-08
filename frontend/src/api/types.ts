@@ -123,6 +123,8 @@ export interface NodePortServiceObject extends ObjectBase {
 /** Feature-Umgebung. Die Kind-Listen fehlen in upsert-Events. */
 export interface NamespaceObject extends ObjectBase {
   kind: 'namespace';
+  /** ID des zugeordneten Teams (Snapshot.teams); fehlt ohne Team. */
+  team?: string;
   services?: ServiceObject[];
   nodePortServices?: NodePortServiceObject[];
   ingresses?: IngressObject[];
@@ -144,7 +146,15 @@ export interface ProjectSnapshot {
 }
 
 /** Inhalt des snapshot-Events (erstes Event auf GET /api/events). */
+/** Entwickler-Team aus dem Abschnitt teams der config.yaml. */
+export interface Team {
+  id: string;
+  label: string;
+}
+
 export interface Snapshot {
+  /** Konfigurierte Teams (statisch, nur im Snapshot). */
+  teams: Team[];
   projects: ProjectSnapshot[];
 }
 

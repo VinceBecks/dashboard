@@ -21,6 +21,8 @@ type Config struct {
 	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
 	Cluster        ClusterConfig         `yaml:"cluster"`
 	Pipelines      PipelinesConfig       `yaml:"pipelines"`
+	// Teams sind die Entwickler-Teams, denen Feature-Umgebungen per Namespace-Label zugeordnet werden.
+	Teams TeamsConfig `yaml:"teams"`
 	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt per link-variables-overrides
 	// überschreibbar.
 	LinkVariables map[string]string `yaml:"link-variables"`
@@ -79,6 +81,61 @@ func (p PipelinesConfig) validate() []error {
 		return []error{fmt.Errorf("pipelines.poll-interval %q muss eine Go-Dauer von mindestens %s sein", p.PollInterval, minPipelinesPollInterval)}
 	}
 	return nil
+}
+
+// TeamsConfig definiert die Entwickler-Teams. Ein Namespace gehört zu einem Team, wenn sein Label LabelKey die ID des
+// Teams trägt. Die Aktion assign-team setzt dieses Label; das Dashboard filtert danach.
+type TeamsConfig struct {
+	LabelKey string `yaml:"label-key"`
+	Teams    []Team `yaml:"teams"`
+}
+
+// Team ist ein Entwickler-Team. Die ID ist der Wert des Namespace-Labels.
+type Team struct {
+	ID    string `yaml:"team-id"`
+	Label string `yaml:"team-label"`
+}
+
+// Find liefert das Team mit dieser ID.
+func (t TeamsConfig) Find(id string) (Team, bool) {
+	for _, team := range t.Teams {
+		if team.ID == id {
+			return team, true
+		}
+	}
+	return Team{}, false
+}
+
+func (t TeamsConfig) validate() []error {
+	if t.LabelKey == "" && len(t.Teams) == 0 {
+		return nil
+	}
+	var errs []error
+	if t.LabelKey == "" {
+		errs = append(errs, errors.New("teams.label-key fehlt"))
+	} else if msgs := validation.IsQualifiedName(t.LabelKey); len(msgs) > 0 {
+		errs = append(errs, fmt.Errorf("teams.label-key %q ist kein gültiger Label-Schlüssel: %s", t.LabelKey, strings.Join(msgs, "; ")))
+	}
+	if len(t.Teams) == 0 {
+		errs = append(errs, errors.New("teams.teams darf nicht leer sein"))
+	}
+	ids := map[string]bool{}
+	for i, team := range t.Teams {
+		at := fmt.Sprintf("teams.teams[%d]", i)
+		switch {
+		case team.ID == "":
+			errs = append(errs, fmt.Errorf("%s: team-id fehlt", at))
+		case ids[team.ID]:
+			errs = append(errs, fmt.Errorf("%s: team-id %q ist nicht eindeutig", at, team.ID))
+		case len(validation.IsValidLabelValue(team.ID)) > 0:
+			errs = append(errs, fmt.Errorf("%s: team-id %q ist kein gültiger Label-Wert", at, team.ID))
+		}
+		ids[team.ID] = true
+		if team.Label == "" {
+			errs = append(errs, fmt.Errorf("%s: team-label fehlt", at))
+		}
+	}
+	return errs
 }
 
 // ClusterConfig enthält Angaben zum Cluster, die das Dashboard anzeigt.
@@ -209,6 +266,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, validateCopyCommands(c.CopyCommands, projects)...)
 	errs = append(errs, c.Cluster.validate()...)
 	errs = append(errs, c.Pipelines.validate()...)
+	errs = append(errs, c.Teams.validate()...)
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
 		if a.Name == "" {

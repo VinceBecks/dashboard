@@ -319,7 +319,7 @@ func TestEventStream(t *testing.T) {
 			lines = append(lines, line)
 		}
 	}
-	if ev := readEvent(); !strings.HasPrefix(ev, "id: 1\nevent: snapshot\ndata: {\"projects\":[{\"name\":\"foo\"") {
+	if ev := readEvent(); !strings.HasPrefix(ev, "id: 1\nevent: snapshot\ndata: {\"teams\":[],\"projects\":[{\"name\":\"foo\"") {
 		t.Fatalf("erstes Event = %q", ev)
 	}
 	_ = st.Update(func(tx *testsource.Tx) error { tx.DeleteNamespace("feat-1"); return nil })
@@ -479,6 +479,33 @@ func TestPipelines(t *testing.T) {
 	state.Remove(model.ObjectRef{Kind: model.KindNamespace, Namespace: "feat-1", Name: "feat-1"}, "deploy")
 	got = syncHub(srv, sub)
 	if len(got) != 1 || !strings.Contains(got[0], `"pipelines":[]`) {
+		t.Fatalf("events = %v", got)
+	}
+}
+
+func TestTeams(t *testing.T) {
+	st, _, _ := setup(t)
+	teams := config.TeamsConfig{LabelKey: "mycomp.de/team", Teams: []config.Team{{ID: "checkout", Label: "Team Checkout"}}}
+	srv := NewServer(st, actions.NewRegistry(), []config.Project{{Name: "foo"}}, func() bool { return true }).WithTeams(teams)
+	_, sub, raw := subscribe(t, srv)
+	if !strings.HasPrefix(raw, `{"teams":[{"id":"checkout","label":"Team Checkout"}],"projects":`) {
+		t.Fatalf("Snapshot = %s", raw)
+	}
+	if strings.Contains(raw, `"team":`) {
+		t.Fatalf("Namespace ohne Team darf kein team tragen: %s", raw)
+	}
+
+	// Label gesetzt → upsert des Namespaces mit team; unbekannter Wert → kein team.
+	setTeam := func(value string) []string {
+		_ = st.Update(func(tx *testsource.Tx) error {
+			return tx.PutNamespace(model.StoredNamespace{Meta: model.Meta{Name: "feat-1", Labels: map[string]string{"mycomp.de/team": value}}, Project: "foo"})
+		})
+		return syncHub(srv, sub)
+	}
+	if got := setTeam("checkout"); len(got) != 1 || !strings.HasPrefix(got[0], `upsert {"kind":"namespace","name":"feat-1","parents":{"project":"foo"},"team":"checkout",`) {
+		t.Fatalf("events = %v", got)
+	}
+	if got := setTeam("gibts-nicht"); len(got) != 1 || strings.Contains(got[0], `"team":`) {
 		t.Fatalf("events = %v", got)
 	}
 }

@@ -36,7 +36,16 @@ type Event struct {
 
 // Snapshot ist der Inhalt des snapshot-Events: alle Projekte (Reihenfolge der config.yaml) mit ihren Namespaces.
 type Snapshot struct {
+	// Teams sind die konfigurierten Entwickler-Teams (Abschnitt teams), Grundlage des Team-Filters. Statisch, es gibt
+	// dafür keine Events.
+	Teams    []TeamDTO         `json:"teams"`
 	Projects []ProjectSnapshot `json:"projects"`
+}
+
+// TeamDTO ist ein Entwickler-Team; NamespaceDTO.Team verweist auf seine ID.
+type TeamDTO struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 // ProjectSnapshot ist ein Projekt mit seinen Service-Bereichen und den Teilbäumen seiner Namespaces.
@@ -80,6 +89,7 @@ type Hub struct {
 	source   Source
 	build    func(model.NamespaceView) NamespaceDTO
 	projects []config.Project
+	teams    config.TeamsConfig
 	// extra liefert Daten außerhalb des Clusters, die in die Objekte einfließen (laufende Pipelines); nil heißt keine.
 	extra RevisionSource
 
@@ -208,7 +218,10 @@ func (h *Hub) snapshotLocked() Snapshot {
 		ns := h.namespaces[name]
 		byProject[ns.project] = append(byProject[ns.project], ns.tree)
 	}
-	snap := Snapshot{Projects: make([]ProjectSnapshot, 0, len(h.projects))}
+	snap := Snapshot{Teams: make([]TeamDTO, 0, len(h.teams.Teams)), Projects: make([]ProjectSnapshot, 0, len(h.projects))}
+	for _, t := range h.teams.Teams {
+		snap.Teams = append(snap.Teams, TeamDTO{ID: t.ID, Label: t.Label})
+	}
 	for _, p := range h.projects {
 		nss := byProject[p.Name]
 		if nss == nil {

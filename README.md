@@ -37,6 +37,7 @@ Replica.
     - [`links` und `link-variables`](#links-und-link-variables)
     - [`copy-commands`](#copy-commands)
     - [Templates in der Konfiguration](#templates-in-der-konfiguration)
+    - [`teams`](#teams)
     - [`cluster`](#cluster)
     - [`pipelines`](#pipelines)
     - [Prüfungen beim Start](#prüfungen-beim-start)
@@ -193,6 +194,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/actions/nodeportservice` | Aktionen `node-port-service-on-service-base`, `delete-node-port-service`   |
 | `internal/actions/restartservice`  | Aktion `restart-service-replicas`                                          |
 | `internal/actions/gitlabpipeline`  | Handler-Typ `gitlab-pipeline`                                              |
+| `internal/actions/assignteam`      | Aktion `assign-team`                                                       |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
@@ -241,6 +243,7 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 | `link-variables` | nein    | Statische Variablen für Link-Templates und Kopier-Befehle            |
 | `copy-commands`  | nein    | Befehle (z. B. `kubectl exec`), die das Dashboard zum Kopieren anbietet |
 | `cluster`        | ja      | Angaben zum Cluster: der DNS-Name der Nodes für NodePort-Adressen    |
+| `teams`          | nein    | Entwickler-Teams und das Namespace-Label, das die Zuordnung trägt    |
 | `pipelines`      | nein    | Ablage und Status-Abfrage laufender GitLab-Pipelines                 |
 
 > **YAML-Hinweise**
@@ -339,6 +342,7 @@ Aktion Formular-Felder, stehen sie in diesem Dialog. Das Ergebnis erscheint als 
 | `restart-service-replicas`          | Service        | Löscht alle Pods eines Services, damit sie neu starten          |
 | `gitlab-pipeline`                   | konfigurierbar | Startet eine GitLab-Pipeline, beliebig viele Aktionen möglich   |
 | `deploy-missing-services`           | Namespace      | Startet eine GitLab-Pipeline für fehlende Services              |
+| `assign-team`                       | Namespace      | Ordnet die Feature-Umgebung einem Team zu (Namespace-Label)     |
 
 #### `delete-pod`
 
@@ -461,6 +465,21 @@ oder an einem seiner Replicas eine Pipeline läuft.
 - Die laufenden Pipelines liegen nur im Speicher. Nach einem Neustart des Backends ist der Stand leer, bereits
   laufende Pipelines werden dann nicht mehr markiert.
 - Das Trigger-Token kann keinen Status lesen, deshalb ist ein zweites Token nötig.
+
+#### `assign-team`
+
+Ordnet eine Feature-Umgebung einem Entwickler-Team zu. Der Dialog zeigt ein Single-Select mit allen Teams aus dem
+Abschnitt [`teams`](#teams) und „Kein Team“, dazu die aktuelle Zuordnung. Die Aktion setzt am Namespace das Label
+`teams.label-key` auf die `team-id` bzw. entfernt es (Merge-Patch, andere Labels bleiben unberührt).
+
+```yaml
+  - action-name: assign-team
+    action-title: Team zuordnen
+    lucide-icon: users
+    projects: [ foo-projekt ]
+```
+
+Keine `extra-handler-configs`; ohne Abschnitt `teams` startet das Backend nicht. Benötigt `patch` auf `namespaces`.
 
 #### `deploy-missing-services`
 
@@ -638,6 +657,29 @@ Templates in Links, Kopier-Befehlen und bei `gitlab-pipeline` bzw. `deploy-missi
   bei `gitlab-pipeline` schlägt die Aktion mit einer Meldung fehl.
 - **Leerzeichen als `+`:** `urlquery` kodiert Leerzeichen als `+`. Das ist für Query-Parameter korrekt.
 
+### `teams`
+
+```yaml
+teams:
+  label-key: mycomp.de/team
+  teams:
+    - team-id: checkout
+      team-label: Team Checkout
+    - team-id: search
+      team-label: Team Suche
+```
+
+| Feld                 | Pflicht | Bedeutung                                                                         |
+|----------------------|---------|-----------------------------------------------------------------------------------|
+| `label-key`          | ja      | Label am Namespace, das die Team-Zuordnung trägt                                  |
+| `teams[].team-id`    | ja      | Eindeutige ID und zugleich Wert des Labels; muss ein gültiger Label-Wert sein     |
+| `teams[].team-label` | ja      | Anzeigename                                                                       |
+
+Sind Teams konfiguriert, zeigt das Dashboard je Projekt einen **Team-Filter**: je Team ein Chip plus „Ohne Team“,
+mehrere gleichzeitig wählbar, ohne Auswahl werden alle Namespaces gezeigt. Die Auswahl steht in der URL
+(`?team.<projekt>=<team-id>`), Reload und geteilte Links behalten sie. An der Kachel steht das zugeordnete Team.
+Namespaces mit einem Label-Wert, der kein konfiguriertes Team ist, gelten als „Ohne Team“.
+
 ### `cluster`
 
 ```yaml
@@ -687,6 +729,8 @@ Das Backend prüft die Konfiguration vollständig und **bricht bei Fehlern mit e
     - Es gibt mindestens ein Target, nur gültige Objekt-Typen, und jedes Target hat ein nicht leeres `command`.
     - Alle Templates sind syntaktisch korrekt.
 - **Cluster:** `dns-name` ist gesetzt und ein gültiger DNS-Name oder eine IP.
+- **Teams:** `label-key` ist ein gültiger Label-Schlüssel; `team-id` ist gesetzt, eindeutig und ein gültiger
+  Label-Wert; `team-label` ist gesetzt.
 - **Pipelines:** `poll-interval` ist eine Go-Dauer von mindestens `5s`; Env-Variablen aus `status-token-env` sind
   gesetzt.
 
@@ -723,6 +767,7 @@ Pflicht.
 | `upsert`   | ein Objekt ohne Kind-Listen                    | Objekt neu oder geändert; vorhandene Kinder bleiben |
 | `delete`   | `{"kind": …, "name": …, "parents": {…}}`       | Objekt samt aller Kinder entfernen                |
 
+- **Teams:** Der Snapshot enthält `teams` (`id`, `label`), jeder Namespace optional `team` (ID des Teams).
 - **Hierarchie:** Projekt → Namespace → Services (→ Pods), NodePort-Services und Ingresses. Ein Beispiel des Snapshots mit allen
   Feldern steht in [`backend/internal/api/example-api.jsonc`](backend/internal/api/example-api.jsonc).
 - **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
@@ -870,7 +915,7 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
 
 | Ressource                         | Verben                           | Wofür                                              |
 |-----------------------------------|----------------------------------|----------------------------------------------------|
-| `namespaces`                      | get, list, watch                 | Informer                                           |
+| `namespaces`                      | get, list, watch, patch          | Informer, `assign-team`                            |
 | `services`                        | get, list, watch, create, delete | Informer, NodePort-Service erstellen und löschen   |
 | `pods`                            | get, list, watch, delete         | Informer, `delete-pod`, `restart-service-replicas` |
 | `ingresses` (`networking.k8s.io`) | get, list, watch                 | Informer                                           |

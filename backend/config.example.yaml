@@ -59,6 +59,11 @@ actionHandlers:
     lucide-icon: trash-2
     lucide-icon-color: red
     projects: [foo-projekt, bar-projekt, foobar-projekt]
+  - action-name: assign-team
+    action-title: Team zuordnen
+    lucide-icon: users
+    lucide-icon-color: "#6a1b9a"
+    projects: [foo-projekt, bar-projekt, foobar-projekt]   # Teams: Abschnitt teams
   - action-name: restart-service-replicas
     action-title: Alle Replika löschen (Neustart)
     lucide-icon: rotate-ccw
@@ -153,6 +158,18 @@ copy-commands:
     targets:
       namespace:
         command: kubectl config set-context --current --namespace={{ .Namespace }}
+
+# Entwickler-Teams: Ein Namespace gehört zu einem Team, wenn sein Label label-key die team-id trägt.
+# Die Aktion assign-team setzt das Label; das Dashboard bietet je Projekt einen Team-Filter an.
+teams:
+  label-key: mycomp.de/team
+  teams:
+    - team-id: checkout          # Wert des Labels, muss ein gültiger Label-Wert sein
+      team-label: Team Checkout
+    - team-id: search
+      team-label: Team Suche
+    - team-id: platform
+      team-label: Team Plattform
 
 cluster:
   dns-name: demo-cluster-control-plane   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>

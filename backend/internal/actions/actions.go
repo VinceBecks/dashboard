@@ -6,6 +6,7 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
+	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/model"
 	"feature-dashboard/internal/pipelines"
 )
@@ -78,6 +79,8 @@ type Deps struct {
 	Pipelines *pipelines.State
 	// ActionName ist der action-name der Aktion, für die der Handler erzeugt wird (setzt die Registry).
 	ActionName string
+	// Teams ist der Abschnitt teams der config.yaml.
+	Teams config.TeamsConfig
 }
 
 // Factory erzeugt einen Handler.

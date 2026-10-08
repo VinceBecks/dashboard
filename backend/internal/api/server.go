@@ -35,6 +35,7 @@ type Server struct {
 	pipelines *pipelines.State
 	dnsName   string
 	projects  map[string]config.Project
+	teams     config.TeamsConfig
 	hub       *Hub
 }
 
@@ -76,6 +77,13 @@ func (s *Server) WithStaticDir(dir string) *Server {
 // WithCluster setzt die Cluster-Angaben; der DNS-Name der Nodes bildet die NodePort-Adressen.
 func (s *Server) WithCluster(c config.ClusterConfig) *Server {
 	s.dnsName = c.DNSName
+	return s
+}
+
+// WithTeams setzt die Entwickler-Teams: Team je Namespace und Team-Liste im Snapshot.
+func (s *Server) WithTeams(t config.TeamsConfig) *Server {
+	s.teams = t
+	s.hub.teams = t
 	return s
 }
 

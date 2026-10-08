@@ -31,6 +31,14 @@ describe('applyUpsert', () => {
     expect(next.projects[0].namespaces[1].services).toHaveLength(2);
   });
 
+  it('behält die Teams des Snapshots und übernimmt das Team eines Namespaces', () => {
+    const head = { ...namespace(), team: 'search', services: undefined, ingresses: undefined, nodePortServices: undefined };
+    const next = applyUpsert(snapshot(), head);
+    expect(next.teams.map((t) => t.id)).toEqual(['checkout', 'search']);
+    expect(next.projects[0].namespaces[0].team).toBe('search');
+    expect(applyUpsert(next, { ...head, team: undefined }).projects[0].namespaces[0].team).toBeUndefined();
+  });
+
   it('lässt unbeteiligte Projekte unverändert', () => {
     const before = snapshot();
     const next = applyUpsert(before, service('api', true));

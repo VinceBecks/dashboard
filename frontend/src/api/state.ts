@@ -13,6 +13,7 @@ export function applyUpsert(state: Snapshot, obj: DashboardObject): Snapshot {
       ? state.projects
       : [...state.projects, { name: project, serviceAreas: [], namespaces: [] }];
     return {
+      ...state,
       projects: projects.map((p) =>
         p.name !== project
           ? p
@@ -55,6 +56,7 @@ export function applyDelete(state: Snapshot, header: ObjectHeader): Snapshot {
   const { project, namespace, service } = header.parents;
   if (header.kind === 'namespace') {
     return {
+      ...state,
       projects: state.projects.map((p) =>
         p.name !== project ? p : { ...p, namespaces: p.namespaces.filter((n) => n.name !== header.name) },
       ),
@@ -93,6 +95,7 @@ function updateNamespace(
   fn: (ns: NamespaceObject) => NamespaceObject,
 ): Snapshot {
   return {
+    ...state,
     projects: state.projects.map((p) =>
       p.name !== project ? p : { ...p, namespaces: p.namespaces.map((n) => (n.name === namespace ? fn(n) : n)) },
     ),

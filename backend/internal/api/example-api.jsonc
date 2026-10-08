@@ -3,6 +3,10 @@
 //   id: 1
 //   data: <dieses JSON, einzeilig>
 {
+  "teams": [                                     // Abschnitt teams der config.yaml; Grundlage des Team-Filters
+    { "id": "checkout", "label": "Team Checkout" },
+    { "id": "search", "label": "Team Suche" }
+  ],
   "projects": [
     {
       "name": "foo-projekt",                       // Reihenfolge wie in der config.yaml
@@ -15,6 +19,7 @@
           "kind": "namespace",
           "name": "foo-feature-123",
           "parents": { "project": "foo-projekt" },
+          "team": "checkout",                       // aus dem Label teams.label-key; fehlt ohne Team
           "actions": [
             {
               "id": "deploy-missing-services",

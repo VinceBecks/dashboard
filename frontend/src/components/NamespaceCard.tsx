@@ -1,4 +1,4 @@
-import { Box, Card, CardContent, Link, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Card, CardContent, Chip, Link, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
 import type { NamespaceObject, ServiceArea } from '../api/types';
 import { CopyButton } from './CopyButton';
@@ -11,6 +11,8 @@ interface Props {
   namespace: NamespaceObject;
   /** Service-Bereiche des Projekts; daraus entstehen die Reiter über den Service-Punkten. */
   serviceAreas?: ServiceArea[];
+  /** Titel des zugeordneten Teams, falls vorhanden. */
+  teamLabel?: string;
 }
 
 /**
@@ -18,7 +20,7 @@ interface Props {
  * kopierbaren Adressen und je Anwendungs-Service ein Punkt (grün: mindestens ein Replica läuft), aufgeteilt in
  * Reiter je Service-Bereich. Ein Klick auf einen Punkt öffnet die Details des Services.
  */
-export function NamespaceCard({ namespace, serviceAreas = [] }: Props) {
+export function NamespaceCard({ namespace, serviceAreas = [], teamLabel }: Props) {
   const [selected, setSelected] = useState<string>();
   const services = namespace.services ?? [];
   const ingresses = namespace.ingresses ?? [];
@@ -28,9 +30,12 @@ export function NamespaceCard({ namespace, serviceAreas = [] }: Props) {
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent>
         <Stack spacing={1.5}>
-          <Typography variant="h6" component="h3" sx={{ wordBreak: 'break-all' }}>
-            {namespace.name}
-          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Typography variant="h6" component="h3" sx={{ wordBreak: 'break-all' }}>
+              {namespace.name}
+            </Typography>
+            {teamLabel && <Chip size="small" label={teamLabel} variant="outlined" aria-label={`Team: ${teamLabel}`} />}
+          </Stack>
           <ObjectButtons object={namespace} />
 
           {ingresses.map((ing) => (
