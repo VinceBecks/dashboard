@@ -84,7 +84,7 @@ var Funcs = template.FuncMap{
 var renewNamespaceRegEx = regexp.MustCompile(`^renew-(f-|if-|hf-)(story|hotfix|feat|bugfix|epic|intfix)([0-9]+).*$`)
 
 // ExtractRenewJiraTicketNumber extrahiert aus dem Namespace-Namen die JIRA-Ticket-Number.
-// je nachdem, ob der Namespace für ein feature-, hotfix-, bugfix- intfix- oder epic-Ticket erstellt wurde ist der Namespace unterschiedlich aufgebaut
+// je nachdem, ob der Namespace für ein feature-, hotfix-, bugfix-, intfix- oder epic-Ticket erstellt wurde ist der Namespace unterschiedlich aufgebaut
 func ExtractRenewJiraTicketNumber(namespace string) string {
 	matches := renewNamespaceRegEx.FindStringSubmatch(namespace)
 	if len(matches) < 4 {
