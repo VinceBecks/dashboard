@@ -131,6 +131,10 @@ func (c *Cluster) namespaceChanged(_, name string) {
 		c.touch(name)
 		return
 	}
+
+	// wenn es eine änderung an einem namespace gab, welcher zu keinem der projekte gehört.
+	// dies ist relevant für folgenden Fall:
+	//	wenn ein Namespace zu einem der Projekte gehörte. Durch eine Änderung an den Labels gehört es jetzt nicht mehr zu dem Projekt
 	if _, ok := c.revisions[name]; ok {
 		delete(c.revisions, name)
 		c.notify()
