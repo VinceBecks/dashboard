@@ -192,7 +192,6 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/actions/assignteam`      | Aktion `assign-team`                                                       |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
 | `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`                               |
-| `internal/scaledowntrigger`        | Logik des CronJobs `nightly-scale-down` (`cmd/nightly-scale-down`)          |
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
 | `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |

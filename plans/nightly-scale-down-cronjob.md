@@ -1,5 +1,9 @@
 # Plan: CronJob `nightly-scale-down` (startet die Pipeline für das nächtliche Herunterskalieren)
 
+> **Nachtrag:** `internal/scaledowntrigger` wurde nach der Umsetzung nach `cmd/nightly-scale-down/scaledown.go`
+> (Paket `main`, Bezeichner nicht exportiert: `configFromEnv`, `excludedNamespaces`, `startScaleDown`) verschoben,
+> damit das Dashboard-Backend den CronJob-Code nicht kennt.
+
 ## Kontext
 
 Das Herunterskalieren aller Feature-Umgebungen übernimmt eine GitLab-Pipeline. Bisher fehlt der Auslöser. Im

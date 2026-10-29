@@ -1,6 +1,6 @@
 // Command nightly-scale-down läuft als Kubernetes-CronJob: Er liest die Namespaces, die im Dashboard vom nächtlichen
 // Herunterskalieren ausgenommen wurden, und startet die GitLab-Pipeline, die alle übrigen Feature-Umgebungen auf
-// 0 Replicas skaliert. Konfiguration nur über Umgebungsvariablen (siehe internal/scaledowntrigger).
+// 0 Replicas skaliert. Konfiguration nur über Umgebungsvariablen (siehe scaledown.go).
 package main
 
 import (
@@ -12,7 +12,6 @@ import (
 
 	"feature-dashboard/internal/actions/gitlabpipeline"
 	"feature-dashboard/internal/kube"
-	"feature-dashboard/internal/scaledowntrigger"
 )
 
 // runTimeout begrenzt den gesamten Lauf, damit der Job nie hängen bleibt.
@@ -26,7 +25,7 @@ func main() {
 }
 
 func run() error {
-	cfg, err := scaledowntrigger.FromEnv(os.Getenv)
+	cfg, err := configFromEnv(os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -42,7 +41,7 @@ func run() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pipeline, excluded, err := scaledowntrigger.Run(ctx, cfg, client, trigger)
+	pipeline, excluded, err := startScaleDown(ctx, cfg, client, trigger)
 	if excluded != nil {
 		slog.Info("Ausgenommene Namespaces gelesen", "count", len(excluded), "namespaces", strings.Join(excluded, ","))
 	}

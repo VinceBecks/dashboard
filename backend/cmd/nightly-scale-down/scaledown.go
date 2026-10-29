@@ -1,8 +1,9 @@
-// Package scaledowntrigger ist die Logik des CronJobs nightly-scale-down: Er liest die Namespaces, die über das Label
-// der Dashboard-Aktion nightly-scale-down-exclusion vom nächtlichen Herunterskalieren ausgenommen sind, und startet
-// die GitLab-Pipeline, die das Herunterskalieren ausführt. Die ausgenommenen Namespaces bekommt sie als Input
-// EXCLUDE_NAMESPACES (komma-getrennt, sortiert). Konfiguriert wird nur über Umgebungsvariablen.
-package scaledowntrigger
+package main
+
+// Logik des CronJobs: Er liest die Namespaces, die über das Label der Dashboard-Aktion nightly-scale-down-exclusion
+// vom nächtlichen Herunterskalieren ausgenommen sind, und startet die GitLab-Pipeline, die das Herunterskalieren
+// ausführt. Die ausgenommenen Namespaces bekommt sie als Input EXCLUDE_NAMESPACES (komma-getrennt, sortiert).
+// Konfiguriert wird nur über Umgebungsvariablen. Der Code gehört nur zu dieser Anwendung, nicht zum Dashboard.
 
 import (
 	"context"
@@ -38,18 +39,18 @@ const (
 // DefaultLabelValue entspricht dem Standard von label-value der Dashboard-Aktion.
 const DefaultLabelValue = "true"
 
-// Config ist die Konfiguration aus den Umgebungsvariablen.
-type Config struct {
+// config ist die Konfiguration aus den Umgebungsvariablen.
+type config struct {
 	LabelKey   string
 	LabelValue string
 	Ref        string
 	Trigger    gitlabpipeline.TriggerConfig
 }
 
-// FromEnv liest und prüft die Konfiguration; alle Fehler werden gemeinsam gemeldet. Das Trigger-Token prüft erst
+// configFromEnv liest und prüft die Konfiguration; alle Fehler werden gemeinsam gemeldet. Das Trigger-Token prüft erst
 // gitlabpipeline.NewTrigger (es liest EnvTriggerToken selbst).
-func FromEnv(getenv func(string) string) (Config, error) {
-	c := Config{
+func configFromEnv(getenv func(string) string) (config, error) {
+	c := config{
 		LabelKey:   getenv(EnvLabelKey),
 		LabelValue: getenv(EnvLabelValue),
 		Ref:        getenv(EnvGitLabRef),
@@ -87,8 +88,8 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	return c, errors.Join(errs...)
 }
 
-// ExcludedNamespaces liefert die Namen aller Namespaces mit dem Label key=value, sortiert.
-func ExcludedNamespaces(ctx context.Context, client kubernetes.Interface, key, value string) ([]string, error) {
+// excludedNamespaces liefert die Namen aller Namespaces mit dem Label key=value, sortiert.
+func excludedNamespaces(ctx context.Context, client kubernetes.Interface, key, value string) ([]string, error) {
 	selector := labels.SelectorFromSet(labels.Set{key: value}).String()
 	list, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
@@ -102,19 +103,19 @@ func ExcludedNamespaces(ctx context.Context, client kubernetes.Interface, key, v
 	return names, nil
 }
 
-// Starter startet eine Pipeline (erfüllt von *gitlabpipeline.Trigger).
-type Starter interface {
+// starter startet eine Pipeline (erfüllt von *gitlabpipeline.Trigger).
+type starter interface {
 	Start(ctx context.Context, ref string, variables, inputs map[string]string) (gitlabpipeline.Pipeline, error)
 }
 
-// Run liest die ausgenommenen Namespaces und startet die Pipeline mit ihnen als Input EXCLUDE_NAMESPACES.
-func Run(ctx context.Context, cfg Config, client kubernetes.Interface, starter Starter) (gitlabpipeline.Pipeline, []string, error) {
-	excluded, err := ExcludedNamespaces(ctx, client, cfg.LabelKey, cfg.LabelValue)
+// startScaleDown liest die ausgenommenen Namespaces und startet die Pipeline mit ihnen als Input EXCLUDE_NAMESPACES.
+func startScaleDown(ctx context.Context, cfg config, client kubernetes.Interface, st starter) (gitlabpipeline.Pipeline, []string, error) {
+	excluded, err := excludedNamespaces(ctx, client, cfg.LabelKey, cfg.LabelValue)
 	if err != nil {
 		return gitlabpipeline.Pipeline{}, nil, err
 	}
 	inputs := map[string]string{InputExcludeNamespaces: strings.Join(excluded, ",")}
-	pipeline, err := starter.Start(ctx, cfg.Ref, nil, inputs)
+	pipeline, err := st.Start(ctx, cfg.Ref, nil, inputs)
 	if err != nil {
 		return gitlabpipeline.Pipeline{}, excluded, fmt.Errorf("pipeline konnte nicht gestartet werden: %w", err)
 	}

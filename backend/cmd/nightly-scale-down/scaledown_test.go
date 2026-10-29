@@ -1,4 +1,4 @@
-package scaledowntrigger
+package main
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func validEnv() map[string]string {
 }
 
 func TestFromEnv(t *testing.T) {
-	c, err := FromEnv(env(validEnv()))
+	c, err := configFromEnv(env(validEnv()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestFromEnv(t *testing.T) {
 	}
 
 	// Alle fehlenden Pflichtvariablen werden gemeinsam gemeldet.
-	_, err = FromEnv(env(nil))
+	_, err = configFromEnv(env(nil))
 	for _, name := range []string{EnvLabelKey, EnvGitLabURL, EnvGitLabProject, EnvGitLabRef, EnvTriggerToken} {
 		if err == nil || !strings.Contains(err.Error(), name) {
 			t.Errorf("Fehler zu %s erwartet: %v", name, err)
@@ -54,7 +54,7 @@ func TestFromEnv(t *testing.T) {
 	for name, kv := range invalid {
 		e := validEnv()
 		e[kv[0]] = kv[1]
-		if _, err := FromEnv(env(e)); err == nil {
+		if _, err := configFromEnv(env(e)); err == nil {
 			t.Errorf("%s: Fehler erwartet", name)
 		}
 	}
@@ -74,7 +74,7 @@ func client() *fake.Clientset {
 }
 
 func TestExcludedNamespaces(t *testing.T) {
-	got, err := ExcludedNamespaces(context.Background(), client(), key, "true")
+	got, err := excludedNamespaces(context.Background(), client(), key, "true")
 	if err != nil || strings.Join(got, ",") != "foo-feat-1,foo-feat-2" {
 		t.Fatalf("got %v, err %v", got, err)
 	}
@@ -92,9 +92,9 @@ func (f *fakeStarter) Start(_ context.Context, ref string, _, inputs map[string]
 }
 
 func TestRun(t *testing.T) {
-	cfg := Config{LabelKey: key, LabelValue: "true", Ref: "main"}
+	cfg := config{LabelKey: key, LabelValue: "true", Ref: "main"}
 	s := &fakeStarter{}
-	p, excluded, err := Run(context.Background(), cfg, client(), s)
+	p, excluded, err := startScaleDown(context.Background(), cfg, client(), s)
 	if err != nil || p.ID != 7 || len(excluded) != 2 {
 		t.Fatalf("pipeline = %+v, excluded = %v, err = %v", p, excluded, err)
 	}
@@ -104,7 +104,7 @@ func TestRun(t *testing.T) {
 
 	// Ohne markierte Namespaces wird trotzdem gestartet, mit leerem Input.
 	s = &fakeStarter{}
-	if _, _, err := Run(context.Background(), cfg, fake.NewClientset(), s); err != nil {
+	if _, _, err := startScaleDown(context.Background(), cfg, fake.NewClientset(), s); err != nil {
 		t.Fatal(err)
 	}
 	if v, ok := s.inputs[InputExcludeNamespaces]; !ok || v != "" {
@@ -113,7 +113,7 @@ func TestRun(t *testing.T) {
 
 	// Fehler beim Start werden durchgereicht.
 	s = &fakeStarter{err: errors.New("GitLab antwortete mit 401")}
-	if _, _, err := Run(context.Background(), cfg, client(), s); err == nil || !strings.Contains(err.Error(), "401") {
+	if _, _, err := startScaleDown(context.Background(), cfg, client(), s); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("err = %v", err)
 	}
 }

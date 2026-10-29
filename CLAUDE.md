@@ -32,7 +32,7 @@ Backend-Pakete (`backend/`):
 | Paket                         | Aufgabe                                                                   |
 |-------------------------------|---------------------------------------------------------------------------|
 | `cmd/dashboard`               | Startup, Wiring, Registrierung der ActionHandler                          |
-| `cmd/nightly-scale-down`      | Zweite Anwendung (CronJob): startet die Pipeline für das nächtliche Herunterskalieren |
+| `cmd/nightly-scale-down`      | Zweite Anwendung (CronJob): startet die Pipeline für das nächtliche Herunterskalieren; Logik in `scaledown.go` (Konfiguration aus Umgebungsvariablen, Namespaces mit Ausnahme-Label lesen, Pipeline mit Input `EXCLUDE_NAMESPACES` starten) |
 | `internal/config`             | `config.yaml` laden/validieren                                            |
 | `internal/model`              | Stored-Object-Structs, `NamespaceView`                                    |
 | `internal/project`            | Namespace-Labels → Projekt                                                |
@@ -47,7 +47,6 @@ Backend-Pakete (`backend/`):
 | `internal/actions/assignteam` | ActionHandler `assign-team`: ordnet einen Namespace einem Team zu (setzt/entfernt das Label `teams.label-key` per Merge-Patch) |
 | `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`: nimmt einen Namespace vom nächtlichen Herunterskalieren aus, indem er das von der Skalierungs-Anwendung ausgewertete Label setzt (`mode: mark`) bzw. entfernt (`mode: unmark`); zwei Aktionen, die sich gegenseitig ablösen |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
-| `internal/scaledowntrigger`   | Logik des CronJobs: Konfiguration aus Umgebungsvariablen, Namespaces mit Ausnahme-Label lesen, Pipeline mit Input `EXCLUDE_NAMESPACES` starten (`gitlabpipeline.Trigger.Start`) |
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
 | `internal/copycommands`       | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
@@ -487,6 +486,9 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 
 Zweite Anwendung im selben Go-Modul und Image (`cmd/nightly-scale-down`, Binary `/nightly-scale-down`), deployt als
 CronJob (`backend/deploy/nightly-scale-down.yaml`, Plan `plans/nightly-scale-down-cronjob.md`).
+
+- Der CronJob-Code liegt nur unter `cmd/nightly-scale-down` (Paket `main`), das Dashboard kennt ihn nicht. Aus
+  `internal/` nutzt er nur gemeinsame Bausteine: `kube.NewClient` und `gitlabpipeline.Trigger`.
 
 - Liest einmal alle Namespaces mit dem Ausnahme-Label (`SCALE_DOWN_EXCLUSION_LABEL_KEY`/`_VALUE`, muss zu
   `label-key`/`label-value` der Aktion `nightly-scale-down-exclusion` passen). Kein Informer, keine `config.yaml`,
