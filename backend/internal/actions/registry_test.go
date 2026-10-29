@@ -32,7 +32,7 @@ func TestRegistry(t *testing.T) {
 	r := NewRegistry()
 	r.Register("scale", func(Deps) Handler { return stub })
 	err := r.Activate([]config.ActionHandlerConfig{
-		{Name: "scale", Title: "Skalieren", LucideIcon: "scale", Projects: []string{"foo"}},
+		{Name: "scale", Title: "Skalieren", Icon: "scale", Projects: []string{"foo"}},
 		{Name: "scale-disabled", Handler: "scale", Projects: []string{}},
 	}, Deps{})
 	if err != nil {

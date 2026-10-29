@@ -22,8 +22,8 @@ nicht über Code.
 ```yaml
   - action-name: deploy-missing-services
     action-title: Fehlende Services deployen
-    lucide-icon: package-plus
-    lucide-icon-color: green
+    icon: package-plus
+    icon-color: green
     projects: [foo-projekt]
     extra-handler-configs:
       services:                            # Pflicht, mindestens ein Eintrag, Namen eindeutig

@@ -53,8 +53,8 @@ projects:
 links:
   - link-id: foo-system
     title: Absprung nach Foo
-    lucide-icon: scroll-text
-    lucide-icon-color: "#00bfb3"
+    icon: scroll-text
+    icon-color: "#00bfb3"
     projects: [foo-projekt]              # Pflicht; [] = in keinem Projekt (Warnung beim Start)
     targets:                             # nur aufgeführte Typen haben den Link
       namespace:

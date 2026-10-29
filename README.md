@@ -306,8 +306,8 @@ actionHandlers:
   - action-name: delete-pod                 # eindeutige Aktion-ID
     handler: delete-pod                     # optional; Standard: action-name
     action-title: Pod löschen               # Tooltip im Dashboard
-    lucide-icon: trash                      # Name eines Lucide-Icons (https://lucide.dev/icons)
-    lucide-icon-color: red                  # beliebige CSS-Farbe
+    icon: trash                      # Name eines icons (https://lucide.dev/icons)
+    icon-color: red                  # beliebige CSS-Farbe
     projects: [ foo-projekt, bar-projekt ]    # Pflicht; [] = deaktiviert
     extra-handler-configs: # handlerspezifisch
       force-delete: true
@@ -318,8 +318,8 @@ actionHandlers:
 | `action-name`           | ja      | Eindeutige ID der Aktion. Sie steht im Pfad von `PATCH /api/actions/{action-name}`.                                                                                                  |
 | `handler`               | nein    | Handler-Typ. Fehlt er, gilt `action-name` als Handler-Typ. Ein Handler-Typ wie `gitlab-pipeline` kann so mehrere Aktionen bedienen.                                                  |
 | `action-title`          | nein    | Titel, im Dashboard als Tooltip am Icon                                                                                                                                              |
-| `lucide-icon`           | nein    | Icon-Name. Unbekannte Namen zeigen ein Platzhalter-Icon.                                                                                                                             |
-| `lucide-icon-color`     | nein    | Icon-Farbe als CSS-Wert, z. B. `red` oder `#00bfb3`                                                                                                                                  |
+| `icon`           | nein    | Icon-Name. Unbekannte Namen zeigen ein Platzhalter-Icon.                                                                                                                             |
+| `icon-color`     | nein    | Icon-Farbe als CSS-Wert, z. B. `red` oder `#00bfb3`                                                                                                                                  |
 | `projects`              | ja      | Projekte, in denen die Aktion angeboten und ausführbar ist. **`[]` deaktiviert die Aktion**: Ihr Handler wird dann nicht erzeugt. Es wird nur geprüft, ob der Handler-Typ existiert. |
 | `extra-handler-configs` | nein    | Handlerspezifische Einstellungen, siehe unten                                                                                                                                        |
 
@@ -408,8 +408,8 @@ können ihn nutzen, sie unterscheiden sich nur in ihrer Konfiguration.
   - action-name: deploy-feature
     handler: gitlab-pipeline
     action-title: Feature deployen
-    lucide-icon: rocket
-    lucide-icon-color: green
+    icon: rocket
+    icon-color: green
     projects: [ foo-projekt ]
     extra-handler-configs:
       gitlab-url: https://gitlab.mycomp.de
@@ -469,7 +469,7 @@ Abschnitt [`teams`](#teams) und „Kein Team“, dazu die aktuelle Zuordnung. Di
 ```yaml
   - action-name: assign-team
     action-title: Team zuordnen
-    lucide-icon: users
+    icon: users
     projects: [ foo-projekt ]
 ```
 
@@ -484,8 +484,8 @@ genau wie bei [`gitlab-pipeline`](#gitlab-pipeline). Die gewählten Services ste
 ```yaml
   - action-name: deploy-missing-services
     action-title: Fehlende Services deployen
-    lucide-icon: package-plus
-    lucide-icon-color: green
+    icon: package-plus
+    icon-color: green
     projects: [ foo-projekt ]
     extra-handler-configs:
       services:
@@ -530,8 +530,8 @@ projects:
 links:
   - link-id: kibana-logs                          # eindeutig
     title: Logs in Kibana                         # Tooltip
-    lucide-icon: scroll-text
-    lucide-icon-color: "#00bfb3"
+    icon: scroll-text
+    icon-color: "#00bfb3"
     projects: [ foo-projekt, bar-projekt ]          # Pflicht; [] = in keinem Projekt
     targets: # je Objekt-Typ genau eine URL
       namespace:
@@ -553,8 +553,8 @@ links:
 |---------------------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `link-id`           | ja      | Eindeutige ID                                                                                                                                                       |
 | `title`             | ja      | Tooltip im Dashboard                                                                                                                                                |
-| `lucide-icon`       | nein    | Icon-Name                                                                                                                                                           |
-| `lucide-icon-color` | nein    | Icon-Farbe                                                                                                                                                          |
+| `icon`       | nein    | Icon-Name                                                                                                                                                           |
+| `icon-color` | nein    | Icon-Farbe                                                                                                                                                          |
 | `projects`          | ja      | Projekte, in denen der Link angeboten wird. `[]` heißt in keinem Projekt, beim Start gibt es dazu eine Warnung.                                                     |
 | `targets`           | ja      | Je Objekt-Typ (`namespace`, `service`, `ingress`, `pod`) ein Eintrag mit `url`. Nicht aufgeführte Typen haben den Link nicht. Ein Target ohne `url` ist ein Fehler. |
 | `targets.<typ>.url` | ja      | [Template](#templates-in-der-konfiguration) für die Ziel-URL                                                                                                        |
@@ -581,8 +581,8 @@ Befehl in die Zwischenablage. Pod-Befehle stehen in den Service-Details beim jew
 copy-commands:
   - command-id: pod-shell                   # eindeutige ID
     title: Shell im Pod öffnen              # Tooltip
-    lucide-icon: terminal                   # Name eines Lucide-Icons
-    lucide-icon-color: "#455a64"            # beliebige CSS-Farbe
+    icon: terminal                   # Name eines icons
+    icon-color: "#455a64"            # beliebige CSS-Farbe
     projects: [ foo-projekt ]               # Pflicht; [] = in keinem Projekt
     targets:                                # je Objekt-Typ ein Befehl; fehlende Typen haben den Befehl nicht
       pod:
@@ -595,8 +595,8 @@ copy-commands:
 |---------------------|---------|--------------------------------------------------------------------------------------------|
 | `command-id`        | ja      | Eindeutige ID                                                                              |
 | `title`             | ja      | Tooltip im Dashboard                                                                       |
-| `lucide-icon`       | nein    | Icon des Buttons                                                                           |
-| `lucide-icon-color` | nein    | Farbe des Icons                                                                            |
+| `icon`       | nein    | Icon des Buttons                                                                           |
+| `icon-color` | nein    | Farbe des Icons                                                                            |
 | `projects`          | ja      | Projekte, in denen der Befehl angeboten wird. `[]` heißt: in keinem (Warnung beim Start).  |
 | `targets.<typ>`     | ja      | `command` je Objekt-Typ (`namespace`, `service`, `ingress`, `pod`) als Template            |
 

@@ -19,8 +19,8 @@ link-variables:
 links:
   - link-id: foo-system                 # eindeutig
     title: Absprung nach Foo                # Tooltip im Dashboard
-    lucide-icon: scroll-text
-    lucide-icon-color: "#00bfb3"
+    icon: scroll-text
+    icon-color: "#00bfb3"
     projects: [foo-projekt]              # required feld. wenn empty, dann ist der link in keinem projekt verfügbar
     # Je Objekt-Typ ein eigenes Ziel. Fehlt ein Typ, gibt es den Link dort nicht.
     targets:

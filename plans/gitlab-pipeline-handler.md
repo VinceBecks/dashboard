@@ -25,8 +25,8 @@ actionHandlers:
     handler: gitlab-pipeline             # NEU: Handler-Typ; fehlt er, gilt action-name (abwärtskompatibel)
     enabled: true
     action-title: Feature deployen
-    lucide-icon: rocket
-    lucide-icon-color: green
+    icon: rocket
+    icon-color: green
     extra-handler-configs:
       gitlab-url: https://gitlab.mycomp.de
       project: team/foo-deploy           # Projekt-ID oder Pfad

@@ -16,8 +16,8 @@ Container ein eigener Befehl mit dem Titel „Shell (app)“, „Shell (sidecar)
 copy-commands:
   - command-id: pod-shell                 # eindeutig
     title: Shell im Pod öffnen
-    lucide-icon: terminal
-    lucide-icon-color: "#455a64"
+    icon: terminal
+    icon-color: "#455a64"
     projects: [foo-projekt]               # Pflicht; [] = in keinem Projekt (Warnung beim Start)
     targets:                              # je Objekt-Typ ein Befehl: namespace | service | ingress | pod
       pod:
@@ -47,7 +47,7 @@ copy-commands:
 
 - **`backend/internal/config/config.go`:**
   - `Config.CopyCommands []CopyCommand` (`yaml:"copy-commands"`)
-  - `CopyCommand{ID command-id, Title, LucideIcon, LucideIconColor, Projects, Targets map[model.Kind]CommandTarget{Command}}`
+  - `CopyCommand{ID command-id, Title, icon, iconColor, Projects, Targets map[model.Kind]CommandTarget{Command}}`
   - Validierung `validateCopyCommands` nach dem Muster von `validateLinks`; nutzt `validateProjects`.
   - Tests in `config_test.go` nach dem Muster von `TestLinks` und `TestLinksValidation`.
 - **`backend/internal/objecttemplate/objecttemplate.go`:**
@@ -56,7 +56,7 @@ copy-commands:
   - Test für `shellquote`
 - **`backend/internal/copycommands/copycommands.go` (neues Paket, analog zu `internal/links`):**
   - `Registry` mit `NewRegistry(cfg)`; parst alle Templates beim Start.
-  - `For(ref, obj, project) []Command` liefert nie nil. `Command{ID, Title, LucideIcon, LucideIconColor, Command}`.
+  - `For(ref, obj, project) []Command` liefert nie nil. `Command{ID, Title, icon, iconColor, Command}`.
   - **Pro Container:** Bei einem `model.StoredPod` mit mindestens einem Container wird je Container mit gesetztem
     `.Container` gerendert.
     - Sind alle Ergebnisse gleich (das Template nutzt `.Container` nicht), entsteht genau ein Befehl mit `ID =
@@ -82,8 +82,8 @@ Jedes Objekt trägt zusätzlich `copyCommands` (nie fehlend, ggf. leer):
 
 ```jsonc
 "copyCommands": [
-  { "id": "pod-shell/app", "title": "Shell im Pod öffnen (app)", "lucideIcon": "terminal",
-    "lucideIconColor": "#455a64", "command": "kubectl exec -it -n foo-feature-123 foo-backend-7d9f -c app -- sh" }
+  { "id": "pod-shell/app", "title": "Shell im Pod öffnen (app)", "icon": "terminal",
+    "iconColor": "#455a64", "command": "kubectl exec -it -n foo-feature-123 foo-backend-7d9f -c app -- sh" }
 ]
 ```
 
@@ -92,10 +92,10 @@ Namespace ergänzen.
 
 ## Frontend
 
-- **`src/api/types.ts`:** `CopyCommand { id; title; lucideIcon; lucideIconColor; command }`,
+- **`src/api/types.ts`:** `CopyCommand { id; title; icon; iconColor; command }`,
   `ObjectBase.copyCommands: CopyCommand[]`.
 - **`src/components/CopyCommandButtons.tsx` (neu):**
-  - je Befehl ein `IconButton` mit dem konfigurierten Lucide-Icon (`ActionIcon`),
+  - je Befehl ein `IconButton` mit dem konfigurierten icon (`ActionIcon`),
   - Tooltip mit Titel und dem Befehl in Monospace, nach dem Klick kurz „Kopiert“ bzw. „Kopieren nicht möglich“,
   - Kopieren über das vorhandene `copyToClipboard` aus `src/components/CopyButton.tsx`, das einen Fallback ohne
     Secure Context mitbringt.

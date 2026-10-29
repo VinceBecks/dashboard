@@ -24,8 +24,8 @@
             {
               "id": "deploy-missing-services",
               "title": "Fehlende Services deployen",
-              "lucideIcon": "package-plus",
-              "lucideIconColor": "green",
+              "icon": "package-plus",
+              "iconColor": "green",
               "formFields": [
                 {
                   "id": "services",
@@ -41,14 +41,14 @@
             {
               "id": "kibana",
               "title": "Logs in Kibana",
-              "lucideIcon": "scroll-text",
-              "lucideIconColor": "#00bfb3",
+              "icon": "scroll-text",
+              "iconColor": "#00bfb3",
               "url": "https://kibana.mycomp.de/app/discover#/?_a=(query:(query:'kubernetes.namespace:foo-feature-123'))"
             }
           ],
           "copyCommands": [
-            { "id": "namespace-context", "title": "Namespace im kubectl-Context setzen", "lucideIcon": "square-terminal",
-              "lucideIconColor": "#455a64", "command": "kubectl config set-context --current --namespace=foo-feature-123" }
+            { "id": "namespace-context", "title": "Namespace im kubectl-Context setzen", "icon": "square-terminal",
+              "iconColor": "#455a64", "command": "kubectl config set-context --current --namespace=foo-feature-123" }
           ],
           "pipelines": [                            // laufende Pipelines (gitlab-pipeline mit status-token-env)
             { "action": "deploy-feature", "title": "Feature deployen",
@@ -62,7 +62,7 @@
               "running": true,                      // grün: mindestens ein Replica ready
               "areas": ["business-services"],       // IDs aus serviceAreas; mehrere möglich
               "actions": [
-                { "id": "restart-service-replicas", "title": "Neu starten", "lucideIcon": "rotate-cw", "lucideIconColor": "orange" }
+                { "id": "restart-service-replicas", "title": "Neu starten", "icon": "rotate-cw", "iconColor": "orange" }
               ],
               "links": [],
               "copyCommands": [],
@@ -77,11 +77,11 @@
                     { "name": "app", "image": "registry.mycomp.de/foo/backend:feature-123" }
                   ],
                   "actions": [
-                    { "id": "delete-pod", "title": "Pod löschen", "lucideIcon": "trash", "lucideIconColor": "red" }
+                    { "id": "delete-pod", "title": "Pod löschen", "icon": "trash", "iconColor": "red" }
                   ],
                   "links": [],
                   "copyCommands": [                  // je Container ein Befehl, wenn das Template .Container nutzt
-                    { "id": "pod-shell", "title": "Shell im Pod öffnen", "lucideIcon": "terminal", "lucideIconColor": "#455a64",
+                    { "id": "pod-shell", "title": "Shell im Pod öffnen", "icon": "terminal", "iconColor": "#455a64",
                       "command": "kubectl exec -it -n foo-feature-123 foo-backend-7d9f8c6b5-x2k4q -c app -- sh" }
                   ],
                   "pipelines": []
@@ -108,7 +108,7 @@
               "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
               "addresses": ["k8s-nodes.mycomp.de:30080"], // je Port mit NodePort
               "actions": [
-                { "id": "delete-node-port-service", "title": "NodePort-Service löschen", "lucideIcon": "trash-2", "lucideIconColor": "red" }
+                { "id": "delete-node-port-service", "title": "NodePort-Service löschen", "icon": "trash-2", "iconColor": "red" }
               ],
               "links": [],
               "copyCommands": [],

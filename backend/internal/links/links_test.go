@@ -24,8 +24,8 @@ projects:
 links:
   - link-id: kibana-logs
     title: Logs in Kibana
-    lucide-icon: scroll-text
-    lucide-icon-color: "#00bfb3"
+    icon: scroll-text
+    icon-color: "#00bfb3"
     projects: [foo, bar]
     targets:
       pod:
@@ -82,7 +82,7 @@ func TestKibanaLinkPerKind(t *testing.T) {
 	r := registry(t, kibanaConfig)
 
 	pod := r.For(ref(model.KindPod, "web-1"), model.StoredPod{}, "foo")
-	if len(pod) != 1 || pod[0].ID != "kibana-logs" || pod[0].LucideIcon != "scroll-text" {
+	if len(pod) != 1 || pod[0].ID != "kibana-logs" || pod[0].icon != "scroll-text" {
 		t.Fatalf("Pod-Links = %+v", pod)
 	}
 	want := `/?_g=(time:(from:now-1h,to:now))&_a=(dataSource:(dataViewId:'logs-foo',type:dataView),` +

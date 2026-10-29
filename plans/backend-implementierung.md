@@ -41,7 +41,7 @@ Makefile, Dockerfile, config.example.yaml, deploy/ (Deployment replicas:1, SA, C
   (Label-Werte im Beispiel sind unquotiert).
 - Structs: `Config{Projects []Project; ActionHandlers []ActionHandlerConfig; Store StoreConfig}`,
   `Project{Name string \`yaml:"project-name"\`; NamespaceLabels map[string]string}`,
-  `ActionHandlerConfig{Name, Enabled, Title, LucideIcon, LucideIconColor, Extra map[string]any}`,
+  `ActionHandlerConfig{Name, Enabled, Title, icon, iconColor, Extra map[string]any}`,
   `StoreConfig{RecreateInterval Interval}`.
 - `Interval`: eigener `UnmarshalYAML`: `0` = deaktiviert, sonst `<n>m`, `<n>h`, `<n>d` (Tage selbst parsen).
 - Validierung: eindeutige Projekt- und Action-Namen, nicht-leere `namespace-labels`.

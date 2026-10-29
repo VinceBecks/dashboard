@@ -205,8 +205,8 @@ Beispiel für ActionHandler:
 actionHandlers:
   - action-name: delete-pod
     action-title: Pod Löschen
-    lucide-icon: trash
-    lucide-icon-color: red
+    icon: trash
+    icon-color: red
     projects: [foo-projekt, bar-projekt]
     extra-handler-configs:
       force-delete: true
@@ -220,7 +220,7 @@ actionHandlers:
   Verfügung.
 - `handler` (optional) ist der Handler-Typ. Fehlt er, gilt `action-name` als Handler-Typ. Ein Handler-Typ kann
   mehrere Aktionen bedienen; je Aktion entsteht eine eigene Handler-Instanz mit eigener Konfiguration.
-- `action-title`, `lucide-icon` und `lucide-icon-color` werden unverändert an das Frontend durchgereicht.
+- `action-title`, `icon` und `icon-color` werden unverändert an das Frontend durchgereicht.
 - `extra-handler-configs` ist handler-spezifisch und wird nur vom jeweiligen Handler interpretiert.
 
 Beispiel für den generischen Handler-Typ `gitlab-pipeline` (startet eine Pipeline über die Pipeline-Trigger-API):
@@ -229,8 +229,8 @@ Beispiel für den generischen Handler-Typ `gitlab-pipeline` (startet eine Pipeli
   - action-name: deploy-feature
     handler: gitlab-pipeline
     action-title: Feature deployen
-    lucide-icon: rocket
-    lucide-icon-color: green
+    icon: rocket
+    icon-color: green
     projects: [foo-projekt]
     extra-handler-configs:
       gitlab-url: https://gitlab.mycomp.de
@@ -249,8 +249,8 @@ ohne `applies-to`). Fehlt nichts, bleibt die Aktion sichtbar, das Dropdown ist l
 ```yaml
   - action-name: deploy-missing-services
     action-title: Fehlende Services deployen
-    lucide-icon: package-plus
-    lucide-icon-color: green
+    icon: package-plus
+    icon-color: green
     projects: [foo-projekt]
     extra-handler-configs:
       services:                           # Abgleich per Service-Name; label optional
@@ -300,8 +300,8 @@ projects:
 links:
   - link-id: foo-system               # eindeutig
     title: Absprung nach Foo
-    lucide-icon: scroll-text
-    lucide-icon-color: "#00bfb3"
+    icon: scroll-text
+    icon-color: "#00bfb3"
     projects: [foo-projekt]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
     targets:                          # je Objekt-Typ eine URL; nicht aufgeführte Typen haben den Link nicht
       namespace:
@@ -333,8 +333,8 @@ Beispiel für Kopier-Befehle (z. B. Shell im Pod). Das Backend rendert sie je Ob
 copy-commands:
   - command-id: pod-shell             # eindeutig
     title: Shell im Pod öffnen
-    lucide-icon: terminal
-    lucide-icon-color: "#455a64"
+    icon: terminal
+    icon-color: "#455a64"
     projects: [foo-projekt]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
     targets:                          # je Objekt-Typ ein Befehl (namespace | service | ingress | pod)
       pod:
@@ -415,12 +415,12 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 - Jedes Objekt kennt seine Parents bis zum Projekt (`parents.project`, `.namespace`, `.service`), damit ein Event
   ohne weitere Daten einsortiert werden kann.
 - Der Snapshot enthält die konfigurierten Teams (`teams`), jeder Namespace seine Team-ID (`team`, optional).
-- Jedes Objekt trägt `links` und `copyCommands` (je Befehl `id`, `title`, `lucideIcon`, `lucideIconColor`, `command`)
+- Jedes Objekt trägt `links` und `copyCommands` (je Befehl `id`, `title`, `icon`, `iconColor`, `command`)
   sowie `pipelines` (laufende Pipelines: `action`, `title`, `url`, `startedAt`).
 - Jedes Objekt trägt die Liste der Aktionen, die auf ihm ausführbar sind. Je Aktion:
     - Name (Titel)
     - Aktion-ID (eindeutiger Name)
-    - Lucide-Icon
+    - icon
     - Icon-Farbe
     - optional eine Liste von Formular-Feldern
 - Je Formular-Feld u. a.: Feld-Typ (`text`, `select`, `multi-select`, `number`), Feld-Label, Feld-ID, `isRequired`,

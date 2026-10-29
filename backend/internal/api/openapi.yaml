@@ -110,12 +110,12 @@ components:
           description: Einzelne Validierungsfehler der Formular-Eingaben
     Action:
       type: object
-      required: [id, title, lucideIcon, lucideIconColor]
+      required: [id, title, icon, iconColor]
       properties:
         id: { type: string, description: Eindeutige Aktion-ID }
         title: { type: string }
-        lucideIcon: { type: string }
-        lucideIconColor: { type: string }
+        icon: { type: string }
+        iconColor: { type: string }
         formFields:
           type: array
           items: { $ref: '#/components/schemas/FormField' }
@@ -140,12 +140,12 @@ components:
     Link:
       type: object
       description: Konfigurierter Absprung (links in der config.yaml); die URL rendert das Backend je Objekt.
-      required: [id, title, lucideIcon, lucideIconColor, url]
+      required: [id, title, icon, iconColor, url]
       properties:
         id: { type: string }
         title: { type: string }
-        lucideIcon: { type: string }
-        lucideIconColor: { type: string }
+        icon: { type: string }
+        iconColor: { type: string }
         url: { type: string, format: uri, description: Absolute http(s)-URL }
     Parents:
       type: object
@@ -181,12 +181,12 @@ components:
         Konfigurierter Befehl (`copy-commands` in der config.yaml), den das Frontend in die Zwischenablage kopiert.
         Nutzt ein Pod-Template `.Container`, gibt es je Container einen Befehl (`id` `<command-id>/<container>`,
         Titel mit Container-Name in Klammern).
-      required: [id, title, lucideIcon, lucideIconColor, command]
+      required: [id, title, icon, iconColor, command]
       properties:
         id: { type: string }
         title: { type: string }
-        lucideIcon: { type: string }
-        lucideIconColor: { type: string }
+        icon: { type: string }
+        iconColor: { type: string }
         command: { type: string, description: Fertig gerenderter Befehl }
     ObjectBase:
       type: object

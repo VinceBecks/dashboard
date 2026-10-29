@@ -22,7 +22,7 @@ projects:
 copy-commands:
   - command-id: pod-shell
     title: Shell
-    lucide-icon: terminal
+    icon: terminal
     projects: [foo, bar]
     targets:
       pod:
@@ -70,7 +70,7 @@ var podRef = model.ObjectRef{Kind: model.KindPod, Namespace: "feat-1", Name: "we
 func TestPodWithOneContainer(t *testing.T) {
 	got := registry(t).For(podRef, pod("app"), "foo")
 	want := []Command{
-		{ID: "pod-shell", Title: "Shell", LucideIcon: "terminal", Command: "kubectl --context kind-demo exec -it -n feat-1 web-1 -c app -- sh"},
+		{ID: "pod-shell", Title: "Shell", Icon: "terminal", Command: "kubectl --context kind-demo exec -it -n feat-1 web-1 -c app -- sh"},
 		{ID: "logs", Title: "Logs", Command: "kubectl logs -f -n feat-1 web-1 --all-containers"},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -81,8 +81,8 @@ func TestPodWithOneContainer(t *testing.T) {
 func TestPodWithTwoContainers(t *testing.T) {
 	got := registry(t).For(podRef, pod("app", "sidecar"), "bar")
 	want := []Command{
-		{ID: "pod-shell/app", Title: "Shell (app)", LucideIcon: "terminal", Command: "kubectl --context kind-bar exec -it -n feat-1 web-1 -c app -- sh"},
-		{ID: "pod-shell/sidecar", Title: "Shell (sidecar)", LucideIcon: "terminal", Command: "kubectl --context kind-bar exec -it -n feat-1 web-1 -c sidecar -- sh"},
+		{ID: "pod-shell/app", Title: "Shell (app)", Icon: "terminal", Command: "kubectl --context kind-bar exec -it -n feat-1 web-1 -c app -- sh"},
+		{ID: "pod-shell/sidecar", Title: "Shell (sidecar)", Icon: "terminal", Command: "kubectl --context kind-bar exec -it -n feat-1 web-1 -c sidecar -- sh"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got  %+v\nwant %+v", got, want)

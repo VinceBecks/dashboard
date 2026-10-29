@@ -14,8 +14,8 @@ projects:
 actionHandlers:
   - action-name: delete-pod
     action-title: Pod Löschen
-    lucide-icon: trash
-    lucide-icon-color: red
+    icon: trash
+    icon-color: red
     projects: [foo-projekt]
     extra-handler-configs:
       force-delete: true
@@ -244,7 +244,7 @@ projects: [{project-name: foo, namespace-labels: {a: b}}]
 copy-commands:
   - command-id: pod-shell
     title: Shell
-    lucide-icon: terminal
+    icon: terminal
     projects: [foo]
     targets:
       pod:

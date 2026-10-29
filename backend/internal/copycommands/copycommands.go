@@ -17,11 +17,11 @@ import (
 
 // Command ist ein fertig gerenderter Befehl, den das Frontend in die Zwischenablage kopiert.
 type Command struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	LucideIcon      string `json:"lucideIcon"`
-	LucideIconColor string `json:"lucideIconColor"`
-	Command         string `json:"command"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Icon      string `json:"icon"`
+	IconColor string `json:"iconColor"`
+	Command   string `json:"command"`
 }
 
 type compiled struct {
@@ -120,7 +120,7 @@ func renderPerContainer(tpl *template.Template, data objecttemplate.Data, contai
 // commands baut aus den gerenderten Befehlen die Ausgabe: einer, wenn alle gleich sind (das Template nutzt
 // .Container nicht), sonst je Container einer mit Container-Name in ID und Titel.
 func commands(cfg config.CopyCommand, containers, rendered []string) []Command {
-	base := Command{ID: cfg.ID, Title: cfg.Title, LucideIcon: cfg.LucideIcon, LucideIconColor: cfg.LucideIconColor}
+	base := Command{ID: cfg.ID, Title: cfg.Title, Icon: cfg.Icon, IconColor: cfg.IconColor}
 	if !slices.ContainsFunc(rendered, func(c string) bool { return c != rendered[0] }) {
 		base.Command = rendered[0]
 		return []Command{base}

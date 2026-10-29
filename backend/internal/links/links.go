@@ -18,11 +18,11 @@ import (
 
 // Link ist ein fertig gerenderter Link für das Frontend.
 type Link struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	LucideIcon      string `json:"lucideIcon"`
-	LucideIconColor string `json:"lucideIconColor"`
-	URL             string `json:"url"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	icon      string `json:"icon"`
+	iconColor string `json:"iconColor"`
+	URL       string `json:"url"`
 }
 
 type compiled struct {
@@ -83,11 +83,11 @@ func (r *Registry) For(ref model.ObjectRef, obj any, project string) []Link {
 			continue
 		}
 		result = append(result, Link{
-			ID:              c.cfg.ID,
-			Title:           c.cfg.Title,
-			LucideIcon:      c.cfg.LucideIcon,
-			LucideIconColor: c.cfg.LucideIconColor,
-			URL:             u,
+			ID:        c.cfg.ID,
+			Title:     c.cfg.Title,
+			icon:      c.cfg.Icon,
+			iconColor: c.cfg.IconColor,
+			URL:       u,
 		})
 	}
 	return result

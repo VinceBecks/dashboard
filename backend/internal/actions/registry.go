@@ -24,11 +24,11 @@ func (e *ValidationError) Error() string { return fmt.Sprintf("ungültige Eingab
 
 // Action ist die Beschreibung einer auf einem Objekt ausführbaren Aktion für das Frontend.
 type Action struct {
-	ID              string      `json:"id"`
-	Title           string      `json:"title"`
-	LucideIcon      string      `json:"lucideIcon"`
-	LucideIconColor string      `json:"lucideIconColor"`
-	FormFields      []FormField `json:"formFields,omitempty"`
+	ID         string      `json:"id"`
+	Title      string      `json:"title"`
+	Icon       string      `json:"icon"`
+	IconColor  string      `json:"iconColor"`
+	FormFields []FormField `json:"formFields,omitempty"`
 }
 
 type activeAction struct {
@@ -87,11 +87,11 @@ func (r *Registry) ActionsFor(obj StoredObject) []Action {
 			continue
 		}
 		result = append(result, Action{
-			ID:              a.cfg.Name,
-			Title:           a.cfg.Title,
-			LucideIcon:      a.cfg.LucideIcon,
-			LucideIconColor: a.cfg.LucideIconColor,
-			FormFields:      a.handler.FormFields(obj),
+			ID:         a.cfg.Name,
+			Title:      a.cfg.Title,
+			Icon:       a.cfg.Icon,
+			IconColor:  a.cfg.IconColor,
+			FormFields: a.handler.FormFields(obj),
 		})
 	}
 	return result

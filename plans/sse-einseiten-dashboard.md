@@ -92,8 +92,8 @@ event: delete        data: { "kind": "...", "name": "...", "parents": { … } }
             {
               "id": "deploy-missing-services",
               "title": "Fehlende Services deployen",
-              "lucideIcon": "package-plus",
-              "lucideIconColor": "green",
+              "icon": "package-plus",
+              "iconColor": "green",
               "formFields": [
                 {
                   "id": "services",
@@ -109,8 +109,8 @@ event: delete        data: { "kind": "...", "name": "...", "parents": { … } }
             {
               "id": "kibana",
               "title": "Logs in Kibana",
-              "lucideIcon": "scroll-text",
-              "lucideIconColor": "#00bfb3",
+              "icon": "scroll-text",
+              "iconColor": "#00bfb3",
               "url": "https://kibana.mycomp.de/app/discover#/?_a=(query:(query:'kubernetes.namespace:foo-feature-123'))"
             }
           ],
@@ -121,7 +121,7 @@ event: delete        data: { "kind": "...", "name": "...", "parents": { … } }
               "parents": { "project": "foo-projekt", "namespace": "foo-feature-123" },
               "running": true,                      // grün: mindestens ein Replica ready
               "actions": [
-                { "id": "restart-service-replicas", "title": "Neu starten", "lucideIcon": "rotate-cw", "lucideIconColor": "orange" }
+                { "id": "restart-service-replicas", "title": "Neu starten", "icon": "rotate-cw", "iconColor": "orange" }
               ],
               "links": [],
               "pods": [                             // Replicas des Services
@@ -135,7 +135,7 @@ event: delete        data: { "kind": "...", "name": "...", "parents": { … } }
                     { "name": "app", "image": "registry.mycomp.de/foo/backend:feature-123" }
                   ],
                   "actions": [
-                    { "id": "delete-pod", "title": "Pod löschen", "lucideIcon": "trash", "lucideIconColor": "red" }
+                    { "id": "delete-pod", "title": "Pod löschen", "icon": "trash", "iconColor": "red" }
                   ],
                   "links": []
                 }

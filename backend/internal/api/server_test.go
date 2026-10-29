@@ -57,7 +57,7 @@ func setup(t *testing.T) (*testsource.Source, *Server, *podAction) {
 	action := &podAction{}
 	reg := actions.NewRegistry()
 	reg.Register("restart", func(actions.Deps) actions.Handler { return action })
-	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Title: "Neustart", LucideIcon: "rotate-ccw", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
+	if err := reg.Activate([]config.ActionHandlerConfig{{Name: "restart", Title: "Neustart", Icon: "rotate-ccw", Projects: []string{"foo"}}}, actions.Deps{}); err != nil {
 		t.Fatal(err)
 	}
 	projects := []config.Project{{Name: "foo"}, {Name: "bar"}}
@@ -170,7 +170,7 @@ func TestEvents(t *testing.T) {
 	got := syncHub(srv, sub)
 	want := []string{
 		`upsert {"kind":"service","name":"web","parents":{"project":"foo","namespace":"feat-1"},"running":true,"areas":["others"],"actions":[],"links":[],"copyCommands":[],"pipelines":[]}`,
-		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","lucideIcon":"rotate-ccw","lucideIconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[],"copyCommands":[],"pipelines":[]}`,
+		`upsert {"kind":"pod","name":"web-1","parents":{"project":"foo","namespace":"feat-1","service":"web"},"ready":true,"containers":[],"actions":[{"id":"restart","title":"Neustart","icon":"rotate-ccw","iconColor":"","formFields":[{"id":"reason","label":"Grund","type":"text","isRequired":true}]}],"links":[],"copyCommands":[],"pipelines":[]}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("events =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -387,7 +387,7 @@ projects: [{project-name: foo, namespace-labels: {a: b}}]
 links:
   - link-id: logs
     title: Logs
-    lucide-icon: scroll-text
+    icon: scroll-text
     projects: [foo]
     targets:
       namespace: {url: "https://kibana.example/{{ .Kind }}/{{ .Name }}"}
@@ -403,7 +403,7 @@ links:
 	srv := NewServer(st, actions.NewRegistry(), cfg.Projects, func() bool { return true }).WithLinks(reg)
 	_, _, body := subscribe(t, srv)
 	for _, want := range []string{
-		`"links":[{"id":"logs","title":"Logs","lucideIcon":"scroll-text","lucideIconColor":"","url":"https://kibana.example/namespace/feat-1"}]`,
+		`"links":[{"id":"logs","title":"Logs","icon":"scroll-text","iconColor":"","url":"https://kibana.example/namespace/feat-1"}]`,
 		`"url":"https://kibana.example/pod/web-1"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -427,7 +427,7 @@ projects: [{project-name: foo, namespace-labels: {a: b}}]
 copy-commands:
   - command-id: shell
     title: Shell
-    lucide-icon: terminal
+    icon: terminal
     projects: [foo]
     targets:
       pod: {command: "kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh"}
@@ -443,9 +443,9 @@ copy-commands:
 	srv := NewServer(st, actions.NewRegistry(), cfg.Projects, func() bool { return true }).WithCopyCommands(reg)
 	_, _, body := subscribe(t, srv)
 	for _, want := range []string{
-		`"copyCommands":[{"id":"shell","title":"Shell","lucideIcon":"terminal","lucideIconColor":"","command":"kubectl config set-context --current --namespace=feat-1"}]`,
-		`{"id":"shell/app","title":"Shell (app)","lucideIcon":"terminal","lucideIconColor":"","command":"kubectl exec -it -n feat-1 web-1 -c app -- sh"}`,
-		`{"id":"shell/sidecar","title":"Shell (sidecar)","lucideIcon":"terminal","lucideIconColor":"","command":"kubectl exec -it -n feat-1 web-1 -c sidecar -- sh"}`,
+		`"copyCommands":[{"id":"shell","title":"Shell","icon":"terminal","iconColor":"","command":"kubectl config set-context --current --namespace=feat-1"}]`,
+		`{"id":"shell/app","title":"Shell (app)","icon":"terminal","iconColor":"","command":"kubectl exec -it -n feat-1 web-1 -c app -- sh"}`,
+		`{"id":"shell/sidecar","title":"Shell (sidecar)","icon":"terminal","iconColor":"","command":"kubectl exec -it -n feat-1 web-1 -c sidecar -- sh"}`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("%s fehlt in %s", want, body)

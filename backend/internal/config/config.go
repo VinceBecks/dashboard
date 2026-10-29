@@ -34,10 +34,10 @@ type Config struct {
 // CopyCommand ist ein konfigurierbarer Befehl, den das Dashboard an Objekten zum Kopieren in die Zwischenablage
 // anbietet.
 type CopyCommand struct {
-	ID              string `yaml:"command-id"`
-	Title           string `yaml:"title"`
-	LucideIcon      string `yaml:"lucide-icon"`
-	LucideIconColor string `yaml:"lucide-icon-color"`
+	ID        string `yaml:"command-id"`
+	Title     string `yaml:"title"`
+	Icon      string `yaml:"icon"`
+	IconColor string `yaml:"icon-color"`
 	// Projects (Pflicht) sind die Projekte, in denen der Befehl angeboten wird; leer heißt: in keinem.
 	Projects []string `yaml:"projects"`
 	// Targets: je Objekt-Typ (namespace, service, ingress, pod) der Befehl. Nur für die enthaltenen Typen wird er
@@ -147,10 +147,10 @@ type ClusterConfig struct {
 
 // Link ist ein konfigurierbarer Absprung (z. B. nach Kibana), den das Dashboard an Objekten anzeigt.
 type Link struct {
-	ID              string `yaml:"link-id"`
-	Title           string `yaml:"title"`
-	LucideIcon      string `yaml:"lucide-icon"`
-	LucideIconColor string `yaml:"lucide-icon-color"`
+	ID        string `yaml:"link-id"`
+	Title     string `yaml:"title"`
+	Icon      string `yaml:"icon"`
+	IconColor string `yaml:"icon-color"`
 	// Projects (Pflicht) sind die Projekte, in denen der Link angeboten wird; leer heißt: in keinem.
 	Projects []string `yaml:"projects"`
 	// Targets: je Objekt-Typ (namespace, service, ingress, pod) die Ziel-URL. Nur für die enthaltenen Typen wird
@@ -201,10 +201,10 @@ type ActionHandlerConfig struct {
 	Name string `yaml:"action-name"`
 	// Handler ist der Handler-Typ. Ein Typ kann mehrere Aktionen bedienen (z. B. gitlab-pipeline).
 	// Fehlt er, gilt der action-name als Handler-Typ.
-	Handler         string `yaml:"handler"`
-	Title           string `yaml:"action-title"`
-	LucideIcon      string `yaml:"lucide-icon"`
-	LucideIconColor string `yaml:"lucide-icon-color"`
+	Handler   string `yaml:"handler"`
+	Title     string `yaml:"action-title"`
+	Icon      string `yaml:"icon"`
+	IconColor string `yaml:"icon-color"`
 	// Projects (Pflicht) sind die Projekte, in denen die Aktion angeboten wird. Eine leere Liste deaktiviert die
 	// Aktion: Ihr Handler wird dann nicht erzeugt.
 	Projects []string       `yaml:"projects"`

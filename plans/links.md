@@ -33,8 +33,8 @@ projects:
 links:
   - link-id: kibana-logs                 # eindeutig
     title: Logs in Kibana                # Tooltip im Dashboard
-    lucide-icon: scroll-text
-    lucide-icon-color: "#00bfb3"
+    icon: scroll-text
+    icon-color: "#00bfb3"
     projects: [foo-projekt]              # optional: nur für diese Projekte
     # Je Objekt-Typ ein eigenes Ziel. Fehlt ein Typ, gibt es den Link dort nicht.
     targets:
@@ -54,8 +54,8 @@ links:
 
   - link-id: grafana-pod
     title: Metriken in Grafana
-    lucide-icon: chart-line
-    lucide-icon-color: orange
+    icon: chart-line
+    icon-color: orange
     targets:
       pod: {}
     url: "{{ .Vars.grafanaUrl }}/d/k8s-pod"
@@ -98,7 +98,7 @@ links:
      sichern das ab.
 2. **Config** (`backend/internal/config/config.go`):
    - Neue Felder: top-level `LinkVariables map[string]string`, `Links []Link`, und `Project.LinkVariables`.
-   - Neuer Typ `Link{ID, Title, LucideIcon, LucideIconColor, Projects, Targets map[model.Kind]map[string]string,
+   - Neuer Typ `Link{ID, Title, icon, iconColor, Projects, Targets map[model.Kind]map[string]string,
      URL, QueryParams}`.
    - Validierung: eindeutige `link-id`, `url` gesetzt, mindestens ein Target, nur gültige Kinds, bekannte Projekte.
 3. **Link-Registry** (neues Paket `backend/internal/links`):
@@ -110,7 +110,7 @@ links:
    - Nur `http(s)`-URLs werden ausgeliefert. Das verhindert `javascript:`-URLs aus Templates.
 4. **API** (`backend/internal/api/server.go`):
    - Jedes Objekt-DTO (`NamespaceDTO`, `ServiceDTO`, `IngressDTO`, `PodDTO`) bekommt
-     `links: [{id, title, lucideIcon, lucideIconColor, url}]`, analog zu `actions`.
+     `links: [{id, title, icon, iconColor, url}]`, analog zu `actions`.
    - Der ETag-Mechanismus bleibt korrekt: Links hängen nur von Objekt-Daten und der statischen Config ab.
    - Die `openapi.yaml` bekommt das Schema `Link` und das Feld `links` an `ObjectBase`.
 5. **Frontend**:
