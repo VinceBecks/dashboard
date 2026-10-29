@@ -69,6 +69,27 @@ action-handlers:
     icon: rotate-ccw
     icon-color: orange
     projects: [foo-projekt, bar-projekt, foobar-projekt]
+  # Nimmt den Namespace vom nächtlichen Herunterskalieren aus (Label, das die Skalierungs-Anwendung auswertet).
+  # Ein Handler-Typ, zwei Aktionen: markieren nur ohne Label, aufheben nur mit Label.
+  - action-name: exclude-from-nightly-scale-down
+    handler: nightly-scale-down-exclusion
+    action-title: Nachts nicht herunterskalieren
+    icon: sun
+    icon-color: "#f9a825"
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
+    extra-handler-configs: &skip-scale-down
+      label-key: mycomp.de/skip-nightly-scale-down
+      label-value: "true"
+      mode: mark
+  - action-name: include-in-nightly-scale-down
+    handler: nightly-scale-down-exclusion
+    action-title: Nächtliches Herunterskalieren wieder zulassen
+    icon: moon
+    icon-color: "#455a64"
+    projects: [foo-projekt, bar-projekt, foobar-projekt]
+    extra-handler-configs:
+      <<: *skip-scale-down
+      mode: unmark
   # Braucht die Umgebungsvariable GITLAB_TRIGGER_TOKEN_FOO, sonst startet das Backend nicht
   # (lokal z. B. GITLAB_TRIGGER_TOKEN_FOO=dummy make run).
   - action-name: deploy-missing-services

@@ -17,6 +17,7 @@ import (
 	"feature-dashboard/internal/actions/deletepod"
 	"feature-dashboard/internal/actions/gitlabpipeline"
 	"feature-dashboard/internal/actions/missingservices"
+	"feature-dashboard/internal/actions/nightlyscaledown"
 	"feature-dashboard/internal/actions/nodeportservice"
 	"feature-dashboard/internal/actions/restartservice"
 	"feature-dashboard/internal/api"
@@ -74,6 +75,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	registry.Register(restartservice.ActionName, restartservice.New)
 	registry.Register(missingservices.HandlerType, missingservices.New)
 	registry.Register(assignteam.HandlerType, assignteam.New)
+	registry.Register(nightlyscaledown.HandlerType, nightlyscaledown.New)
 	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: cluster, Pipelines: pipelineState, Teams: cfg.Teams}); err != nil {
 		return err
 	}

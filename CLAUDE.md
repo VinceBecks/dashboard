@@ -44,6 +44,7 @@ Backend-Pakete (`backend/`):
 | `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
 | `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar |
 | `internal/actions/assignteam` | ActionHandler `assign-team`: ordnet einen Namespace einem Team zu (setzt/entfernt das Label `teams.label-key` per Merge-Patch) |
+| `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`: nimmt einen Namespace vom nächtlichen Herunterskalieren aus, indem er das von der Skalierungs-Anwendung ausgewertete Label setzt (`mode: mark`) bzw. entfernt (`mode: unmark`); zwei Aktionen, die sich gegenseitig ablösen |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
 | `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
 | `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
@@ -370,6 +371,37 @@ teams:
   Das Frontend zeigt je Projekt einen Team-Filter (Chips, Mehrfachauswahl, „Ohne Team“; Auswahl in der URL als
   `?team.<projekt>=<team-id>`) und das Team an der Kachel.
 - Die Namespaces werden nicht per ArgoCD self-heal verwaltet; das Label bleibt daher bestehen.
+
+Beispiel für den Handler-Typ `nightly-scale-down-exclusion` (Namespace vom nächtlichen Herunterskalieren ausnehmen;
+eine externe Anwendung skaliert nachts alle Feature-Umgebungen auf 0 und lässt Namespaces mit dem Label aus):
+
+```yaml
+  - action-name: exclude-from-nightly-scale-down
+    handler: nightly-scale-down-exclusion
+    action-title: Nachts nicht herunterskalieren
+    icon: sun
+    icon-color: "#f9a825"
+    projects: [foo-projekt]
+    extra-handler-configs: &skip-scale-down
+      label-key: mycomp.de/skip-nightly-scale-down   # Pflicht, gültiger Label-Key
+      label-value: "true"                            # optional, Standard "true"
+      mode: mark                                     # mark = setzen, unmark = entfernen
+  - action-name: include-in-nightly-scale-down
+    handler: nightly-scale-down-exclusion
+    action-title: Nächtliches Herunterskalieren wieder zulassen
+    icon: moon
+    icon-color: "#455a64"
+    projects: [foo-projekt]
+    extra-handler-configs:
+      <<: *skip-scale-down                           # gleiches Label wie oben
+      mode: unmark
+```
+
+- Nur für das nächtliche Herunterskalieren gedacht. Ein Handler-Typ, zwei Aktionen mit demselben Label. `mark` wird nur angeboten, solange das Label mit dem
+  konfigurierten Wert fehlt, `unmark` nur, solange es gesetzt ist (`IsApplicable`). Ein anderer Wert gilt als nicht
+  gesetzt. Nach der Ausführung tauscht der Event-Hub die angebotene Aktion über das `upsert` des Namespaces aus.
+- `label-value` ist optional (Standard `"true"`); Key und Wert werden beim Start geprüft. RBAC: `patch` auf
+  `namespaces`.
 
 Beispiel für Cluster-Angaben (Pflicht):
 

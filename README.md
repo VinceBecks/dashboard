@@ -190,6 +190,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/actions/gitlabpipeline`  | Handler-Typ `gitlab-pipeline`                                              |
 | `internal/actions/assignteam`      | Aktion `assign-team`                                                       |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
+| `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`                               |
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
 | `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
@@ -337,6 +338,7 @@ Aktion Formular-Felder, stehen sie in diesem Dialog. Das Ergebnis erscheint als 
 | `gitlab-pipeline`                   | konfigurierbar | Startet eine GitLab-Pipeline, beliebig viele Aktionen möglich   |
 | `deploy-missing-services`           | Namespace      | Startet eine GitLab-Pipeline für fehlende Services              |
 | `assign-team`                       | Namespace      | Ordnet die Feature-Umgebung einem Team zu (Namespace-Label)     |
+| `nightly-scale-down-exclusion`      | Namespace      | Nimmt den Namespace vom nächtlichen Herunterskalieren aus       |
 
 #### `delete-pod`
 
@@ -474,6 +476,51 @@ Abschnitt [`teams`](#teams) und „Kein Team“, dazu die aktuelle Zuordnung. Di
 ```
 
 Keine `extra-handler-configs`; ohne Abschnitt `teams` startet das Backend nicht. Benötigt `patch` auf `namespaces`.
+
+#### `nightly-scale-down-exclusion`
+
+Eine externe Anwendung skaliert jede Nacht alle Feature-Umgebungen auf 0 Replicas und lässt Namespaces mit einem
+bestimmten Label aus. Dieser Handler-Typ setzt das Label (`mode: mark`, Namespace ausnehmen) oder entfernt es
+(`mode: unmark`, Namespace wird wieder herunterskaliert). Er wird als **zwei Aktionen** mit demselben `label-key`
+konfiguriert, die sich gegenseitig ablösen:
+
+- `mark` wird nur angeboten, solange das Label mit dem konfigurierten Wert **fehlt**. Ein anderer Wert gilt als
+  nicht gesetzt und wird überschrieben.
+- `unmark` wird nur angeboten, solange das Label mit dem konfigurierten Wert **gesetzt** ist.
+
+Nach der Ausführung kommt die Änderung über den Informer. Am Namespace steht dann automatisch die jeweils andere
+Aktion. Gesetzt bzw. entfernt wird per Merge-Patch, andere Labels bleiben unberührt.
+
+```yaml
+  - action-name: exclude-from-nightly-scale-down
+    handler: nightly-scale-down-exclusion
+    action-title: Nachts nicht herunterskalieren
+    icon: sun
+    icon-color: "#f9a825"
+    projects: [ foo-projekt ]
+    extra-handler-configs: &skip-scale-down
+      label-key: mycomp.de/skip-nightly-scale-down   # Pflicht, gültiger Label-Key
+      label-value: "true"                            # optional, Standard "true"
+      mode: mark                                     # mark = setzen, unmark = entfernen
+  - action-name: include-in-nightly-scale-down
+    handler: nightly-scale-down-exclusion
+    action-title: Nächtliches Herunterskalieren wieder zulassen
+    icon: moon
+    icon-color: "#455a64"
+    projects: [ foo-projekt ]
+    extra-handler-configs:
+      <<: *skip-scale-down                           # gleiches Label wie oben
+      mode: unmark
+```
+
+| Feld          | Pflicht | Bedeutung                                                       |
+|---------------|---------|-----------------------------------------------------------------|
+| `label-key`   | ja      | Label, das die Skalierungs-Anwendung auswertet; gültiger Key    |
+| `label-value` | nein    | Wert beim Setzen und für „gesetzt“, Standard `"true"`           |
+| `mode`        | ja      | `mark` (Label setzen) oder `unmark` (Label entfernen)           |
+
+Keine Formular-Felder (nur Bestätigung). Benötigt `patch` auf `namespaces`. Namespaces werden nicht per ArgoCD
+self-heal verwaltet, das Label bleibt also bestehen.
 
 #### `deploy-missing-services`
 
@@ -926,7 +973,7 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
 
 | Ressource                         | Verben                           | Wofür                                              |
 |-----------------------------------|----------------------------------|----------------------------------------------------|
-| `namespaces`                      | get, list, watch, patch          | Informer, `assign-team`                            |
+| `namespaces`                      | get, list, watch, patch          | Informer, `assign-team`, `nightly-scale-down-exclusion` |
 | `services`                        | get, list, watch, create, delete | Informer, NodePort-Service erstellen und löschen   |
 | `pods`                            | get, list, watch, delete         | Informer, `delete-pod`, `restart-service-replicas` |
 | `ingresses` (`networking.k8s.io`) | get, list, watch                 | Informer                                           |

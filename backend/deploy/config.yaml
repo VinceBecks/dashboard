@@ -76,6 +76,27 @@ data:
         icon: rotate-ccw
         icon-color: orange
         projects: [foo-projekt, bar-projekt, foobar-projekt]
+      # Nimmt den Namespace vom nächtlichen Herunterskalieren aus (Label, das die Skalierungs-Anwendung auswertet).
+      # Ein Handler-Typ, zwei Aktionen: markieren nur ohne Label, aufheben nur mit Label.
+      - action-name: exclude-from-nightly-scale-down
+        handler: nightly-scale-down-exclusion
+        action-title: Nachts nicht herunterskalieren
+        icon: sun
+        icon-color: "#f9a825"
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
+        extra-handler-configs: &skip-scale-down
+          label-key: mycomp.de/skip-nightly-scale-down
+          label-value: "true"
+          mode: mark
+      - action-name: include-in-nightly-scale-down
+        handler: nightly-scale-down-exclusion
+        action-title: Nächtliches Herunterskalieren wieder zulassen
+        icon: moon
+        icon-color: "#455a64"
+        projects: [foo-projekt, bar-projekt, foobar-projekt]
+        extra-handler-configs:
+          <<: *skip-scale-down
+          mode: unmark
       # Startet eine GitLab-Pipeline für den Namespace; Tokens aus dem Secret feature-dashboard-gitlab.
       - action-name: redeploy-namespace
         handler: gitlab-pipeline
