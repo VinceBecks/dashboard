@@ -113,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
+	mux.HandleFunc("GET /api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("PATCH /api/actions/{action}", s.handleAction)
 	mux.HandleFunc("GET /api/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
@@ -192,6 +193,30 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+}
+
+// handleSnapshot liefert den aktuellen Stand einmalig als JSON (gleicher Inhalt wie das snapshot-Event von
+// /api/events) und beendet die Response; es folgen keine weiteren Events.
+func (s *Server) handleSnapshot(w http.ResponseWriter, _ *http.Request) {
+	if !s.ready() {
+		writeError(w, http.StatusServiceUnavailable, errors.New("informer-Cache ist noch nicht synchronisiert"))
+		return
+	}
+	snapshot, err := s.hub.Snapshot()
+	switch {
+	case errors.Is(err, errHubClosed):
+		writeError(w, http.StatusServiceUnavailable, err)
+		return
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(snapshot); err != nil {
+		slog.Error("Antwort schreiben fehlgeschlagen", "error", err)
 	}
 }
 

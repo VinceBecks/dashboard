@@ -790,6 +790,16 @@ Pflicht.
 curl -N localhost:8080/api/events
 ```
 
+### Einmaliger Snapshot (`GET /api/snapshot`)
+
+Liefert den aktuellen Stand einmalig als JSON und beendet die Response. Der Inhalt ist derselbe wie im
+`snapshot`-Event von `GET /api/events`, es folgen aber keine weiteren Events. Gedacht für Clients, die nur den
+aktuellen Stand brauchen (z. B. Skripte). Solange der Informer-Cache synchronisiert, antwortet der Endpunkt mit `503`.
+
+```sh
+curl localhost:8080/api/snapshot
+```
+
 ### Aktion ausführen
 
 ```sh

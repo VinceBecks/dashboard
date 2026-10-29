@@ -342,6 +342,33 @@ func TestEventStream(t *testing.T) {
 	}
 }
 
+func TestSnapshotEndpoint(t *testing.T) {
+	_, srv, _ := setup(t)
+	rec := do(srv.Handler(), "GET", "/api/snapshot", "")
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("status = %d, Content-Type = %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	srv.hub.mu.Lock()
+	subscribers := len(srv.hub.subscribers)
+	srv.hub.mu.Unlock()
+	if subscribers != 0 {
+		t.Fatalf("%d Abonnenten nach /api/snapshot, erwartet 0", subscribers)
+	}
+	// Gleicher Inhalt wie das snapshot-Event des Streams.
+	_, _, streamed := subscribe(t, srv)
+	if got := rec.Body.String(); got != streamed {
+		t.Fatalf("Snapshot = %s\nStream  = %s", got, streamed)
+	}
+}
+
+func TestSnapshotNotReady(t *testing.T) {
+	st, _, _ := setup(t)
+	h := NewServer(st, actions.NewRegistry(), nil, func() bool { return false }).Handler()
+	if rec := do(h, "GET", "/api/snapshot", ""); rec.Code != 503 {
+		t.Fatalf("503 erwartet, got %d", rec.Code)
+	}
+}
+
 func TestEventsNotReady(t *testing.T) {
 	st, _, _ := setup(t)
 	h := NewServer(st, actions.NewRegistry(), nil, func() bool { return false }).Handler()

@@ -176,11 +176,7 @@ func (h *Hub) extraRevisions() map[string]time.Time {
 func (h *Hub) Subscribe() (*Subscription, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.closed {
-		return nil, errHubClosed
-	}
-	h.syncLocked()
-	snapshot, err := json.Marshal(h.snapshotLocked())
+	snapshot, err := h.snapshotJSONLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +184,23 @@ func (h *Hub) Subscribe() (*Subscription, error) {
 	sub := &Subscription{Snapshot: snapshot, Events: events, events: events, hub: h}
 	h.subscribers[sub] = struct{}{}
 	return sub, nil
+}
+
+// Snapshot gleicht den Stand ab und liefert ihn als JSON, ohne einen Client zu registrieren.
+func (h *Hub) Snapshot() (json.RawMessage, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.snapshotJSONLocked()
+}
+
+// snapshotJSONLocked gleicht alle geänderten Namespaces ab und serialisiert den Stand. Unterschiede gehen dabei wie
+// gewohnt an die bestehenden Abonnenten, der Snapshot ist also konsistent mit ihren Streams.
+func (h *Hub) snapshotJSONLocked() (json.RawMessage, error) {
+	if h.closed {
+		return nil, errHubClosed
+	}
+	h.syncLocked()
+	return json.Marshal(h.snapshotLocked())
 }
 
 // Cancel meldet den Client ab.

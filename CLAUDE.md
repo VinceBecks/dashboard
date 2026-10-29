@@ -407,6 +407,8 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 - `GET /api/events` (Server-Sent Events): zuerst ein `snapshot`-Event mit allen Objekten in der Hierarchie
   **Projekt → Namespace → Services (→ Pods) / NodePort-Services / Ingresses**, danach nur noch `upsert`- und `delete`-Events.
   Beispiel des Snapshots: `backend/internal/api/example-api.jsonc`.
+- `GET /api/snapshot`: derselbe Snapshot einmalig als JSON (`application/json`), danach endet die Response; keine
+  weiteren Events, kein Abo am Event-Hub (`Hub.Snapshot`).
 - `PATCH /api/actions/{action-name}` zum Ausführen von Aktionen auf einem Objekt
 
 - Objekte tragen nur, was das Dashboard braucht (`kind`, `name`, `parents`, Aktionen, Links und je Typ wenige
@@ -448,7 +450,8 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 
 ## Frontend (nicht in diesem Repository)
 
-Das Frontend wird getrennt entwickelt und nutzt nur die HTTP-API (`GET /api/events`, `PATCH /api/actions/{id}`).
+Das Frontend wird getrennt entwickelt und nutzt nur die HTTP-API (`GET /api/events`, `GET /api/snapshot`,
+`PATCH /api/actions/{id}`).
 Für dieses Repository gilt daraus:
 
 - **API maximal generisch halten:** Das Frontend kennt keine konkreten Aktionen. Buttons, Icons, Farben und Formulare

@@ -199,7 +199,8 @@ Startpunkt. Hier steht auch die einzige Liste der verfügbaren Handler-Typen (`r
 
 ### `internal/api`
 - **`server.go`:**
-  - Routen: `/api/events`, `PATCH /api/actions/{id}`, Health, OpenAPI und Swagger.
+  - Routen: `/api/events`, `/api/snapshot` (Stand einmalig als JSON), `PATCH /api/actions/{id}`, Health, OpenAPI
+    und Swagger.
   - Die Schnittstelle `Source` beschreibt, was der Server von der Datenquelle braucht.
   - `extras` hängt Aktionen, Links, Befehle und Pipelines an ein Objekt.
   - Optionen werden per `With…` gesetzt (`WithLinks`, `WithCopyCommands`, `WithCluster`, `WithPipelines`,
@@ -213,7 +214,8 @@ Startpunkt. Hier steht auch die einzige Liste der verfügbaren Handler-Typen (`r
     kann.
 - **`events.go`:** der Event-Hub (`Hub`).
   - `syncLocked` erkennt geänderte Namespaces, `load` baut sie auf, `diff` erzeugt die Events.
-  - `Subscribe` und `snapshotLocked` bedienen neue Abonnenten.
+  - `Subscribe` und `snapshotLocked` bedienen neue Abonnenten; `Snapshot` liefert den Stand ohne Abo
+    (für `/api/snapshot`).
   - Stündlich (`fullResyncInterval`) baut der Hub alles neu auf, als Sicherheitsnetz.
 - **`static.go`:** liefert optional statische Dateien aus (`--static-dir`, im Image nicht genutzt). Unbekannte Pfade
   bekommen `index.html`.

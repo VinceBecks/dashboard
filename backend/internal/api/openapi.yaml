@@ -5,7 +5,8 @@ info:
   description: |
     API des Feature-Environment-Dashboards. Das Frontend öffnet `GET /api/events` (Server-Sent Events),
     erhält zuerst die komplette Hierarchie Projekt → Namespace → Services (→ Pods) / Ingresses und danach
-    nur noch Änderungen. Aktionen werden über `PATCH /api/actions/{action}` ausgelöst.
+    nur noch Änderungen. Aktionen werden über `PATCH /api/actions/{action}` ausgelöst. Wer nur den aktuellen Stand
+    braucht, ruft `GET /api/snapshot` ab (einmalig, JSON).
 
     Ein Beispiel des Initialstands liegt in `backend/internal/api/example-api.jsonc`.
 paths:
@@ -42,6 +43,28 @@ paths:
                 id: 2
                 event: delete
                 data: {"kind":"namespace","name":"foo-feature-123","parents":{"project":"foo-projekt"}}
+        '503':
+          description: Informer-Cache wird noch synchronisiert oder Server fährt herunter
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/snapshot:
+    get:
+      summary: Aktueller Stand, einmalig
+      description: |
+        Liefert den kompletten Stand einmalig als JSON und beendet die Response. Der Inhalt entspricht dem
+        `snapshot`-Event von `GET /api/events`; es folgen keine weiteren Events.
+      responses:
+        '200':
+          description: Snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Snapshot' }
+        '500':
+          description: Interner Fehler im Backend
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '503':
           description: Informer-Cache wird noch synchronisiert oder Server fährt herunter
           content:
