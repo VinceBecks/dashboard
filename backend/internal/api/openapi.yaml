@@ -62,7 +62,7 @@ paths:
             schema: { $ref: '#/components/schemas/ActionRequest' }
       responses:
         '200':
-          description: Aktion wurde ausgeführt; `success` zeigt, ob sie erfolgreich war.
+          description: Aktion wurde erfolgreich ausgeführt (`success` ist immer `true`).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ActionResult' }
@@ -73,6 +73,19 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '404':
           description: Aktion unbekannt/deaktiviert oder Objekt nicht gefunden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: |
+            Der Request war gültig, der ActionHandler konnte die Aktion aber nicht ausführen (z. B. Objekt inzwischen
+            verändert, Kubernetes oder GitLab lehnt ab). `error` enthält die für den Nutzer formulierte Meldung des
+            Handlers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Interner Fehler im Backend
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

@@ -271,12 +271,12 @@ func (c *Config) Validate() error {
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
 		if a.Name == "" {
-			errs = append(errs, fmt.Errorf("actionHandlers[%d]: action-name fehlt", i))
+			errs = append(errs, fmt.Errorf("action-handlers[%d]: action-name fehlt", i))
 		} else if actions[a.Name] {
-			errs = append(errs, fmt.Errorf("actionHandlers[%d]: action-name %q ist nicht eindeutig", i, a.Name))
+			errs = append(errs, fmt.Errorf("action-handlers[%d]: action-name %q ist nicht eindeutig", i, a.Name))
 		}
 		actions[a.Name] = true
-		errs = append(errs, validateProjects(fmt.Sprintf("actionHandlers[%d]", i), a.Projects, projects)...)
+		errs = append(errs, validateProjects(fmt.Sprintf("action-handlers[%d]", i), a.Projects, projects)...)
 	}
 	return errors.Join(errs...)
 }

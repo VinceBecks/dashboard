@@ -21,7 +21,11 @@ import (
 	"feature-dashboard/internal/testsource"
 )
 
-type podAction struct{ calls int }
+// podAction ist eine Test-Aktion auf Pods; ist fail gesetzt, schlägt Execute mit dieser Meldung fehl.
+type podAction struct {
+	calls int
+	fail  string
+}
 
 func (p *podAction) Configure(map[string]any) error { return nil }
 func (p *podAction) IsApplicable(o actions.StoredObject) bool {
@@ -33,6 +37,9 @@ func (p *podAction) FormFields(actions.StoredObject) []actions.FormField {
 }
 func (p *podAction) Execute(context.Context, actions.StoredObject, map[string]any) actions.Result {
 	p.calls++
+	if p.fail != "" {
+		return actions.Result{Success: false, Message: p.fail}
+	}
 	return actions.Result{Success: true, Message: "ok"}
 }
 
@@ -367,6 +374,13 @@ func TestAction(t *testing.T) {
 	if action.calls != 1 {
 		t.Fatalf("Aktion %d-mal ausgeführt", action.calls)
 	}
+
+	// Kann der Handler die Aktion nicht ausführen, kommt 422 mit seiner Meldung, nie 200.
+	action.fail = "Pod web-1 konnte nicht gelöscht werden"
+	rec := do(h, "PATCH", "/api/actions/restart", pod)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `"error":"Pod web-1 konnte nicht gelöscht werden"`) {
+		t.Fatalf("fehlgeschlagene Aktion: status = %d, body = %s", rec.Code, rec.Body)
+	}
 }
 
 func TestDocsAndHealth(t *testing.T) {
@@ -485,10 +499,10 @@ func TestPipelines(t *testing.T) {
 
 func TestTeams(t *testing.T) {
 	st, _, _ := setup(t)
-	teams := config.TeamsConfig{LabelKey: "mycomp.de/team", Teams: []config.Team{{ID: "checkout", Label: "Team Checkout"}}}
+	teams := config.TeamsConfig{LabelKey: "mycomp.de/team", Teams: []config.Team{{ID: "checkout", Label: "Team Checkout", TeamColor: "#2e7d32"}}}
 	srv := NewServer(st, actions.NewRegistry(), []config.Project{{Name: "foo"}}, func() bool { return true }).WithTeams(teams)
 	_, sub, raw := subscribe(t, srv)
-	if !strings.HasPrefix(raw, `{"teams":[{"id":"checkout","label":"Team Checkout"}],"projects":`) {
+	if !strings.HasPrefix(raw, `{"teams":[{"id":"checkout","label":"Team Checkout","teamColor":"#2e7d32"}],"projects":`) {
 		t.Fatalf("Snapshot = %s", raw)
 	}
 	if strings.Contains(raw, `"team":`) {

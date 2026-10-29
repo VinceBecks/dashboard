@@ -4,8 +4,8 @@
 //   data: <dieses JSON, einzeilig>
 {
   "teams": [                                     // Abschnitt teams der config.yaml; Grundlage des Team-Filters
-    { "id": "checkout", "label": "Team Checkout" },
-    { "id": "search", "label": "Team Suche" }
+    { "id": "checkout", "label": "Team Checkout", "teamColor": "#2e7d32" },
+    { "id": "search", "label": "Team Suche", "teamColor": "" }      // ohne team-color: leer
   ],
   "projects": [
     {

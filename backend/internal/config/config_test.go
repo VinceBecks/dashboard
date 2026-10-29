@@ -196,7 +196,7 @@ func TestActionProjectsValidation(t *testing.T) {
 		"leere Liste (deaktiviert)": `[{action-name: x, projects: []}]`,
 	}
 	for name, actions := range valid {
-		if _, err := parse([]byte(projects + "actionHandlers: " + actions + "\n")); err != nil {
+		if _, err := parse([]byte(projects + "action-handlers: " + actions + "\n")); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -205,7 +205,7 @@ func TestActionProjectsValidation(t *testing.T) {
 		"unbekanntes Projekt": `[{action-name: x, projects: [nope]}]`,
 	}
 	for name, actions := range invalid {
-		if _, err := parse([]byte(projects + "actionHandlers: " + actions + "\n")); err == nil {
+		if _, err := parse([]byte(projects + "action-handlers: " + actions + "\n")); err == nil {
 			t.Errorf("%s: Fehler erwartet", name)
 		}
 	}

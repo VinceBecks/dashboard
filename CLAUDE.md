@@ -202,7 +202,7 @@ projects:
 Beispiel für ActionHandler:
 
 ```yaml
-actionHandlers:
+action-handlers:
   - action-name: delete-pod
     action-title: Pod Löschen
     icon: trash
@@ -319,9 +319,10 @@ links:
 - Template-Daten: `.Kind .Name .Namespace .Project .Labels .Annotations .Selector` (nur Services) `.Vars`
   `.Services` (nur bei `deploy-missing-services` gefüllt) `.Container` (nur bei Kopier-Befehlen für Pods).
 - Template-Funktionen zusätzlich zu Go-Standard (`urlquery`, `index`, `printf`, `range`, …): `rison`, `pathescape`,
-  `replace`, `join`, `shellquote`, `trimproject` (entfernt `<project-name>-` als Präfix, z. B.
-  `{{ trimproject .Namespace }}`: „myproject-foo-bar“ → „foo-bar“; ohne dieses Präfix unverändert). `trimproject`
-  bindet `objecttemplate.Render` je Aufruf an das Projekt des Objekts.
+  `replace`, `join`, `shellquote`, `trimPrefix` (entfernt ein Präfix, z. B.
+  `{{ trimPrefix (printf "%s-" .Project) .Namespace }}`: „myproject-foo-bar“ → „foo-bar“; ohne dieses Präfix
+  unverändert) und `extractRenewJiraTicketNumber` (Jira-Ticketnummer aus Namespaces der Form
+  `renew-<f-|if-|hf-><story|hotfix|feat|bugfix|epic|intfix><nummer>…`, sonst leer).
 - Gemeinsame URL-Teile mehrerer Targets (z. B. die Kibana-Discover-Basis) in `link-variables` auslagern.
 - Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
   (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
@@ -359,12 +360,13 @@ teams:
   teams:
     - team-id: checkout               # eindeutig, gültiger Label-Wert
       team-label: Team Checkout
+      team-color: "#2e7d32"           # optional, CSS-Farbe; wird als teamColor durchgereicht
 ```
 
 - Ein Namespace gehört zu einem Team, wenn sein Label `label-key` die `team-id` trägt. Die Aktion `assign-team`
   (Handler-Typ gleichen Namens, keine `extra-handler-configs`) bietet am Namespace ein Single-Select mit allen Teams
   und „Kein Team“ an und setzt bzw. entfernt das Label per Merge-Patch (RBAC: `patch` auf `namespaces`).
-- Die API liefert die Teams im Snapshot (`teams`) und am Namespace die Team-ID (`team`, nur für konfigurierte Teams).
+- Die API liefert die Teams im Snapshot (`teams`: `id`, `label`, `teamColor`, leer ohne `team-color`) und am Namespace die Team-ID (`team`, nur für konfigurierte Teams).
   Das Frontend zeigt je Projekt einen Team-Filter (Chips, Mehrfachauswahl, „Ohne Team“; Auswahl in der URL als
   `?team.<projekt>=<team-id>`) und das Team an der Kachel.
 - Die Namespaces werden nicht per ArgoCD self-heal verwaltet; das Label bleibt daher bestehen.
@@ -391,7 +393,9 @@ cluster:
     2. ob er zum Ausführen zusätzliche Eingaben vom Nutzer braucht, und wenn ja, welche Formular-Felder.
 - Ein ActionHandler kann Veränderungen in Kubernetes vornehmen (Pods löschen, Service erstellen, ...). Die Aktion
   ändert keinen Zustand im Backend; die Veränderung kommt nur über die Informer-Events.
-- Ein ActionHandler gibt ein Result zurück, welches zeigt, ob die Aktion erfolgreich ausgeführt wurde oder nicht
+- Ein ActionHandler gibt ein Result zurück, welches zeigt, ob die Aktion erfolgreich ausgeführt wurde oder nicht.
+  Die API antwortet bei Erfolg mit `200`, bei einem Fehlschlag des Handlers mit `422` und seiner Meldung als
+  `{"error": "…"}` (nie `200`). Die Meldung ist für den Nutzer formuliert.
 
 Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Registry registrieren, Eintrag in der
 `config.yaml` ergänzen. Am (separaten) Frontend ist dafür keine Änderung nötig.
@@ -420,7 +424,7 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 - Jedes Objekt trägt die Liste der Aktionen, die auf ihm ausführbar sind. Je Aktion:
     - Name (Titel)
     - Aktion-ID (eindeutiger Name)
-    - icon
+    - Icon (Lucide-Name)
     - Icon-Farbe
     - optional eine Liste von Formular-Feldern
 - Je Formular-Feld u. a.: Feld-Typ (`text`, `select`, `multi-select`, `number`), Feld-Label, Feld-ID, `isRequired`,

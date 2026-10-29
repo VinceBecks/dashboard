@@ -71,3 +71,31 @@ func TestShellQuote(t *testing.T) {
 		}
 	}
 }
+
+func TestTrimPrefix(t *testing.T) {
+	tpl, err := Parse("t", `{{ trimPrefix (printf "%s-" .Project) .Namespace }}|{{ .Namespace | trimPrefix "anderes-" }}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Render(tpl, Data{Namespace: "myproject-foo-bar", Project: "myproject"})
+	if want := "foo-bar|myproject-foo-bar"; err != nil || got != want {
+		t.Fatalf("got %q (%v), want %q", got, err, want)
+	}
+}
+
+func TestExtractRenewJiraTicketNumber(t *testing.T) {
+	for in, want := range map[string]string{
+		"renew-f-feat1234-login":  "1234",
+		"renew-hf-hotfix42":       "42",
+		"renew-if-intfix7-x":      "7",
+		"renew-f-bugfix99":        "99",
+		"renew-f-story":           "",
+		"renew-x-feat1234":        "",
+		"foo-renew-f-feat1234":    "",
+		"myproject-feature-login": "",
+	} {
+		if got := ExtractRenewJiraTicketNumber(in); got != want {
+			t.Errorf("ExtractRenewJiraTicketNumber(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

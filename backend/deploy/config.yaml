@@ -48,7 +48,7 @@ data:
               - app.kubernetes.io/part-of: database
         link-variables-overrides:
           something: isNotHere
-    actionHandlers:
+    action-handlers:
       - action-name: delete-pod
         action-title: Pod Löschen
         icon: trash
@@ -96,8 +96,8 @@ data:
             PROJECT: "{{ .Project }}"
             ORGANIZATION_UNIT: '{{ index .Labels "mycomp.de/organization-unit" }}'
             ACTION: redeploy
-            # trimproject entfernt "<project-name>-" als Präfix, z. B. "foo-projekt-login" → "login".
-            FEATURE: "{{ trimproject .Namespace }}"
+            # trimPrefix entfernt ein Präfix, z. B. "foo-projekt-login" → "login".
+            FEATURE: '{{ trimPrefix (printf "%s-" .Project) .Namespace }}'
     copy-commands:
       - command-id: pod-shell                 # je Container ein Befehl, da das Template .Container nutzt
         title: Shell im Pod öffnen

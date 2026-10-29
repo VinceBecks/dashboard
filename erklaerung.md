@@ -139,7 +139,7 @@ etwas mehr Arbeit, die Namespaces sind aber klein.
    Config), ob der Handler sie für das Objekt anbietet (`IsApplicable`) und ob die Eingaben zu den Formular-Feldern
    passen (`validate`). Danach ruft sie `Handler.Execute` auf.
 4. **Ergebnis:** Der Handler ändert den Cluster oder startet etwas extern und liefert ein `Result{Success, Message}`.
-   Das Frontend zeigt es als Snackbar.
+   Bei Erfolg antwortet die API mit `200`, sonst mit `422` und der Meldung des Handlers als `{"error": "…"}`.
 5. **Anzeige:** Die eigentliche Änderung erscheint, sobald der Informer sie meldet (Ablauf 4.2).
 
 ### 4.5 Eine GitLab-Pipeline wird verfolgt
@@ -248,8 +248,7 @@ Startpunkt. Hier steht auch die einzige Liste der verfügbaren Handler-Typen (`r
 ### `internal/objecttemplate`, `internal/links`, `internal/copycommands`
 - **`objecttemplate`:** Go-Templates mit den Daten eines Objekts (`Data`: `.Kind .Name .Namespace .Project .Labels
   .Annotations .Selector .Vars .Services .Container`). Zusätzliche Funktionen sind `rison`, `pathescape`, `replace`,
-  `join`, `shellquote` und `trimproject`. `trimproject` entfernt den Projektnamen als Präfix und kennt das Projekt des
-  Objekts, weil `Render` es bei jedem Aufruf an eine Kopie des Templates bindet. Fehlende Map-Schlüssel sind ein Fehler.
+  `join`, `shellquote`, `trimPrefix` und `extractRenewJiraTicketNumber`. Fehlende Map-Schlüssel sind ein Fehler.
 - **`links`:** rendert die konfigurierten Links je Objekt und lässt nur absolute http(s)-URLs zu.
 - **`copycommands`:** rendert die Kopier-Befehle. Bei Pods rendert es je Container einmal; unterscheiden sich die
   Ergebnisse, entsteht je Container ein eigener Befehl.
@@ -290,7 +289,7 @@ Eine In-Memory-Datenquelle **nur für Tests**. Sie erfüllt `api.Source` und `ac
 1. Neues Paket unter `internal/actions/<name>` anlegen, `actions.Handler` implementieren und eine Factory
    `New(deps actions.Deps) actions.Handler` schreiben.
 2. In `main.go` mit `registry.Register("<handler-typ>", <paket>.New)` registrieren.
-3. Die Aktion in der `config.yaml` unter `actionHandlers` eintragen, mit `projects`, Titel, Icon und
+3. Die Aktion in der `config.yaml` unter `action-handlers` eintragen, mit `projects`, Titel, Icon und
    `extra-handler-configs`.
 4. Am Frontend ist nichts zu tun (es ist generisch).
 

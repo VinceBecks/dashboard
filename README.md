@@ -31,7 +31,7 @@ die API erreichbar sein, z. B. per Ingress (`/api` → Backend, `/` → Frontend
 5. [Konfiguration (`config.yaml`)](#konfiguration-configyaml)
     - [Übersicht](#übersicht)
     - [`projects`](#projects)
-    - [`actionHandlers`](#actionhandlers)
+    - [`action-handlers`](#action-handlers)
     - [Mitgelieferte Aktionen](#mitgelieferte-aktionen)
     - [`links` und `link-variables`](#links-und-link-variables)
     - [`copy-commands`](#copy-commands)
@@ -158,7 +158,7 @@ abhängigen Objekte.
 
 ### Aktionen
 
-- **Eine Instanz je Aktion:** Jede Aktion in `actionHandlers` wird beim Start einem **Handler-Typ** zugeordnet. Die
+- **Eine Instanz je Aktion:** Jede Aktion in `action-handlers` wird beim Start einem **Handler-Typ** zugeordnet. Die
   **ActionRegistry** erzeugt daraus genau eine Handler-Instanz.
 - **Sichtbarkeit:** Ob eine Aktion an einem Objekt angeboten wird, entscheiden zwei Stellen. Zuerst prüft die
   Registry das Projekt (`projects`), dann entscheidet der Handler selbst (`IsApplicable`). Benötigt der Handler
@@ -232,7 +232,7 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 | Schlüssel        | Pflicht | Inhalt                                                               |
 |------------------|---------|----------------------------------------------------------------------|
 | `projects`       | ja      | Projekte, ihre Namespace-Labels, Service-Bereiche, Link-Variablen    |
-| `actionHandlers` | nein    | Aktionen, die das Dashboard anbietet                                 |
+| `action-handlers` | nein    | Aktionen, die das Dashboard anbietet                                 |
 | `links`          | nein    | Links von Objekten in andere Systeme                                 |
 | `link-variables` | nein    | Statische Variablen für Link-Templates und Kopier-Befehle            |
 | `copy-commands`  | nein    | Befehle (z. B. `kubectl exec`), die das Dashboard zum Kopieren anbietet |
@@ -299,15 +299,15 @@ Einträge, UND innerhalb eines Eintrags.
 - **Wiederverwendung:** Gleiche Bereiche in mehreren Projekten lassen sich mit YAML-Ankern (`&name` / `*name`)
   teilen.
 
-### `actionHandlers`
+### `action-handlers`
 
 ```yaml
-actionHandlers:
+action-handlers:
   - action-name: delete-pod                 # eindeutige Aktion-ID
     handler: delete-pod                     # optional; Standard: action-name
     action-title: Pod löschen               # Tooltip im Dashboard
-    icon: trash                      # Name eines icons (https://lucide.dev/icons)
-    icon-color: red                  # beliebige CSS-Farbe
+    icon: trash                             # Name eines Lucide-Icons (https://lucide.dev/icons)
+    icon-color: red                         # beliebige CSS-Farbe
     projects: [ foo-projekt, bar-projekt ]    # Pflicht; [] = deaktiviert
     extra-handler-configs: # handlerspezifisch
       force-delete: true
@@ -318,8 +318,8 @@ actionHandlers:
 | `action-name`           | ja      | Eindeutige ID der Aktion. Sie steht im Pfad von `PATCH /api/actions/{action-name}`.                                                                                                  |
 | `handler`               | nein    | Handler-Typ. Fehlt er, gilt `action-name` als Handler-Typ. Ein Handler-Typ wie `gitlab-pipeline` kann so mehrere Aktionen bedienen.                                                  |
 | `action-title`          | nein    | Titel, im Dashboard als Tooltip am Icon                                                                                                                                              |
-| `icon`           | nein    | Icon-Name. Unbekannte Namen zeigen ein Platzhalter-Icon.                                                                                                                             |
-| `icon-color`     | nein    | Icon-Farbe als CSS-Wert, z. B. `red` oder `#00bfb3`                                                                                                                                  |
+| `icon`                  | nein    | Icon-Name. Unbekannte Namen zeigen ein Platzhalter-Icon.                                                                                                                             |
+| `icon-color`            | nein    | Icon-Farbe als CSS-Wert, z. B. `red` oder `#00bfb3`                                                                                                                                  |
 | `projects`              | ja      | Projekte, in denen die Aktion angeboten und ausführbar ist. **`[]` deaktiviert die Aktion**: Ihr Handler wird dann nicht erzeugt. Es wird nur geprüft, ob der Handler-Typ existiert. |
 | `extra-handler-configs` | nein    | Handlerspezifische Einstellungen, siehe unten                                                                                                                                        |
 
@@ -553,8 +553,8 @@ links:
 |---------------------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `link-id`           | ja      | Eindeutige ID                                                                                                                                                       |
 | `title`             | ja      | Tooltip im Dashboard                                                                                                                                                |
-| `icon`       | nein    | Icon-Name                                                                                                                                                           |
-| `icon-color` | nein    | Icon-Farbe                                                                                                                                                          |
+| `icon`              | nein    | Icon-Name                                                                                                                                                           |
+| `icon-color`        | nein    | Icon-Farbe                                                                                                                                                          |
 | `projects`          | ja      | Projekte, in denen der Link angeboten wird. `[]` heißt in keinem Projekt, beim Start gibt es dazu eine Warnung.                                                     |
 | `targets`           | ja      | Je Objekt-Typ (`namespace`, `service`, `ingress`, `pod`) ein Eintrag mit `url`. Nicht aufgeführte Typen haben den Link nicht. Ein Target ohne `url` ist ein Fehler. |
 | `targets.<typ>.url` | ja      | [Template](#templates-in-der-konfiguration) für die Ziel-URL                                                                                                        |
@@ -581,8 +581,8 @@ Befehl in die Zwischenablage. Pod-Befehle stehen in den Service-Details beim jew
 copy-commands:
   - command-id: pod-shell                   # eindeutige ID
     title: Shell im Pod öffnen              # Tooltip
-    icon: terminal                   # Name eines icons
-    icon-color: "#455a64"            # beliebige CSS-Farbe
+    icon: terminal                          # Name eines Lucide-Icons
+    icon-color: "#455a64"                   # beliebige CSS-Farbe
     projects: [ foo-projekt ]               # Pflicht; [] = in keinem Projekt
     targets:                                # je Objekt-Typ ein Befehl; fehlende Typen haben den Befehl nicht
       pod:
@@ -595,8 +595,8 @@ copy-commands:
 |---------------------|---------|--------------------------------------------------------------------------------------------|
 | `command-id`        | ja      | Eindeutige ID                                                                              |
 | `title`             | ja      | Tooltip im Dashboard                                                                       |
-| `icon`       | nein    | Icon des Buttons                                                                           |
-| `icon-color` | nein    | Farbe des Icons                                                                            |
+| `icon`              | nein    | Icon des Buttons                                                                           |
+| `icon-color`        | nein    | Farbe des Icons                                                                            |
 | `projects`          | ja      | Projekte, in denen der Befehl angeboten wird. `[]` heißt: in keinem (Warnung beim Start).  |
 | `targets.<typ>`     | ja      | `command` je Objekt-Typ (`namespace`, `service`, `ingress`, `pod`) als Template            |
 
@@ -638,7 +638,8 @@ Templates in Links, Kopier-Befehlen und bei `gitlab-pipeline` bzw. `deploy-missi
 | `replace`    | `{{ replace "app.kubernetes.io" "." "_" }}` | `app_kubernetes_io`              |
 | `join`       | `{{ join .Liste ", " }}`                    | verbindet eine Liste von Strings |
 | `shellquote` | `{{ shellquote "it's" }}`                   | `'it'\''s'` (ein Shell-Argument)  |
-| `trimproject` | `{{ trimproject .Namespace }}`             | entfernt `<project-name>-` als Präfix: `myproject-foo-bar` → `foo-bar` (Projekt `myproject`); ohne dieses Präfix unverändert |
+| `trimPrefix` | `{{ trimPrefix (printf "%s-" .Project) .Namespace }}` | entfernt ein Präfix: `myproject-foo-bar` → `foo-bar` (Projekt `myproject`); ohne dieses Präfix unverändert |
+| `extractRenewJiraTicketNumber` | `{{ extractRenewJiraTicketNumber .Namespace }}` | Jira-Ticketnummer aus `renew-<f-\|if-\|hf-><story\|hotfix\|feat\|bugfix\|epic\|intfix><nummer>…`, z. B. `renew-f-feat1234-login` → `1234`; sonst leer |
 
 **Fallstricke:**
 
@@ -659,6 +660,7 @@ teams:
   teams:
     - team-id: checkout
       team-label: Team Checkout
+      team-color: "#2e7d32"
     - team-id: search
       team-label: Team Suche
 ```
@@ -668,6 +670,7 @@ teams:
 | `label-key`          | ja      | Label am Namespace, das die Team-Zuordnung trägt                                  |
 | `teams[].team-id`    | ja      | Eindeutige ID und zugleich Wert des Labels; muss ein gültiger Label-Wert sein     |
 | `teams[].team-label` | ja      | Anzeigename                                                                       |
+| `teams[].team-color` | nein    | Farbe des Teams als CSS-Wert; in der API `teamColor` (leer, wenn nicht gesetzt)   |
 
 Sind Teams konfiguriert, zeigt das Dashboard je Projekt einen **Team-Filter**: je Team ein Chip plus „Ohne Team“,
 mehrere gleichzeitig wählbar, ohne Auswahl werden alle Namespaces gezeigt. Die Auswahl steht in der URL
@@ -797,9 +800,13 @@ curl -X PATCH localhost:8080/api/actions/delete-pod \
 
 | Status | Bedeutung                                                                                                                       |
 |--------|---------------------------------------------------------------------------------------------------------------------------------|
-| `200`  | Die Aktion wurde ausgeführt. `{"success": …, "message": "…"}` sagt, ob sie erfolgreich war (`success` ist `true` oder `false`). |
+| `200`  | Die Aktion wurde erfolgreich ausgeführt: `{"success": true, "message": "…"}`.                                                   |
 | `400`  | Ungültiger Body, die Aktion ist auf dem Objekt bzw. in diesem Projekt nicht anwendbar, oder ungültige Eingaben (mit `problems`) |
 | `404`  | Unbekannte oder deaktivierte Aktion, oder das Objekt gibt es nicht                                                              |
+| `422`  | Der Handler konnte die Aktion nicht ausführen; `{"error": "…"}` enthält seine Meldung für den Nutzer                            |
+| `500`  | Interner Fehler im Backend                                                                                                      |
+
+Alle Fehlerantworten haben die Form `{"error": "…"}`. Ein Fehlschlag des Handlers kommt nie als `200`.
 
 Bei Namespaces darf `object.namespace` fehlen. `inputs` enthält die Werte der Formular-Felder mit der Feld-ID als
 Schlüssel: `text` als String, `number` als Zahl, `select` als String, `multi-select` als Liste von Strings.
@@ -837,7 +844,7 @@ entstehen aus den Backend-Daten.
       `IsRequired`, `Description` und bei Auswahlfeldern `Options`.
 2. **Registrieren** in `backend/cmd/dashboard/main.go`:
    `registry.Register("mein-handler-typ", meinhandler.New)`.
-3. **Konfigurieren** in der `config.yaml`: Füge einen Eintrag in `actionHandlers` hinzu, mit `projects`.
+3. **Konfigurieren** in der `config.yaml`: Füge einen Eintrag in `action-handlers` hinzu, mit `projects`.
 4. **Rechte prüfen:** Braucht der Handler weitere Kubernetes-Rechte, ergänzt du die ClusterRole in
    `backend/deploy/rbac.yaml`.
 
@@ -945,7 +952,7 @@ Umsetzungspläne in `plans/`.
 
 | Meldung / Symptom                                                         | Ursache und Lösung                                                                                                                                                     |
 |---------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `actionHandlers[n]: projects fehlt …`                                     | `projects` ist Pflicht. Zum Deaktivieren `projects: []` setzen.                                                                                                        |
+| `action-handlers[n]: projects fehlt …`                                     | `projects` ist Pflicht. Zum Deaktivieren `projects: []` setzen.                                                                                                        |
 | `aktion "…": umgebungsvariable … mit dem Trigger-Token ist nicht gesetzt` | Token-Variable setzen bzw. Secret `feature-dashboard-gitlab` anlegen, oder die Aktion mit `projects: []` deaktivieren.                                                 |
 | `projects gehört nicht mehr in extra-handler-configs …`                   | `projects` bei `gitlab-pipeline` direkt an die Aktion verschieben.                                                                                                     |
 | `WARN Link konnte nicht erzeugt werden … can't evaluate field X`          | Das Template nutzt ein Feld, das es nicht gibt, siehe [Template-Daten](#templates-in-der-konfiguration).                                                               |

@@ -262,8 +262,14 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	case !result.Success:
-		writeError(w, http.StatusInternalServerError, fmt.Errorf(fmt.Sprintf("Aktion konnte nicht erfolgreich ausgeführt werden")))
-		slog.Warn(fmt.Sprintf("Aktion %s konnte nicht erfolgreich auf dem Objekt %v im Projekt %s ausgeführt werden. %v", name, obj.Ref, obj.Project, result.Message))
+		// Der Request war gültig, die Aktion ließ sich aber nicht ausführen (z. B. Objekt inzwischen verändert,
+		// Kubernetes oder GitLab lehnt ab). Die Meldung des Handlers ist für den Nutzer formuliert.
+		msg := result.Message
+		if msg == "" {
+			msg = "Aktion konnte nicht ausgeführt werden"
+		}
+		slog.Warn("Aktion fehlgeschlagen", "action", name, "object", ref, "project", obj.Project, "message", result.Message)
+		writeError(w, http.StatusUnprocessableEntity, errors.New(msg))
 		return
 	}
 	slog.Info("Aktion ausgeführt", "action", name, "object", ref, "success", result.Success, "message", result.Message)
