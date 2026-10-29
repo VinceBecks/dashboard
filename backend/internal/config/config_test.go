@@ -11,7 +11,7 @@ projects:
     namespace-labels:
       mycomp.de/is-feature-environment: true
       mycomp.de/project-name: foo-projekt
-actionHandlers:
+action-handlers:
   - action-name: delete-pod
     action-title: Pod Löschen
     icon: trash
@@ -44,7 +44,7 @@ projects:
   - project-name: a
     namespace-labels: {x: y}
   - project-name: a
-actionHandlers:
+action-handlers:
   - action-name: x
   - action-name: x
 `))
@@ -55,7 +55,7 @@ actionHandlers:
 
 func TestHandlerType(t *testing.T) {
 	cfg, err := parse([]byte(`
-actionHandlers:
+action-handlers:
   - action-name: deploy
     handler: gitlab-pipeline
     projects: []

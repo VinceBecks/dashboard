@@ -261,6 +261,10 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, err)
 		return
+	case !result.Success:
+		writeError(w, http.StatusInternalServerError, fmt.Errorf(fmt.Sprintf("Aktion konnte nicht erfolgreich ausgeführt werden")))
+		slog.Warn(fmt.Sprintf("Aktion %s konnte nicht erfolgreich auf dem Objekt %v im Projekt %s ausgeführt werden. %v", name, obj.Ref, obj.Project, result.Message))
+		return
 	}
 	slog.Info("Aktion ausgeführt", "action", name, "object", ref, "success", result.Success, "message", result.Message)
 	writeJSON(w, http.StatusOK, result)

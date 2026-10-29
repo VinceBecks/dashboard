@@ -18,7 +18,7 @@ import (
 // Config ist die beim Startup eingelesene Konfiguration.
 type Config struct {
 	Projects       []Project             `yaml:"projects"`
-	ActionHandlers []ActionHandlerConfig `yaml:"actionHandlers"`
+	ActionHandlers []ActionHandlerConfig `yaml:"action-handlers"`
 	Cluster        ClusterConfig         `yaml:"cluster"`
 	Pipelines      PipelinesConfig       `yaml:"pipelines"`
 	// Teams sind die Entwickler-Teams, denen Feature-Umgebungen per Namespace-Label zugeordnet werden.
@@ -92,8 +92,9 @@ type TeamsConfig struct {
 
 // Team ist ein Entwickler-Team. Die ID ist der Wert des Namespace-Labels.
 type Team struct {
-	ID    string `yaml:"team-id"`
-	Label string `yaml:"team-label"`
+	ID        string `yaml:"team-id"`
+	Label     string `yaml:"team-label"`
+	TeamColor string `yaml:"team-color"`
 }
 
 // Find liefert das Team mit dieser ID.

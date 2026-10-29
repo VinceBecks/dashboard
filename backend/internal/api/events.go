@@ -44,8 +44,9 @@ type Snapshot struct {
 
 // TeamDTO ist ein Entwickler-Team; NamespaceDTO.Team verweist auf seine ID.
 type TeamDTO struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	TeamColor string `json:"teamColor"`
 }
 
 // ProjectSnapshot ist ein Projekt mit seinen Service-Bereichen und den Teilbäumen seiner Namespaces.
@@ -220,7 +221,7 @@ func (h *Hub) snapshotLocked() Snapshot {
 	}
 	snap := Snapshot{Teams: make([]TeamDTO, 0, len(h.teams.Teams)), Projects: make([]ProjectSnapshot, 0, len(h.projects))}
 	for _, t := range h.teams.Teams {
-		snap.Teams = append(snap.Teams, TeamDTO{ID: t.ID, Label: t.Label})
+		snap.Teams = append(snap.Teams, TeamDTO{ID: t.ID, Label: t.Label, TeamColor: t.TeamColor})
 	}
 	for _, p := range h.projects {
 		nss := byProject[p.Name]

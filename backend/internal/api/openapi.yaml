@@ -294,10 +294,11 @@ components:
         label: { type: string }
     Team:
       type: object
-      required: [id, label]
+      required: [id, label, teamColor]
       properties:
         id: { type: string, description: '`team-id` aus der config.yaml (Wert des Team-Labels am Namespace)' }
         label: { type: string }
+        teamColor: { type: string }
     Snapshot:
       type: object
       required: [teams, projects]

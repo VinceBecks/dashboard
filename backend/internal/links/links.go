@@ -107,7 +107,7 @@ func (r *Registry) render(tpl *template.Template, ref model.ObjectRef, obj any, 
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("ungültige URL: %w", err)
+		return "", fmt.Errorf("ungültige URL. Raw String wert ist '%s': %w", raw, err)
 	}
 	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return "", fmt.Errorf("nur absolute http(s)-URLs sind erlaubt, erhalten: %q", raw)

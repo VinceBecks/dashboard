@@ -180,22 +180,3 @@ func TestConfigureErrors(t *testing.T) {
 		}
 	}
 }
-
-func TestVariablesCanTrimProject(t *testing.T) {
-	srv, last := fakeGitLab(t, http.StatusCreated, `{"id": 1, "web_url": "https://gitlab.example/p/-/pipelines/1"}`)
-	h := configured(t, srv.URL, map[string]any{
-		"ref":       "feature/{{ trimproject .Namespace }}",
-		"variables": map[string]any{"FEATURE": "{{ trimproject .Namespace }}"},
-	})
-	ns := model.StoredNamespace{Meta: model.Meta{Name: "foo-projekt-login"}, Project: "foo-projekt"}
-	obj := actions.StoredObject{Ref: model.ObjectRef{Kind: model.KindNamespace, Namespace: ns.Name, Name: ns.Name}, Object: ns, Project: "foo-projekt"}
-	if res := h.Execute(context.Background(), obj, nil); !res.Success {
-		t.Fatalf("res = %+v", res)
-	}
-	if got := last.form.Get("variables[FEATURE]"); got != "login" {
-		t.Errorf("FEATURE = %q", got)
-	}
-	if got := last.form.Get("ref"); got != "feature/login" {
-		t.Errorf("ref = %q", got)
-	}
-}

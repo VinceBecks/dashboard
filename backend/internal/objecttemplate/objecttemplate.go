@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -71,13 +72,27 @@ func Meta(obj any) (model.Meta, bool) {
 
 // Funcs sind die zusätzlichen Template-Funktionen (neben Go-Standardfunktionen wie urlquery).
 var Funcs = template.FuncMap{
-	"pathescape": url.PathEscape,
-	"rison":      Rison,
-	"replace":    func(s, old, new string) string { return strings.ReplaceAll(s, old, new) },
-	"join":       func(elems []string, sep string) string { return strings.Join(elems, sep) },
-	"shellquote": ShellQuote,
+	"extractRenewJiraTicketNumber": ExtractRenewJiraTicketNumber,
+	"pathescape":                   url.PathEscape,
+	"rison":                        Rison,
+	"replace":                      func(s, old, new string) string { return strings.ReplaceAll(s, old, new) },
+	"join":                         func(elems []string, sep string) string { return strings.Join(elems, sep) },
+	"shellquote":                   ShellQuote,
 	// trimproject ist hier nur ein Platzhalter für das Parsen; Render bindet es an das Projekt des Objekts.
-	"trimproject": func(s string) string { return s },
+	"trimPrefix": func(prefix, value string) string { return strings.TrimPrefix(value, prefix) },
+}
+
+var renewNamespaceRegEx = regexp.MustCompile("^renew-(f-|if-|hf-)(story|hotfix|feat|bug|epic|intfix)([0-9]+).*")
+
+// ExtractRenewJiraTicketNumber extrahiert aus dem Namespace-Namen die JIRA-Ticket-Number.
+// je nachdem, ob der Namespace für ein feature-, hotfix-, bugfix- intfix- oder epic-Ticket erstellt wurde ist der Namespace unterschiedlich aufgebaut
+func ExtractRenewJiraTicketNumber(namespace string) string {
+	matches := renewNamespaceRegEx.FindStringSubmatch(namespace)
+	if len(matches) < 4 {
+		return ""
+	}
+
+	return matches[3]
 }
 
 // TrimProject entfernt den Projektnamen samt Bindestrich als Präfix, z. B. "myproject-foo-bar" im Projekt
@@ -104,16 +119,10 @@ func Parse(name, text string) (*template.Template, error) {
 	return t, nil
 }
 
-// Render führt ein Template aus. Funktionen, die vom Objekt abhängen (trimproject), werden dafür an eine Kopie des
-// Templates gebunden; das geparste Template selbst bleibt unverändert und kann nebenläufig genutzt werden.
+// Render führt ein Template aus.
 func Render(t *template.Template, data Data) (string, error) {
-	bound, err := t.Clone()
-	if err != nil {
-		return "", fmt.Errorf("template %s: %w", t.Name(), err)
-	}
-	bound.Funcs(template.FuncMap{"trimproject": func(s string) string { return TrimProject(s, data.Project) }})
 	var sb strings.Builder
-	if err := bound.Execute(&sb, data); err != nil {
+	if err := t.Execute(&sb, data); err != nil {
 		return "", fmt.Errorf("template %s: %w", t.Name(), err)
 	}
 	return sb.String(), nil
