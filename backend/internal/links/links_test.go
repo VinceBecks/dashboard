@@ -82,7 +82,7 @@ func TestKibanaLinkPerKind(t *testing.T) {
 	r := registry(t, kibanaConfig)
 
 	pod := r.For(ref(model.KindPod, "web-1"), model.StoredPod{}, "foo")
-	if len(pod) != 1 || pod[0].ID != "kibana-logs" || pod[0].icon != "scroll-text" {
+	if len(pod) != 1 || pod[0].ID != "kibana-logs" || pod[0].Icon != "scroll-text" {
 		t.Fatalf("Pod-Links = %+v", pod)
 	}
 	want := `/?_g=(time:(from:now-1h,to:now))&_a=(dataSource:(dataViewId:'logs-foo',type:dataView),` +

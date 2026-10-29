@@ -20,8 +20,8 @@ import (
 type Link struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
-	icon      string `json:"icon"`
-	iconColor string `json:"iconColor"`
+	Icon      string `json:"icon"`
+	IconColor string `json:"iconColor"`
 	URL       string `json:"url"`
 }
 
@@ -85,8 +85,8 @@ func (r *Registry) For(ref model.ObjectRef, obj any, project string) []Link {
 		result = append(result, Link{
 			ID:        c.cfg.ID,
 			Title:     c.cfg.Title,
-			icon:      c.cfg.Icon,
-			iconColor: c.cfg.IconColor,
+			Icon:      c.cfg.Icon,
+			IconColor: c.cfg.IconColor,
 			URL:       u,
 		})
 	}

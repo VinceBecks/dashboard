@@ -78,11 +78,10 @@ var Funcs = template.FuncMap{
 	"replace":                      func(s, old, new string) string { return strings.ReplaceAll(s, old, new) },
 	"join":                         func(elems []string, sep string) string { return strings.Join(elems, sep) },
 	"shellquote":                   ShellQuote,
-	// trimproject ist hier nur ein Platzhalter für das Parsen; Render bindet es an das Projekt des Objekts.
-	"trimPrefix": func(prefix, value string) string { return strings.TrimPrefix(value, prefix) },
+	"trimPrefix":                   func(prefix, value string) string { return strings.TrimPrefix(value, prefix) },
 }
 
-var renewNamespaceRegEx = regexp.MustCompile("^renew-(f-|if-|hf-)(story|hotfix|feat|bug|epic|intfix)([0-9]+).*")
+var renewNamespaceRegEx = regexp.MustCompile(`^renew-(f-|if-|hf-)(story|hotfix|feat|bugfix|epic|intfix)([0-9]+).*$`)
 
 // ExtractRenewJiraTicketNumber extrahiert aus dem Namespace-Namen die JIRA-Ticket-Number.
 // je nachdem, ob der Namespace für ein feature-, hotfix-, bugfix- intfix- oder epic-Ticket erstellt wurde ist der Namespace unterschiedlich aufgebaut
@@ -93,15 +92,6 @@ func ExtractRenewJiraTicketNumber(namespace string) string {
 	}
 
 	return matches[3]
-}
-
-// TrimProject entfernt den Projektnamen samt Bindestrich als Präfix, z. B. "myproject-foo-bar" im Projekt
-// "myproject" zu "foo-bar". Ohne dieses Präfix (oder ohne Projekt) bleibt s unverändert.
-func TrimProject(s, project string) string {
-	if project == "" {
-		return s
-	}
-	return strings.TrimPrefix(s, project+"-")
 }
 
 // ShellQuote setzt s für POSIX-Shells in einfache Anführungszeichen; enthaltene Hochkommas werden maskiert,
