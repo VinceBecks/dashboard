@@ -1,0 +1,86 @@
+# CronJob nightly-scale-down: startet jede Nacht die GitLab-Pipeline, die alle Feature-Umgebungen auf 0 Replicas
+# skaliert. Namespaces mit dem Ausnahme-Label (Dashboard-Aktion nightly-scale-down-exclusion) bekommt die Pipeline
+# im Input EXCLUDE_NAMESPACES (komma-getrennt). Gleiches Image wie das Dashboard, andere Binary.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nightly-scale-down
+  namespace: feature-dashboard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nightly-scale-down
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [list] # Namespaces mit dem Ausnahme-Label lesen
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nightly-scale-down
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nightly-scale-down
+subjects:
+  - kind: ServiceAccount
+    name: nightly-scale-down
+    namespace: feature-dashboard
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-scale-down
+  namespace: feature-dashboard
+spec:
+  schedule: "0 20 * * *" # Platzhalter: täglich 20:00
+  timeZone: Europe/Berlin
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0 # kein Retry: nie zwei Pipelines in einer Nacht starten
+      template:
+        spec:
+          serviceAccountName: nightly-scale-down
+          restartPolicy: Never
+          containers:
+            - name: nightly-scale-down
+              image: feature-dashboard-backend:1.0.0
+              imagePullPolicy: IfNotPresent
+              command: ["/nightly-scale-down"]
+              env:
+                # Muss zu label-key/label-value der Dashboard-Aktion nightly-scale-down-exclusion passen.
+                - name: SCALE_DOWN_EXCLUSION_LABEL_KEY
+                  value: mycomp.de/skip-nightly-scale-down
+                - name: SCALE_DOWN_EXCLUSION_LABEL_VALUE
+                  value: "true"
+                - name: GITLAB_URL
+                  value: https://gitlab.mycomp.de
+                - name: GITLAB_PROJECT
+                  value: team/nightly-scale-down
+                - name: GITLAB_REF
+                  value: main
+                - name: GITLAB_TIMEOUT
+                  value: 15s
+              envFrom:
+                # GITLAB_TRIGGER_TOKEN, siehe nightly-scale-down-secret.example.yaml.
+                - secretRef:
+                    name: nightly-scale-down-gitlab
+                # Proxy und Company-CA (HTTPS_PROXY, NO_PROXY, SSL_CERT_DIR), siehe network.example.yaml.
+                - configMapRef:
+                    name: feature-dashboard-network
+                    optional: true
+              volumeMounts:
+                - name: company-ca
+                  mountPath: /etc/company-ca
+                  readOnly: true
+          volumes:
+            # Company-CA (PEM); ohne die ConfigMap bleibt das Verzeichnis leer und es gelten nur die System-CAs.
+            - name: company-ca
+              configMap:
+                name: company-ca
+                optional: true

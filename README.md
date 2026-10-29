@@ -44,8 +44,9 @@ die API erreichbar sein, z. B. per Ingress (`/api` → Backend, `/` → Frontend
 6. [HTTP-API](#http-api)
 7. [Eine eigene Aktion entwickeln](#eine-eigene-aktion-entwickeln)
 8. [Deployment im Cluster](#deployment-im-cluster)
-9. [Entwicklung](#entwicklung)
-10. [Fehlersuche](#fehlersuche)
+9. [Nächtliches Herunterskalieren (CronJob)](#nächtliches-herunterskalieren-cronjob)
+10. [Entwicklung](#entwicklung)
+11. [Fehlersuche](#fehlersuche)
 
 ---
 
@@ -191,6 +192,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/actions/assignteam`      | Aktion `assign-team`                                                       |
 | `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
 | `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`                               |
+| `internal/scaledowntrigger`        | Logik des CronJobs `nightly-scale-down` (`cmd/nightly-scale-down`)          |
 | `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
 | `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
@@ -980,6 +982,80 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
 
 ---
 
+## Nächtliches Herunterskalieren (CronJob)
+
+Eine GitLab-Pipeline skaliert jede Nacht alle Feature-Umgebungen auf 0 Replicas. Ausgelöst wird sie von einer
+zweiten, kleinen Anwendung im selben Repository (`backend/cmd/nightly-scale-down`). Sie läuft als Kubernetes-CronJob.
+Namespaces, die Entwickler im Dashboard mit der Aktion
+[`nightly-scale-down-exclusion`](#nightly-scale-down-exclusion) ausgenommen haben, bekommt die Pipeline als Liste.
+
+**Ablauf je Lauf:**
+
+1. Konfiguration aus Umgebungsvariablen lesen. Fehlt etwas, endet die Anwendung mit Exit-Code 1 und nennt alle
+   fehlenden bzw. ungültigen Variablen.
+2. Alle Namespaces mit dem Label `<SCALE_DOWN_EXCLUSION_LABEL_KEY>=<SCALE_DOWN_EXCLUSION_LABEL_VALUE>` lesen (ein
+   List-Aufruf mit Label-Selector, kein Informer). Projekt-Labels spielen dabei keine Rolle.
+3. Die Pipeline über die Trigger-API starten, mit dem Pipeline-Input **`EXCLUDE_NAMESPACES`**: die Namen
+   komma-getrennt und sortiert, z. B. `foo-feat-1,foo-feat-2`. Ist kein Namespace ausgenommen, ist der Wert leer,
+   die Pipeline startet trotzdem.
+4. Pipeline-ID und URL loggen und mit Exit-Code 0 enden. Jeder Fehler führt zu Exit-Code 1, der Job gilt dann als
+   fehlgeschlagen.
+
+**Umgebungsvariablen:**
+
+| Variable                           | Pflicht | Bedeutung                                                                  |
+|------------------------------------|---------|----------------------------------------------------------------------------|
+| `SCALE_DOWN_EXCLUSION_LABEL_KEY`   | ja      | Ausnahme-Label; muss zum `label-key` der Aktion passen                     |
+| `SCALE_DOWN_EXCLUSION_LABEL_VALUE` | nein    | Wert des Labels, Standard `true` (wie `label-value` der Aktion)            |
+| `GITLAB_URL`                       | ja      | z. B. `https://gitlab.mycomp.de`                                           |
+| `GITLAB_PROJECT`                   | ja      | Projekt-ID oder Pfad des Projekts mit der Scale-down-Pipeline              |
+| `GITLAB_REF`                       | ja      | Branch oder Tag, z. B. `main`                                              |
+| `GITLAB_TRIGGER_TOKEN`             | ja      | Pipeline-Trigger-Token (im Cluster aus dem Secret)                         |
+| `GITLAB_TIMEOUT`                   | nein    | HTTP-Timeout, Standard `10s`                                               |
+| `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_DIR` | nein | Proxy und Company-CA wie beim Dashboard                           |
+| `KUBECONFIG`                       | nein    | Nur lokal; im Cluster gilt die In-Cluster-Konfiguration                    |
+
+**Pipeline:** `EXCLUDE_NAMESPACES` ist ein Pipeline-Input (`spec:inputs`), keine CI/CD-Variable. Er wird als
+`inputs[EXCLUDE_NAMESPACES]` an die Trigger-API übergeben, dafür braucht es eine GitLab-Version, die Inputs über
+die Trigger-API annimmt. Beispiel für den Kopf der `.gitlab-ci.yml`:
+
+```yaml
+spec:
+  inputs:
+    EXCLUDE_NAMESPACES:
+      type: string
+      default: ""
+      description: Komma-getrennte Namespaces, die nicht herunterskaliert werden
+---
+scale-down:
+  script:
+    - ./scale-down.sh --exclude "$[[ inputs.EXCLUDE_NAMESPACES ]]"
+```
+
+**Deployment:** Der CronJob nutzt dasselbe Image wie das Dashboard und startet mit `command: ["/nightly-scale-down"]`.
+
+```sh
+kubectl apply -f backend/deploy/nightly-scale-down-secret.example.yaml   # vorher echtes Trigger-Token eintragen
+kubectl apply -f backend/deploy/nightly-scale-down.yaml                  # vorher Schedule, Label und GitLab-Werte anpassen
+```
+
+- **Zeitplan:** `schedule: "0 20 * * *"` mit `timeZone: Europe/Berlin` ist ein Platzhalter.
+- **Kein Retry:** `concurrencyPolicy: Forbid` und `backoffLimit: 0` verhindern, dass in einer Nacht zwei
+  Pipelines starten. Ein fehlgeschlagener Lauf wird nicht wiederholt.
+- **Rechte:** eigener ServiceAccount `nightly-scale-down` mit ClusterRole, nur `list` auf `namespaces`.
+- **Proxy und Company-CA:** wie beim Dashboard über die ConfigMaps `feature-dashboard-network` und `company-ca`.
+- **Label:** `SCALE_DOWN_EXCLUSION_LABEL_KEY` und `_VALUE` müssen zu `label-key` und `label-value` der Aktion in
+  der `config.yaml` des Dashboards passen. Sonst werden markierte Namespaces trotzdem herunterskaliert.
+
+**Lokal ausführen** (startet wirklich eine Pipeline):
+
+```sh
+SCALE_DOWN_EXCLUSION_LABEL_KEY=mycomp.de/skip-nightly-scale-down GITLAB_URL=https://gitlab.mycomp.de \
+  GITLAB_PROJECT=team/nightly-scale-down GITLAB_REF=main GITLAB_TRIGGER_TOKEN=… make nightly-scale-down-run
+```
+
+---
+
 ## Entwicklung
 
 Alle Befehle laufen über das `Makefile` im Repository-Root:
@@ -988,8 +1064,9 @@ Alle Befehle laufen über das `Makefile` im Repository-Root:
 |---------------------|-------------------------------------------------------------------------------------|
 | `make test`         | Backend-Tests (`go test -race ./...`)                                               |
 | `make lint`         | `go vet`                                                                            |
-| `make build`        | Backend-Binary nach `backend/bin/dashboard`                                         |
+| `make build`        | Binaries nach `backend/bin/` (`dashboard`, `nightly-scale-down`)                    |
 | `make run`          | Backend lokal starten (`CONFIG=…`, `STATIC_DIR=…`, `KUBECONFIG=…` überschreibbar)   |
+| `make nightly-scale-down-run` | CronJob-Anwendung einmal lokal ausführen (Konfiguration aus der Umgebung) |
 | `make docker`       | Image bauen (`IMAGE=…` überschreibbar, `COMPANY_CA=…` für den Build hinter dem Proxy) |
 | `make clean`        | Build-Artefakte löschen                                                             |
 

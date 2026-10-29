@@ -11,7 +11,7 @@ STATIC_DIR ?=
 KUBECONFIG ?= $(HOME)/.kube/config
 
 .PHONY: build test lint run docker clean \
-	backend-build backend-test backend-vet backend-run
+	backend-build backend-test backend-vet backend-run nightly-scale-down-run
 
 ## Sammel-Targets
 
@@ -36,8 +36,9 @@ clean:
 
 ## Backend
 
+# Baut alle Binaries nach backend/bin/: dashboard und nightly-scale-down.
 backend-build:
-	go -C backend build -o bin/dashboard ./cmd/dashboard
+	go -C backend build -o bin/ ./cmd/...
 
 backend-test:
 	go -C backend test -race ./...
@@ -48,3 +49,7 @@ backend-vet:
 backend-run:
 	go -C backend run ./cmd/dashboard --config "$(abspath $(CONFIG))" --kubeconfig "$(KUBECONFIG)" \
 		$(if $(STATIC_DIR),--static-dir "$(abspath $(STATIC_DIR))")
+
+# CronJob-Anwendung einmal lokal ausführen; Konfiguration nur über Umgebungsvariablen (siehe README).
+nightly-scale-down-run:
+	KUBECONFIG="$(KUBECONFIG)" go -C backend run ./cmd/nightly-scale-down

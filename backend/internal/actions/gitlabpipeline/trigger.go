@@ -149,42 +149,23 @@ func (t *Trigger) PipelineStatus(ctx context.Context, id int) (string, error) {
 // Run rendert ref und Variablen mit data und löst die Pipeline aus. Bei aktivem Track merkt es sich die gestartete
 // Pipeline am Objekt aus data.
 func (t *Trigger) Run(ctx context.Context, data objecttemplate.Data) actions.Result {
-	form := url.Values{}
-	form.Set("token", t.token)
 	ref, err := objecttemplate.Render(t.ref, data)
 	if err != nil {
 		return failure("%v", err)
 	}
-	form.Set("ref", ref)
+	variables := make(map[string]string, len(t.variables))
 	for key, tmpl := range t.variables {
 		value, err := objecttemplate.Render(tmpl, data)
 		if err != nil {
 			return failure("%v", err)
 		}
-		form.Set("variables["+key+"]", value)
+		variables[key] = value
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.triggerURL, strings.NewReader(form.Encode()))
+	pipeline, err := t.Start(ctx, ref, variables, nil)
 	if err != nil {
-		return failure("Request konnte nicht erstellt werden: %v", err)
+		return failure("%v", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	res, err := t.client.Do(req)
-	if err != nil {
-		// Der Fehler enthält nur Methode und URL; das Token steht im Body und taucht nicht auf.
-		return failure("GitLab nicht erreichbar: %v", err)
-	}
-	defer func() { _ = res.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(res.Body, maxResponseSize))
-
-	if res.StatusCode != http.StatusCreated && res.StatusCode != http.StatusOK {
-		return failure("GitLab antwortete mit %s: %s", res.Status, gitlabMessage(body))
-	}
-	var pipeline struct {
-		ID     int    `json:"id"`
-		WebURL string `json:"web_url"`
-	}
-	if err := json.Unmarshal(body, &pipeline); err != nil || pipeline.ID == 0 {
+	if pipeline.ID == 0 {
 		return actions.Result{Success: true, Message: fmt.Sprintf("Pipeline für ref %s gestartet", ref)}
 	}
 	result := actions.Result{Success: true, Message: fmt.Sprintf("Pipeline #%d gestartet: %s", pipeline.ID, pipeline.WebURL)}
@@ -215,6 +196,48 @@ func gitlabMessage(body []byte) string {
 		msg = msg[:maxMessageLen] + "…"
 	}
 	return msg
+}
+
+// Pipeline ist eine gestartete Pipeline. ID ist 0, wenn GitLab keine auswertbare Antwort geliefert hat.
+type Pipeline struct {
+	ID     int    `json:"id"`
+	WebURL string `json:"web_url"`
+}
+
+// Start löst die Pipeline für ref mit bereits fertigen Werten aus: variables als CI/CD-Variablen
+// (variables[KEY]), inputs als Pipeline-Inputs (inputs[KEY], spec:inputs). Es merkt sich nichts (kein Track).
+func (t *Trigger) Start(ctx context.Context, ref string, variables, inputs map[string]string) (Pipeline, error) {
+	form := url.Values{}
+	form.Set("token", t.token)
+	form.Set("ref", ref)
+	for key, value := range variables {
+		form.Set("variables["+key+"]", value)
+	}
+	for key, value := range inputs {
+		form.Set("inputs["+key+"]", value)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.triggerURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return Pipeline{}, fmt.Errorf("Request konnte nicht erstellt werden: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := t.client.Do(req)
+	if err != nil {
+		// Der Fehler enthält nur Methode und URL; das Token steht im Body und taucht nicht auf.
+		return Pipeline{}, fmt.Errorf("GitLab nicht erreichbar: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, maxResponseSize))
+
+	if res.StatusCode != http.StatusCreated && res.StatusCode != http.StatusOK {
+		return Pipeline{}, fmt.Errorf("GitLab antwortete mit %s: %s", res.Status, gitlabMessage(body))
+	}
+	var pipeline Pipeline
+	if err := json.Unmarshal(body, &pipeline); err != nil {
+		return Pipeline{}, nil
+	}
+	return pipeline, nil
 }
 
 func failure(format string, args ...any) actions.Result {
