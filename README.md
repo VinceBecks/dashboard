@@ -6,20 +6,19 @@ lassen sich außerdem **Aktionen** auf diesen Objekten auslösen, z. B. einen Po
 Services neu starten oder eine GitLab-Pipeline starten. Konfigurierbare **Links** springen von Objekten in andere Systeme, etwa
 zu den Logs in Kibana.
 
-Das Projekt besteht aus zwei Teilen:
-
-| Teil     | Technik                                               | Ordner      |
-|----------|-------------------------------------------------------|-------------|
-| Backend  | Go, `client-go` v0.33 (Informer), `net/http`          | `backend/`  |
-| Frontend | React 19, TypeScript, Vite, MUI, Lucide               | `frontend/` |
+Dieses Repository enthält nur das **Backend** (Go, `client-go` v0.33 mit Informern, `net/http`, Ordner `backend/`).
+Das Frontend wird getrennt entwickelt und nutzt die hier beschriebene HTTP-API (`backend/internal/api/openapi.yaml`).
 
 Das Dashboard ist eine einzige Seite: je Projekt eine Kachel pro Feature-Umgebung, darin je Anwendungs-Service ein
 grüner (mindestens ein Replica läuft) oder roter Punkt. Ein Klick auf einen Punkt zeigt die Details des Services
 mit seinen Replicas. Das Frontend lädt beim Aufruf den kompletten Stand und wird danach per **Server-Sent Events**
 aktuell gehalten.
 
-Im Cluster liefert das Backend auch das gebaute Frontend aus. Es gibt ein Image und genau ein Deployment mit **einem**
-Replica.
+Das Backend läuft im Cluster als ein Image in genau einem Deployment mit **einem** Replica.
+
+**Hinweis für das Frontend:** Das Backend setzt keine CORS-Header. Das Frontend muss daher unter derselben Origin wie
+die API erreichbar sein, z. B. per Ingress (`/api` → Backend, `/` → Frontend) oder lokal über einen Dev-Proxy, der
+`/api` an `localhost:8080` weiterleitet.
 
 ---
 
@@ -52,27 +51,22 @@ Replica.
 
 ## Schnellstart
 
-Voraussetzungen: Go 1.26, Node.js 22, ein erreichbarer Kubernetes-Cluster (z. B. kind oder minikube) und eine
+Voraussetzungen: Go 1.26, ein erreichbarer Kubernetes-Cluster (z. B. kind oder minikube) und eine
 kubeconfig.
 
 ```sh
-# Frontend bauen und Backend lokal starten (nutzt KUBECONFIG bzw. ~/.kube/config)
+# Backend lokal starten (nutzt KUBECONFIG bzw. ~/.kube/config)
 make run
 
-# danach im Browser http://localhost:8080 öffnen
+# danach z. B. den Event-Stream ansehen oder die Swagger-UI öffnen
+curl -N http://localhost:8080/api/events
+# http://localhost:8080/api/swagger
 ```
 
 `make run` verwendet `backend/config.example.yaml`. Eine eigene Konfiguration gibst du so an:
 
 ```sh
 make run CONFIG=pfad/zur/config.yaml          # Pfad relativ zum Repository-Root
-```
-
-Für die Frontend-Entwicklung mit Hot-Reload startest du Backend und Vite-Dev-Server getrennt:
-
-```sh
-make backend-run      # Backend auf :8080
-make frontend-dev     # Vite-Dev-Server; leitet /api an localhost:8080 weiter
 ```
 
 Damit das Dashboard etwas anzeigt, braucht ein Namespace die Labels eines konfigurierten Projekts. Für
@@ -200,7 +194,7 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 | `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
 | `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
 | `internal/pipelines`               | Laufende GitLab-Pipelines im Speicher, Status-Abfrage                      |
-| `internal/api`                     | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, Auslieferung des Frontends |
+| `internal/api`                     | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, optionale Auslieferung statischer Dateien |
 
 ---
 
@@ -215,7 +209,7 @@ dashboard --config config.yaml --listen :8080 [--kubeconfig PFAD] [--static-dir 
 | `--config`     | `config.yaml` | Pfad zur Konfiguration                                                                             |
 | `--listen`     | `:8080`       | HTTP-Adresse                                                                                       |
 | `--kubeconfig` | leer          | Leer: In-Cluster-Konfiguration, ersatzweise `KUBECONFIG` bzw. `~/.kube/config`. Sonst dieser Pfad. |
-| `--static-dir` | leer          | Verzeichnis mit dem Frontend-Build. Leer: Das Frontend wird nicht ausgeliefert.                    |
+| `--static-dir` | leer          | Optional: Verzeichnis mit statischen Dateien (SPA-Fallback). Leer: nichts. Im Image nicht genutzt. |
 
 Ablauf beim Start:
 
@@ -814,8 +808,8 @@ Schlüssel: `text` als String, `number` als Zahl, `select` als String, `multi-se
 
 ## Eine eigene Aktion entwickeln
 
-Eine neue Aktion braucht **keine Änderung am Frontend**. Buttons, Icons und Formulare entstehen aus den
-Backend-Daten.
+Eine neue Aktion braucht **keine Änderung am Frontend** (das Frontend ist generisch). Buttons, Icons und Formulare
+entstehen aus den Backend-Daten.
 
 1. **Handler schreiben.** Lege ein neues Paket unter `backend/internal/actions/<name>` an und implementiere
    `actions.Handler`:
@@ -851,7 +845,7 @@ Backend-Daten.
 
 ## Deployment im Cluster
 
-Das Image enthält Backend und Frontend. Gebaut wird es aus dem `Dockerfile` im Repository-Root:
+Das Image enthält nur das Backend. Gebaut wird es aus dem `Dockerfile` im Repository-Root:
 
 ```sh
 make docker IMAGE=feature-dashboard-backend:1.0.0
@@ -877,7 +871,7 @@ kubectl apply -f backend/deploy/config.yaml -f backend/deploy/rbac.yaml -f backe
 kubectl apply -f backend/deploy/gitlab-secret.example.yaml
 ```
 
-- **Startbefehl:** Der Container startet mit `--config /etc/dashboard/config.yaml --static-dir /static`. Die
+- **Startbefehl:** Der Container startet mit `--config /etc/dashboard/config.yaml`. Die
   ConfigMap wird unter `/etc/dashboard` eingehängt.
 - **Secret:** Das Secret `feature-dashboard-gitlab` wird per `envFrom` als Umgebungsvariablen geladen. Es ist
   optional, das Backend startet also auch ohne dieses Secret.
@@ -904,11 +898,11 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
   Aktionen über den Proxy. In `NO_PROXY` gehören mindestens die IP des API-Servers (`KUBERNETES_SERVICE_HOST`, bzw.
   der Service-CIDR) sowie `.svc` und `.cluster.local`. CIDR-Angaben sind erlaubt.
 - **Image bauen hinter dem Proxy:** `make docker COMPANY_CA=/pfad/zur/company-ca.pem` übergibt die CA als
-  BuildKit-Secret (sie landet in keinem Layer) für `npm ci` und `go mod download`. `HTTP_PROXY`, `HTTPS_PROXY` und
+  BuildKit-Secret (sie landet in keinem Layer) für `go mod download`. `HTTP_PROXY`, `HTTPS_PROXY` und
   `NO_PROXY` aus der Umgebung werden als Build-Args durchgereicht.
 - **Lokal (`make run`):** Unter macOS und Windows nutzt Go den System-Zertifikatsspeicher; ist die Company-CA dort
   installiert, ist nichts zu tun. Unter Linux z. B. `SSL_CERT_DIR=/etc/ssl/certs:/pfad/zum/ca-verzeichnis make run`.
-- **Browser:** Das Frontend spricht nur mit dem Backend. Die Swagger-UI unter `/api/swagger` lädt ihre Skripte von
+- **Browser:** Die Swagger-UI unter `/api/swagger` lädt ihre Skripte von
   unpkg.com; dafür muss der Browser selbst der Company-CA vertrauen.
 
 ### Benötigte Rechte (ClusterRole)
@@ -928,17 +922,14 @@ Alle Befehle laufen über das `Makefile` im Repository-Root:
 
 | Befehl              | Wirkung                                                                             |
 |---------------------|-------------------------------------------------------------------------------------|
-| `make test`         | Backend-Tests (`go test -race ./...`) und Frontend-Tests (Vitest)                   |
-| `make lint`         | `go vet` und ESLint                                                                 |
-| `make build`        | Backend-Binary nach `backend/bin/dashboard`, Frontend-Build nach `frontend/dist/`   |
-| `make run`          | Frontend bauen, Backend lokal starten und das Frontend mit ausliefern               |
-| `make backend-run`  | Nur das Backend starten (`CONFIG=…`, `STATIC_DIR=…`, `KUBECONFIG=…` überschreibbar) |
-| `make frontend-dev` | Vite-Dev-Server mit Weiterleitung von `/api` an `localhost:8080`                    |
+| `make test`         | Backend-Tests (`go test -race ./...`)                                               |
+| `make lint`         | `go vet`                                                                            |
+| `make build`        | Backend-Binary nach `backend/bin/dashboard`                                         |
+| `make run`          | Backend lokal starten (`CONFIG=…`, `STATIC_DIR=…`, `KUBECONFIG=…` überschreibbar)   |
 | `make docker`       | Image bauen (`IMAGE=…` überschreibbar, `COMPANY_CA=…` für den Build hinter dem Proxy) |
 | `make clean`        | Build-Artefakte löschen                                                             |
 
-Einzelschritte gibt es als `backend-build|test|vet|run` und `frontend-install|dev|build|test|lint`. Die
-Frontend-Targets führen bei Bedarf automatisch `npm ci` aus.
+Einzelschritte gibt es als `backend-build|test|vet|run`.
 
 Die Backend-Tests laufen ohne Cluster:
 

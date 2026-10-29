@@ -15,7 +15,7 @@ hochgefahren haben und welche Services darin laufen.
 
 - Kubernetes-Cluster: Version 1.33.1
 - Backend: Go, Code liegt in `backend/`, läuft im Cluster und ist immer auf genau ein replica skaliert
-- Frontend: React + TypeScript, Code liegt in `frontend/`
+- Frontend: wird nicht mehr in diesem Repository entwickelt (siehe Abschnitt „Frontend“); hier nur das Backend
 - Keine Authentifizierung im Dashboard
 - Ausgehende Kommunikation läuft über einen Proxy mit eigener Company-CA. Kein eigener TLS-/Proxy-Code: HTTP-Clients
   nutzen den Standard-Transport von Go (`HTTPS_PROXY`/`NO_PROXY`, System-CAs plus `SSL_CERT_DIR`); konfiguriert wird
@@ -23,9 +23,9 @@ hochgefahren haben und welche Services darin laufen.
   `NO_PROXY` muss den Kubernetes-API-Server ausnehmen, da client-go `HTTPS_PROXY` ebenfalls beachtet.
 
 ## Aktueller Stand
-Backend und Frontend sind implementiert (Plan Backend: `plans/backend-implementierung.md`, Umstellung auf
-Server-Sent Events und eine Seite: `plans/sse-einseiten-dashboard.md`).
-Das Backend liefert im Cluster auch das gebaute Frontend aus (ein Image, `Dockerfile` im Repository-Root).
+Das Backend ist implementiert (Plan Backend: `plans/backend-implementierung.md`, Umstellung auf
+Server-Sent Events: `plans/sse-einseiten-dashboard.md`). Das Frontend wurde aus dem Repository entfernt
+(`plans/frontend-entfernen.md`). Das Image enthält nur das Backend (`Dockerfile` im Repository-Root).
 
 Backend-Pakete (`backend/`):
 
@@ -57,24 +57,15 @@ Alle Befehle laufen über das `Makefile` im Repository-Root:
 
 | Befehl              | Wirkung                                                                                   |
 |---------------------|-------------------------------------------------------------------------------------------|
-| `make test`         | Backend- und Frontend-Tests (`go test -race`, Vitest)                                     |
-| `make lint`         | `go vet` und ESLint                                                                       |
-| `make build`        | Backend-Binary nach `backend/bin/dashboard`, Frontend-Build nach `frontend/dist/`         |
-| `make run`          | Frontend bauen, Backend lokal starten und das Frontend mit ausliefern (Port 8080)         |
-| `make docker`       | Image mit Backend + Frontend bauen (`IMAGE=...`, optional `COMPANY_CA=...` hinter dem Proxy); Manifeste in `backend/deploy/` |
-| `make backend-run`  | Nur das Backend lokal starten                                                             |
-| `make frontend-dev` | Vite-Dev-Server; `/api` wird an das lokale Backend auf `localhost:8080` weitergeleitet    |
+| `make test`         | Backend-Tests (`go test -race`)                                                           |
+| `make lint`         | `go vet`                                                                                  |
+| `make build`        | Backend-Binary nach `backend/bin/dashboard`                                               |
+| `make run`          | Backend lokal starten (Port 8080)                                                         |
+| `make docker`       | Backend-Image bauen (`IMAGE=...`, optional `COMPANY_CA=...` hinter dem Proxy); Manifeste in `backend/deploy/` |
 
-Einzelschritte gibt es als `backend-build|test|vet|run` und `frontend-install|dev|build|test|lint`.
+Einzelschritte gibt es als `backend-build|test|vet|run`.
 Lokale Starts nutzen den Cluster aus `KUBECONFIG` (Standard `~/.kube/config`) und `backend/config.example.yaml`;
-andere Config mit `make run CONFIG=pfad.yaml` (relativ zum Repository-Root). Für Frontend-Entwickler bleiben die
-npm-Scripts in `frontend/package.json` direkt nutzbar; das Makefile ruft nur sie auf.
-
-Frontend-Stack: Vite, React 19, MUI, Lucide.
-Frontend-Struktur: `src/api` (Typen gemäß `openapi.yaml`, `state.ts` wendet Events auf den Zustand an, Client für
-Aktionen), `src/hooks/useDashboardEvents.ts` (EventSource auf `GET /api/events`), `src/components`
-(`NamespaceCard`, `ServiceDialog`, generische Aktions-Buttons/-Dialoge, `ConnectionStatus` oben rechts),
-`src/pages/DashboardPage.tsx` (einzige Seite).
+andere Config mit `make run CONFIG=pfad.yaml` (relativ zum Repository-Root).
 
 ## Fachliche Begriffe
 
@@ -403,7 +394,7 @@ cluster:
 - Ein ActionHandler gibt ein Result zurück, welches zeigt, ob die Aktion erfolgreich ausgeführt wurde oder nicht
 
 Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Registry registrieren, Eintrag in der
-`config.yaml` ergänzen. Am Frontend ist dafür keine Änderung nötig.
+`config.yaml` ergänzen. Am (separaten) Frontend ist dafür keine Änderung nötig.
 
 ### API zum Dashboard
 
@@ -451,45 +442,17 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
   einen neuen Snapshot (`Last-Event-ID` wird ignoriert). Zu langsame Clients werden getrennt und verbinden sich neu.
 - Der Hub hält nur JSON-Bytes der zuletzt verschickten DTOs, keine Kopie der Kubernetes-Objekte.
 
-## Frontend
+## Frontend (nicht in diesem Repository)
 
-### Verwendete Libs / Tools
+Das Frontend wird getrennt entwickelt und nutzt nur die HTTP-API (`GET /api/events`, `PATCH /api/actions/{id}`).
+Für dieses Repository gilt daraus:
 
-- Lucide-Icons
-- MUI (Material UI) als Component-Library
-
-### Grundsatz: maximal generisch
-
-Das Dashboard kennt keine konkreten Aktionen. Buttons, Icons, Farben und Formulare werden vollständig aus den Daten des
-Backends aufgebaut. **Kein aktionsspezifischer Code im Frontend** (kein `if (action.id === "delete-pod")`). Fehlt dem
-Frontend eine Information, wird die API erweitert.
-
-### Seite
-
-Das Dashboard besteht aus genau einer Seite (`DashboardPage`):
-
-- Je Projekt (Reihenfolge der `config.yaml`) ein Abschnitt mit einer Kachel je Namespace (`NamespaceCard`). Sind
-  Teams konfiguriert, steht darüber ein Team-Filter (`TeamFilter`, Chips je Team plus „Ohne Team“, Mehrfachauswahl,
-  Auswahl in der URL); die Kachel zeigt das zugeordnete Team als Chip.
-- Kachel: Namespace-Name, Aktionen und Links des Namespaces, die URLs der Ingresses (je URL ein Label mit dem Namen
-  des Ingress, bei mehreren URLs mit Index: `rabbitmq` bzw. `web-1`, `web-2`; dazu die Aktionen/Links des Ingress), die
-  NodePort-Services (Name, Aktionen/Links, je Adresse ein Kopieren-Button, `CopyButton`) und je Anwendungs-Service
-  ein Punkt – grün, wenn mindestens ein Replica läuft, sonst rot.
-- Die Punkte stehen in Reitern je Service-Bereich (`ServiceAreaTabs` in `NamespaceCard`, Gruppierung in
-  `components/serviceAreas.ts`): nur Bereiche mit Services, Reihenfolge aus `serviceAreas`, „Andere“ zuletzt. Bei
-  nur einem Bereich entfällt die Reiterleiste. Der gewählte Reiter gilt je Kachel und wird nicht gespeichert.
-- Aktionen, Kopier-Befehle und Links eines Objekts stehen in einer Zeile (`ObjectButtons`): Aktionen links,
-  Kopier-Befehle (`CopyCommandButtons`) und Links rechtsbündig. Pod-Befehle erscheinen im `ServiceDialog` beim Replica.
-- Klick auf einen Punkt öffnet den `ServiceDialog`: Aktionen und Links des Services, darunter je Replica Ready-Zustand,
-  Container (Name, Image), Aktionen und Links. Verschwindet der Service zwischenzeitlich, zeigt der Dialog einen
-  Hinweis.
-
-### Datenaktualisierung
-
-Beim Aufruf öffnet das Frontend `GET /api/events` (EventSource). Das erste Event (`snapshot`) liefert den kompletten
-Stand, danach werden `upsert`/`delete` angewendet (`src/api/state.ts`). Nach einem Verbindungsabbruch verbindet sich
-der Browser selbst neu und erhält einen frischen Snapshot. Den Verbindungszustand zeigt `ConnectionStatus` oben
-rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die Events.
+- **API maximal generisch halten:** Das Frontend kennt keine konkreten Aktionen. Buttons, Icons, Farben und Formulare
+  werden vollständig aus den API-Daten aufgebaut. Aktionsspezifische Logik gehört ins Backend; fehlt dem Frontend eine
+  Information, wird die API erweitert (`openapi.yaml`, `example-api.jsonc`).
+- **Kein CORS:** Das Backend setzt keine CORS-Header. Das Frontend muss unter derselben Origin wie die API laufen
+  (z. B. Ingress `/api` → Backend, lokal Dev-Proxy auf `localhost:8080`).
+- `--static-dir` (`internal/api/static.go`) bleibt im Backend erhalten, wird im Image aber nicht mehr genutzt.
 
 ## Leitplanken für Änderungen
 
@@ -506,12 +469,11 @@ rechts. Nach einer Aktion wird nichts neu geladen; die Änderung kommt über die
 
 - Backend: `k8s.io/client-go` v0.33.x mit Informern, HTTP mit stdlib `net/http`, YAML mit `gopkg.in/yaml.v3`.
 - Build/Test: Makefile + `go test`, Dockerfile (distroless).
-- Frontend: Vite, eine Seite ohne Router; Auslieferung durch das Backend (`--static-dir`, SPA-Fallback auf
-  `index.html`).
+- Das Frontend liegt nicht mehr in diesem Repository (Plan `plans/frontend-entfernen.md`); das Image enthält nur das
+  Backend.
 - Aktualisierung über Server-Sent Events statt Polling/ETag; der Initialstand ist das erste Event desselben Streams.
 - Service-Bereiche sind Reiter in der Namespace-Kachel (kein seitenweiter Filter). NodePort-Services kommen als eigenes Attribut `nodePortServices` mit fertigen Adressen;
   `cluster.dns-name` ist dafür Pflicht.
-- Aktionen werden im Frontend immer über einen Dialog bestätigt; Formular-Felder erscheinen darin, falls vorhanden.
 - Kein eigener Store und kein periodischer Neuaufbau mit frischen Informern (Plan
   `plans/informer-cache-statt-store.md`): Der Informer-Cache ist konsistent, der Event-Hub baut geänderte
   Namespaces neu auf und verschickt nur echte Unterschiede; stündlich gleicht er zusätzlich alles ab.

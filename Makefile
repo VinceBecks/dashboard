@@ -1,4 +1,4 @@
-# Einstiegspunkt für Backend (Go, backend/) und Frontend (Vite, frontend/).
+# Einstiegspunkt für das Backend (Go, backend/).
 # Relative Pfade in CONFIG und STATIC_DIR beziehen sich auf das Repository-Root.
 
 IMAGE      ?= feature-dashboard-backend:latest
@@ -6,27 +6,23 @@ IMAGE      ?= feature-dashboard-backend:latest
 # werden aus der Umgebung übernommen, falls gesetzt.
 COMPANY_CA ?=
 CONFIG     ?= backend/config.example.yaml
+# Optional: Verzeichnis mit statischen Dateien, die das Backend unter / ausliefert (--static-dir).
 STATIC_DIR ?=
 KUBECONFIG ?= $(HOME)/.kube/config
 
-BACKEND_BINARY := backend/bin/dashboard
-NPM            := npm --prefix frontend
-
 .PHONY: build test lint run docker clean \
-	backend-build backend-test backend-vet backend-run \
-	frontend-install frontend-dev frontend-build frontend-test frontend-lint
+	backend-build backend-test backend-vet backend-run
 
 ## Sammel-Targets
 
-build: backend-build frontend-build
+build: backend-build
 
-test: backend-test frontend-test
+test: backend-test
 
-lint: backend-vet frontend-lint
+lint: backend-vet
 
-# Backend lokal starten und den aktuellen Frontend-Build mit ausliefern.
-run: frontend-build
-	$(MAKE) backend-run STATIC_DIR=frontend/dist
+# Backend lokal starten.
+run: backend-run
 
 comma := ,
 DOCKER_PROXY_ARGS := $(foreach v,HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy,$(if $($(v)),--build-arg $(v)))
@@ -36,7 +32,7 @@ docker:
 		$(if $(COMPANY_CA),--secret id=company_ca$(comma)src=$(COMPANY_CA)) -t $(IMAGE) .
 
 clean:
-	rm -rf backend/bin frontend/dist
+	rm -rf backend/bin
 
 ## Backend
 
@@ -52,23 +48,3 @@ backend-vet:
 backend-run:
 	go -C backend run ./cmd/dashboard --config "$(abspath $(CONFIG))" --kubeconfig "$(KUBECONFIG)" \
 		$(if $(STATIC_DIR),--static-dir "$(abspath $(STATIC_DIR))")
-
-## Frontend
-
-frontend/node_modules: frontend/package.json frontend/package-lock.json
-	$(NPM) ci
-	@touch $@
-
-frontend-install: frontend/node_modules
-
-frontend-dev: frontend/node_modules
-	$(NPM) run dev
-
-frontend-build: frontend/node_modules
-	$(NPM) run build
-
-frontend-test: frontend/node_modules
-	$(NPM) test
-
-frontend-lint: frontend/node_modules
-	$(NPM) run lint

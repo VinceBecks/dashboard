@@ -2,8 +2,9 @@
 
 Diese Datei erklärt die Anwendung so, dass man sich damit in den Code einarbeiten kann. Sie beschreibt zuerst das
 große Bild und dann die Abläufe, die man beim Lesen des Codes immer wieder trifft. Danach folgt ein Rundgang durch
-Backend und Frontend, Paket für Paket. Für Konfigurationsdetails und Betrieb gibt es die `README.md`. Die verbindlichen
-Regeln für Änderungen stehen in `CLAUDE.md`.
+das Backend, Paket für Paket. Das Frontend liegt nicht in diesem Repository; es nutzt nur die HTTP-API. Für
+Konfigurationsdetails und Betrieb gibt es die `README.md`. Die verbindlichen Regeln für Änderungen stehen in
+`CLAUDE.md`.
 
 ---
 
@@ -70,8 +71,6 @@ ein Handler direkt in `pipelines.State` einträgt. Auch sie erreichen das Fronte
 | 7       | `backend/internal/api/server.go`                               | HTTP-Routen, SSE-Handler, Aktions-Endpunkt               |
 | 8       | `backend/internal/actions/actions.go`, `registry.go`           | Wie Aktionen funktionieren                               |
 | 9       | ein einfacher Handler, z. B. `actions/deletepod/deletepod.go`  | Ein Handler in klein                                     |
-| 10      | `frontend/src/hooks/useDashboardEvents.ts`, `api/state.ts`     | Wie das Frontend den Stream verarbeitet                  |
-| 11      | `frontend/src/components/NamespaceCard.tsx`, `ObjectButtons.tsx` | Wie die Seite aufgebaut ist                            |
 
 Ein Beispiel für die Daten, die das Frontend bekommt, steht in `backend/internal/api/example-api.jsonc`. Es lohnt sich,
 diese Datei parallel offen zu haben.
@@ -132,7 +131,7 @@ etwas mehr Arbeit, die Namespaces sind aber klein.
 
 ### 4.4 Eine Aktion wird ausgeführt (`PATCH /api/actions/{id}`)
 
-1. **Dialog:** Das Frontend zeigt `ActionDialog` mit den Formular-Feldern der Aktion und schickt dann
+1. **Dialog:** Das Frontend zeigt einen Dialog mit den Formular-Feldern der Aktion und schickt dann
    `{object: {kind, namespace, name}, inputs}`.
 2. **Objekt laden:** `Server.handleAction` lädt das Objekt über `Server.load` (Typ `actions.StoredObject`: Ref, Objekt,
    Projekt).
@@ -216,7 +215,8 @@ Startpunkt. Hier steht auch die einzige Liste der verfügbaren Handler-Typen (`r
   - `syncLocked` erkennt geänderte Namespaces, `load` baut sie auf, `diff` erzeugt die Events.
   - `Subscribe` und `snapshotLocked` bedienen neue Abonnenten.
   - Stündlich (`fullResyncInterval`) baut der Hub alles neu auf, als Sicherheitsnetz.
-- **`static.go`:** liefert das gebaute Frontend aus. Unbekannte Pfade bekommen `index.html`.
+- **`static.go`:** liefert optional statische Dateien aus (`--static-dir`, im Image nicht genutzt). Unbekannte Pfade
+  bekommen `index.html`.
 - **`openapi.yaml`:** die API-Beschreibung, eingebettet und unter `/api/openapi.yaml` erreichbar.
 - **`example-api.jsonc`:** ein kommentiertes Beispiel des Snapshots.
 
@@ -266,34 +266,7 @@ Eine In-Memory-Datenquelle **nur für Tests**. Sie erfüllt `api.Source` und `ac
 
 ---
 
-## 6. Frontend-Rundgang (`frontend/src/`)
-
-| Datei                                  | Aufgabe                                                                                   |
-|----------------------------------------|-------------------------------------------------------------------------------------------|
-| `main.tsx`, `App.tsx`                  | Einstieg, Theme, Kopfzeile mit `ConnectionStatus`, ruft `useDashboardEvents` auf          |
-| `hooks/useDashboardEvents.ts`          | Öffnet `EventSource('/api/events')` und wendet `snapshot`/`upsert`/`delete` per Reducer an |
-| `api/types.ts`                         | Typen passend zu `openapi.yaml`                                                           |
-| `api/state.ts`                         | Reine Funktionen `applyUpsert`, `applyDelete`, `refOf`; Einsortieren über `parents`       |
-| `api/client.ts`                        | `executeAction` (PATCH) und `ApiError`                                                    |
-| `pages/DashboardPage.tsx`              | Je Projekt ein Abschnitt mit Team-Filter und einem Grid aus Kacheln                       |
-| `components/TeamFilter.tsx`, `teams.ts` | Team-Chips (Mehrfachauswahl, „Ohne Team“) und `filterByTeams`                           |
-| `hooks/useUrlList.ts`                  | Liste von Werten in einem Query-Parameter (Filter-Auswahl in der URL)                     |
-| `components/NamespaceCard.tsx`         | Die Kachel: Namespace, Ingresses, NodePort-Services, Service-Punkte mit Bereichs-Reitern  |
-| `components/serviceAreas.ts`           | `groupByArea`: verteilt die Services auf die Reiter                                       |
-| `components/ServiceDots.tsx`, `ServiceDot.tsx` | Die grünen/roten Punkte, pulsierend bei laufender Pipeline                       |
-| `components/ServiceDialog.tsx`         | Details eines Services: Aktionen, Replicas mit Status, Containern, Aktionen               |
-| `components/ObjectButtons.tsx`         | Eine Zeile je Objekt: Pipelines, Aktionen, Kopier-Befehle, Links                          |
-| `components/ActionButtons.tsx`, `ActionDialog.tsx` | Aktions-Icons und der generische Bestätigungs-/Formular-Dialog                |
-| `components/CopyCommandButtons.tsx`, `CopyButton.tsx` | Kopieren in die Zwischenablage (mit Fallback ohne HTTPS)                   |
-| `components/LinkButtons.tsx`, `PipelineBadges.tsx`, `PodStatus.tsx`, `ActionIcon.tsx` | Kleine Darstellungs-Bausteine                 |
-
-**Datenmodell im Frontend:** Der Zustand ist genau der Snapshot (`Snapshot` → Projekte → Namespaces → Services → Pods,
-dazu Ingresses und NodePort-Services). Ein `upsert` ersetzt ein Objekt und behält seine Kinder. Ein `delete`
-entfernt ein Objekt samt Kindern. Wohin ein Event gehört, steht in `parents`.
-
----
-
-## 7. Regeln, die man kennen muss
+## 6. Regeln, die man kennen muss
 
 - **Nur vier Kubernetes-Typen:** Namespace, Service, Ingress und Pod werden beobachtet, keine weiteren. Die
   Es gibt keine Persistenz; die laufenden Pipelines liegen nur im Speicher.
@@ -302,7 +275,7 @@ entfernt ein Objekt samt Kindern. Wohin ein Event gehört, steht in `parents`.
 - **Keinen Zustand an Objekten der Feature-Umgebungen ablegen** (Annotationen o. Ä.). ArgoCD verwaltet sie mit
   Self-Heal und setzt solche Änderungen zurück.
 - **Kein aktionsspezifischer Code im Frontend.** Fehlt dem Frontend eine Information, wird die API erweitert.
-- **Bei API-Änderungen alles mitziehen:** `openapi.yaml`, `example-api.jsonc` und `frontend/src/api/types.ts`.
+- **Bei API-Änderungen alles mitziehen:** `openapi.yaml` und `example-api.jsonc` (das Frontend richtet sich danach).
 - **Proxy und Company-CA:** Ausgehende Aufrufe laufen über einen Firmen-Proxy mit eigener CA. HTTP-Clients nutzen
   deshalb den Standard-Transport von Go, der `HTTPS_PROXY`/`NO_PROXY` und `SSL_CERT_DIR` beachtet. Kein eigener
   `Transport` ohne Proxy und CA. Konfiguriert wird im Cluster über `backend/deploy/network.example.yaml`.
@@ -311,7 +284,7 @@ entfernt ein Objekt samt Kindern. Wohin ein Event gehört, steht in `parents`.
 
 ---
 
-## 8. Typische Erweiterungen
+## 7. Typische Erweiterungen
 
 **Neue Aktion:**
 1. Neues Paket unter `internal/actions/<name>` anlegen, `actions.Handler` implementieren und eine Factory
@@ -319,15 +292,15 @@ entfernt ein Objekt samt Kindern. Wohin ein Event gehört, steht in `parents`.
 2. In `main.go` mit `registry.Register("<handler-typ>", <paket>.New)` registrieren.
 3. Die Aktion in der `config.yaml` unter `actionHandlers` eintragen, mit `projects`, Titel, Icon und
    `extra-handler-configs`.
-4. Am Frontend ist nichts zu tun.
+4. Am Frontend ist nichts zu tun (es ist generisch).
 
 Gute Vorlage: `deletepod` (einfach) oder `nodeportservice` (mit Formular und Prüfung gegen den Cache).
 
-**Neues Feld im Frontend anzeigen:**
+**Neues Feld in der API ausliefern:**
 1. Gibt es das Feld im k8s-Objekt noch nach `trim`? Sonst `trim` erweitern.
 2. Im `model` und im `converter` übernehmen.
 3. Im passenden DTO in `dto.go` ausgeben.
-4. `openapi.yaml`, `example-api.jsonc` und `types.ts` anpassen und im Frontend darstellen.
+4. `openapi.yaml` und `example-api.jsonc` anpassen. Die Darstellung erfolgt im (separaten) Frontend.
 
 Events, Diff und Snapshot passen sich automatisch an.
 
@@ -335,9 +308,9 @@ Events, Diff und Snapshot passen sich automatisch an.
 
 ---
 
-## 9. Tests und lokales Arbeiten
+## 8. Tests und lokales Arbeiten
 
-- **Befehle:** `make test` (Go mit `-race` und Vitest), `make lint`, `make build`. `make run` startet lokal gegen
+- **Befehle:** `make test` (Go mit `-race`), `make lint`, `make build`. `make run` startet lokal gegen
   `KUBECONFIG` mit `backend/config.example.yaml`.
 - **Wichtige Testdateien:**
   - `internal/api/server_test.go`: Snapshot, Events, SSE-Stream, Aktionen. Nutzt `testsource` und die Helfer
@@ -345,8 +318,6 @@ Events, Diff und Snapshot passen sich automatisch an.
   - `internal/kube/cluster_test.go`: Informer mit `fake.NewClientset`, Revisionen, `trim`.
   - `internal/converter/converter_test.go`: Auflösung von Replicas und targetPorts.
   - `internal/pipelines/pipelines_test.go`: State und Tracker.
-  - `frontend/src/api/state.test.ts`: Anwenden der Events.
-  - `frontend/src/components/*.test.tsx`: Kachel, Dialog, Reiter, Buttons.
 - **Stream ansehen:** `curl -N localhost:8080/api/events` zeigt den Snapshot und danach jede Änderung. Gut geeignet,
   um nachzuvollziehen, was ein Pod-Neustart oder eine Aktion auslöst.
 - **API ausprobieren:** `/api/swagger` zeigt die Swagger-UI.
