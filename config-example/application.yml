@@ -1,0 +1,204 @@
+# Beispiel-Konfiguration des Dashboards (Spring-Boot-Variante von backend/config.example.yaml).
+# Lokal: ./gradlew bootRun (lädt diese Datei). Im Cluster: per ConfigMap nach /config/application.yml.
+#
+# Unterschiede zur config.yaml des Go-Backends:
+#   - alles unter "dashboard:"
+#   - Label-Schlüssel mit "." oder "/" in eckigen Klammern: "[mycomp.de/project-name]": foo
+#   - Templates in Pebble-Syntax: {{ namespace }}, {{ labels['a/b'] }}, {{ vars.x }}, {{ name | urlencode }}
+#   - Tokens als Platzhalter statt token-env: token: ${GITLAB_TRIGGER_TOKEN_FOO}
+dashboard:
+  projects:
+    - project-name: foo-projekt
+      namespace-labels:
+        "[mycomp.de/is-feature-environment]": "true"
+        "[mycomp.de/project-name]": foo-projekt
+      service-areas:
+        - area-name: business-services
+          area-label: Business
+          label-combinations:
+            - "[app.kubernetes.io/part-of]": foo
+        - area-name: infrastructure-services
+          area-label: Infrastruktur
+          label-combinations:
+            - "[app.kubernetes.io/part-of]": rabbitmq
+            - "[app.kubernetes.io/part-of]": database
+    - project-name: bar-projekt
+      namespace-labels:
+        "[mycomp.de/is-feature-environment]": "true"
+        "[mycomp.de/project-name]": bar
+      service-areas:
+        - area-name: business-services
+          area-label: Business
+          label-combinations:
+            - "[app.kubernetes.io/part-of]": bar
+        - area-name: infrastructure-services
+          area-label: Infrastruktur
+          label-combinations:
+            - "[app.kubernetes.io/part-of]": database
+    - project-name: foobar-projekt
+      namespace-labels:
+        "[mycomp.de/is-feature-environment]": "true"
+        "[mycomp.de/project-name]": foobar
+      service-areas:
+        - area-name: business-services
+          area-label: Business
+          label-combinations:
+            - "[app.kubernetes.io/part-of]": foobar
+        - area-name: infrastructure-services
+          area-label: Infrastruktur
+          label-combinations:
+            - "[app.kubernetes.io/part-of]": database
+      link-variables-overrides:
+        "[something]": isNotHere
+
+  action-handlers:
+    - action-name: delete-pod
+      action-title: Pod Löschen
+      icon: trash
+      icon-color: red
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+      extra-handler-configs:
+        force-delete: true
+    - action-name: node-port-service-on-service-base
+      action-title: NodePort-Service erstellen
+      icon: network
+      icon-color: blue
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+    - action-name: delete-node-port-service
+      action-title: NodePort-Service löschen
+      icon: trash-2
+      icon-color: red
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+    - action-name: assign-team
+      action-title: Team zuordnen
+      icon: users
+      icon-color: "#6a1b9a"
+      projects: [foo-projekt, bar-projekt, foobar-projekt]   # Teams: Abschnitt teams
+    - action-name: restart-service-replicas
+      action-title: Alle Replika löschen (Neustart)
+      icon: rotate-ccw
+      icon-color: orange
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+    - action-name: exclude-from-nightly-scale-down
+      handler: nightly-scale-down-exclusion
+      action-title: Nachts nicht herunterskalieren
+      icon: sun
+      icon-color: "#f9a825"
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+      extra-handler-configs:
+        mode: mark
+    - action-name: include-in-nightly-scale-down
+      handler: nightly-scale-down-exclusion
+      action-title: Nächtliches Herunterskalieren wieder zulassen
+      icon: moon
+      icon-color: "#455a64"
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+      extra-handler-configs:
+        mode: unmark
+    # Braucht die Umgebungsvariable GITLAB_TRIGGER_TOKEN_FOO, sonst startet das Dashboard nicht
+    # (lokal z. B. GITLAB_TRIGGER_TOKEN_FOO=dummy ./gradlew bootRun).
+    - action-name: deploy-missing-services
+      action-title: Fehlende Services deployen
+      icon: package-plus
+      icon-color: green
+      projects: [foo-projekt]
+      extra-handler-configs:
+        services:
+          - name: foo-backend
+            label: Foo Backend
+          - name: foo-frontend
+            label: Foo Frontend
+        gitlab-url: https://gitlab.mycomp.de
+        project: team/foo-deploy
+        ref: main
+        token: ${GITLAB_TRIGGER_TOKEN_FOO}
+        # Optional: Lese-Token (read_api). Dann zeigt das Dashboard die Pipeline am Namespace, bis sie beendet ist.
+        # status-token: ${GITLAB_READ_TOKEN_FOO}
+        variables:
+          "[NAMESPACE]": "{{ namespace }}"
+          "[SERVICES]": "{{ services | join(',') }}"
+    # Startet eine GitLab-Pipeline für den Namespace (Handler-Typ gitlab-pipeline). Die Pipeline-Variablen sind
+    # Pebble-Templates mit den Daten des Namespaces; verfügbar sind kind name namespace project labels annotations.
+    - action-name: redeploy-namespace
+      handler: gitlab-pipeline
+      action-title: Feature-Umgebung neu deployen
+      icon: rocket
+      icon-color: green
+      projects: [foo-projekt]
+      extra-handler-configs:
+        gitlab-url: https://gitlab.mycomp.de
+        project: team/foo-deploy                      # Projekt-ID oder Pfad
+        ref: main                                     # Branch/Tag, Template erlaubt (z. B. "feature/{{ namespace }}")
+        token: ${GITLAB_TRIGGER_TOKEN_FOO}
+        # status-token: ${GITLAB_READ_TOKEN_FOO}      # optional: laufende Pipeline am Namespace anzeigen
+        applies-to: [namespace]                       # Aktion erscheint nur an Namespaces
+        timeout: 15s
+        variables:
+          "[NAMESPACE]": "{{ namespace }}"
+          "[PROJECT]": "{{ project }}"
+          "[ORGANIZATION_UNIT]": "{{ labels['mycomp.de/organization-unit'] }}"
+          "[ACTION]": redeploy
+          # trimPrefix entfernt ein Präfix, z. B. "foo-projekt-login" → "login".
+          "[FEATURE]": "{{ namespace | trimPrefix(project ~ '-') }}"
+
+  link-variables:
+    "[demoUrl]": http://localhost:8080
+    "[something]": isHere
+  links:
+    - link-id: test-kibana-logs
+      title: Logs in Kibana
+      icon: scroll-text
+      icon-color: "#00bfb3"
+      projects: [ foo-projekt, bar-projekt ]
+      targets:
+        namespace:
+          url: |-
+            {{ vars.demoUrl }}/namespaces/{{ name }}/{{ vars.something }}?foo={{ 'hello world // bro' | urlencode }}
+        service: # Logs aller Pods, die der Service selektiert
+          url: |-
+            {{ vars.demoUrl }}/namespaces/{{ namespace }}/services/{{ name }}/{{ vars.something }}?foo=hello
+
+  copy-commands:
+    - command-id: pod-shell                 # je Container ein Befehl, da das Template container nutzt
+      title: Shell im Pod öffnen
+      icon: terminal
+      icon-color: "#455a64"
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+      targets:
+        pod:
+          command: kubectl exec -it -n {{ namespace }} {{ name }} -c {{ container }} -- sh
+    - command-id: pod-logs
+      title: Logs verfolgen
+      icon: file-text
+      icon-color: "#455a64"
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+      targets:
+        pod:
+          command: kubectl logs -f -n {{ namespace }} {{ name }} --all-containers
+    - command-id: namespace-context
+      title: Namespace im kubectl-Context setzen
+      icon: square-terminal
+      icon-color: "#455a64"
+      projects: [foo-projekt, bar-projekt, foobar-projekt]
+      targets:
+        namespace:
+          command: kubectl config set-context --current --namespace={{ namespace }}
+
+  # Entwickler-Teams: Ein Namespace gehört zu einem Team, wenn sein Label label-key die team-id trägt.
+  # Die Aktion assign-team setzt das Label; das Dashboard bietet je Projekt einen Team-Filter an.
+  teams:
+    label-key: mycomp.de/team
+    teams:
+      - team-id: checkout          # Wert des Labels, muss ein gültiger Label-Wert sein
+        team-label: Team Checkout
+      - team-id: search
+        team-label: Team Suche
+      - team-id: platform
+        team-label: Team Plattform
+
+  cluster:
+    dns-name: demo-cluster-control-plane   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
+
+  # Optional; ohne Angabe gilt der hier gezeigte Wert.
+  pipelines:
+    poll-interval: 15s   # so oft wird der Status laufender Pipelines bei GitLab abgefragt

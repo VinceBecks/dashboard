@@ -1,0 +1,37 @@
+dashboard:
+  cluster:
+    dns-name: nodes.example
+  projects:
+    - project-name: foo
+      namespace-labels:
+        "[mycomp.de/project-name]": foo
+  action-handlers:
+    - action-name: exclude-from-nightly-scale-down
+      handler: nightly-scale-down-exclusion
+      action-title: Nachts nicht herunterskalieren
+      icon: sun
+      projects: [foo]
+      extra-handler-configs:
+        mode: mark
+    - action-name: include-in-nightly-scale-down
+      handler: nightly-scale-down-exclusion
+      action-title: Wieder herunterskalieren
+      icon: moon
+      projects: [foo]
+      extra-handler-configs:
+        mode: unmark
+    - action-name: delete-pod
+      action-title: Pod löschen
+      projects: [foo]
+  links:
+    - link-id: logs
+      title: Logs
+      projects: [foo]
+      targets:
+        namespace:
+          url: "https://kibana.example/{{ namespace | pathescape }}"
+  teams:
+    label-key: mycomp.de/team
+    teams:
+      - team-id: checkout
+        team-label: Team Checkout

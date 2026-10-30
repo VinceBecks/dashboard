@@ -1,0 +1,27 @@
+# Technische Standardwerte. Die fachliche Konfiguration (dashboard.*) kommt aus einer eigenen Datei, im Cluster per
+# ConfigMap (SPRING_CONFIG_ADDITIONAL_LOCATION), lokal aus config-example/application.yml (./gradlew bootRun).
+spring:
+  application:
+    name: feature-dashboard
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      request-timeout: -1   # Server-Sent Events laufen unbegrenzt
+
+server:
+  port: 8080
+  shutdown: graceful
+
+springdoc:
+  api-docs:
+    path: /api/generated-docs   # nur intern für die Swagger-UI-Konfiguration; die API beschreibt /api/openapi.yaml
+  swagger-ui:
+    path: /api/swagger
+    url: /api/openapi.yaml
+
+management:
+  endpoints:
+    web:
+      base-path: /actuator

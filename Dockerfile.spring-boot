@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+# Image des Feature-Dashboards als Spring-Boot-Anwendung (Java 21). Build-Kontext ist das Repository-Root:
+#
+#   docker build -f Dockerfile.spring-boot -t feature-dashboard:1.0.0 .
+#   docker build -f Dockerfile.spring-boot --secret id=company_ca,src=/pfad/zur/company-ca.pem -t feature-dashboard:1.0.0 .
+#
+# Company-CA: optional als BuildKit-Secret "company_ca" (PEM). Sie wird in den Truststore (cacerts) des Images
+# importiert; ausgehende HTTPS-Verbindungen (GitLab) vertrauen ihr dann. Ohne Secret bleibt der Truststore unverändert.
+#
+# Konfiguration: Die fachliche Konfiguration (dashboard.*) wird zur Laufzeit als /config/application.yml eingehängt
+# (z. B. ConfigMap), Tokens kommen als Umgebungsvariablen (Secret).
+
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /src
+COPY gradlew settings.gradle.kts build.gradle.kts ./
+COPY gradle/ gradle/
+RUN ./gradlew --no-daemon --quiet dependencies > /dev/null
+COPY src/ src/
+# Einzige Quelle der API-Beschreibung (wird von processResources ins Jar übernommen).
+COPY backend/internal/api/openapi.yaml backend/internal/api/openapi.yaml
+RUN ./gradlew --no-daemon --quiet bootJar \
+    && cp "$(ls build/libs/*.jar | grep -v -- '-plain.jar')" /app.jar
+
+FROM eclipse-temurin:21-jre
+RUN --mount=type=secret,id=company_ca,required=false \
+    if [ -s /run/secrets/company_ca ]; then \
+      keytool -importcert -noprompt -cacerts -storepass changeit -alias company-ca -file /run/secrets/company_ca; \
+    fi
+COPY --from=build /app.jar /app/app.jar
+ENV SPRING_CONFIG_ADDITIONAL_LOCATION=optional:file:/config/application.yml
+USER 10001
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
