@@ -14,10 +14,10 @@ import (
 	"feature-dashboard/internal/model"
 )
 
-const key = "mycomp.de/skip-nightly-scale-down"
+const key = ExclusionLabelKey
 
 func extra(mode string) map[string]any {
-	return map[string]any{"label-key": key, "mode": mode}
+	return map[string]any{"mode": mode}
 }
 
 func setup(t *testing.T, labels map[string]string) (*fake.Clientset, *actions.Registry, actions.StoredObject) {
@@ -113,15 +113,14 @@ func TestUnmarkNotApplicableWithoutLabel(t *testing.T) {
 
 func TestConfigure(t *testing.T) {
 	h := New(actions.Deps{}).(*Handler)
-	if err := h.Configure(extra(ModeMark)); err != nil || h.value != DefaultLabelValue {
-		t.Fatalf("err = %v, value = %q", err, h.value)
+	if err := h.Configure(extra(ModeUnmark)); err != nil || h.mode != ModeUnmark {
+		t.Fatalf("err = %v, mode = %q", err, h.mode)
 	}
 	invalid := map[string]map[string]any{
-		"label-key fehlt":      {"mode": ModeMark},
-		"label-key ungültig":   {"label-key": "a b", "mode": ModeMark},
-		"label-value ungültig": {"label-key": key, "label-value": "nicht gültig!", "mode": ModeMark},
-		"mode fehlt":           {"label-key": key},
-		"mode unbekannt":       {"label-key": key, "mode": "toggle"},
+		"label-key (alte Config)":   {"label-key": key, "mode": ModeMark},
+		"label-value (alte Config)": {"label-value": "true", "mode": ModeMark},
+		"mode fehlt":                {},
+		"mode unbekannt":            {"mode": "toggle"},
 	}
 	for name, e := range invalid {
 		if err := New(actions.Deps{}).Configure(e); err == nil {

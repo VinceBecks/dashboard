@@ -3,7 +3,7 @@
 Antworte und dokumentiere auf Deutsch; Code-Bezeichner (Typen, Funktionen, Variablen) bleiben englisch.
 
 Wenn du im Plan-Mode arbeitest, dann erstelle den Plan in einer Datei unter dem Ordner `plans/`.
-In dem Ordner helpers/ liegen helper Dateien, welche nicht mit der Anwendung selber in Zusammenhang stehen. 
+In dem Ordner helpers/ liegen helper Dateien, welche nicht mit der Anwendung selber in Zusammenhang stehen.
 
 ## Projektziel
 
@@ -23,48 +23,49 @@ hochgefahren haben und welche Services darin laufen.
   `NO_PROXY` muss den Kubernetes-API-Server ausnehmen, da client-go `HTTPS_PROXY` ebenfalls beachtet.
 
 ## Aktueller Stand
+
 Das Backend ist implementiert (Plan Backend: `plans/backend-implementierung.md`, Umstellung auf
 Server-Sent Events: `plans/sse-einseiten-dashboard.md`). Das Frontend wurde aus dem Repository entfernt
 (`plans/frontend-entfernen.md`). Das Image enthält nur das Backend (`Dockerfile` im Repository-Root).
 
 Backend-Pakete (`backend/`):
 
-| Paket                         | Aufgabe                                                                   |
-|-------------------------------|---------------------------------------------------------------------------|
-| `cmd/dashboard`               | Startup, Wiring, Registrierung der ActionHandler                          |
-| `cmd/nightly-scale-down`      | Zweite Anwendung (CronJob): startet die Pipeline für das nächtliche Herunterskalieren; Logik in `scaledown.go` (Konfiguration aus Umgebungsvariablen, Namespaces mit Ausnahme-Label lesen, Pipeline mit Input `EXCLUDE_NAMESPACES` starten) |
-| `internal/config`             | `config.yaml` laden/validieren                                            |
-| `internal/model`              | Stored-Object-Structs, `NamespaceView`                                    |
-| `internal/project`            | Namespace-Labels → Projekt                                                |
-| `internal/converter`          | k8s-Objekt (aus dem Lister) → Stored-Object; `NamespaceView` löst Replicas und targetPorts beim Aufbau auf |
-| `internal/kube`               | `Cluster`: Informer-Cache als einzige Datenquelle, Lister-Zugriff, Revisionen je Projekt-Namespace, Trim-Transform |
-| `internal/testsource`         | In-Memory-Datenquelle nur für Tests (erfüllt `api.Source` und `actions.ObjectReader`) |
-| `internal/actions`            | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder  |
-| `internal/actions/deletepod`  | ActionHandler `delete-pod`                                                |
-| `internal/actions/nodeportservice` | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht) |
-| `internal/actions/restartservice` | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller |
-| `internal/actions/gitlabpipeline` | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar |
-| `internal/actions/assignteam` | ActionHandler `assign-team`: ordnet einen Namespace einem Team zu (setzt/entfernt das Label `teams.label-key` per Merge-Patch) |
+| Paket                               | Aufgabe                                                                                                                                                                                                                                                                 |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `cmd/dashboard`                     | Startup, Wiring, Registrierung der ActionHandler                                                                                                                                                                                                                        |
+| `cmd/nightly-scale-down`            | Zweite Anwendung (CronJob): startet die Pipeline für das nächtliche Herunterskalieren; Logik in `scaledown.go` (Konfiguration aus Umgebungsvariablen, Namespaces mit Ausnahme-Label lesen, Pipeline mit Input `EXCLUDE_NAMESPACES` starten)                             |
+| `internal/config`                   | `config.yaml` laden/validieren                                                                                                                                                                                                                                          |
+| `internal/model`                    | Stored-Object-Structs, `NamespaceView`                                                                                                                                                                                                                                  |
+| `internal/project`                  | Namespace-Labels → Projekt                                                                                                                                                                                                                                              |
+| `internal/converter`                | k8s-Objekt (aus dem Lister) → Stored-Object; `NamespaceView` löst Replicas und targetPorts beim Aufbau auf                                                                                                                                                              |
+| `internal/kube`                     | `Cluster`: Informer-Cache als einzige Datenquelle, Lister-Zugriff, Revisionen je Projekt-Namespace, Trim-Transform                                                                                                                                                      |
+| `internal/testsource`               | In-Memory-Datenquelle nur für Tests (erfüllt `api.Source` und `actions.ObjectReader`)                                                                                                                                                                                   |
+| `internal/actions`                  | ActionHandler-Interface, ActionRegistry, Validierung der Formular-Felder                                                                                                                                                                                                |
+| `internal/actions/deletepod`        | ActionHandler `delete-pod`                                                                                                                                                                                                                                              |
+| `internal/actions/nodeportservice`  | ActionHandler `node-port-service-on-service-base` und `delete-node-port-service`; erstellte Services tragen das Label `feature-dashboard/created-by-action` und eine ownerReference auf den Basis-Service (werden mit ihm gelöscht)                                     |
+| `internal/actions/restartservice`   | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller                                                                                                                                                           |
+| `internal/actions/gitlabpipeline`   | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar                                                                                                                                        |
+| `internal/actions/assignteam`       | ActionHandler `assign-team`: ordnet einen Namespace einem Team zu (setzt/entfernt das Label `teams.label-key` per Merge-Patch)                                                                                                                                          |
 | `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`: nimmt einen Namespace vom nächtlichen Herunterskalieren aus, indem er das von der Skalierungs-Anwendung ausgewertete Label setzt (`mode: mark`) bzw. entfernt (`mode: unmark`); zwei Aktionen, die sich gegenseitig ablösen |
-| `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline |
-| `internal/objecttemplate`     | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)  |
-| `internal/links`              | Rendert die konfigurierten Links je Objekt                                |
-| `internal/copycommands`       | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
-| `internal/pipelines`          | Laufende GitLab-Pipelines je Objekt und Aktion (`State`, nur im Speicher) und `Tracker` (Status-Abfrage, entfernt beendete) |
-| `internal/api`                | HTTP-API, DTOs (`dto.go`), Event-Hub und SSE (`events.go`), `openapi.yaml`, `example-api.jsonc`, Swagger-UI |
+| `internal/actions/missingservices`  | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline                                                                                      |
+| `internal/objecttemplate`           | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)                                                                                                                                                                                               |
+| `internal/links`                    | Rendert die konfigurierten Links je Objekt                                                                                                                                                                                                                              |
+| `internal/copycommands`             | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container)                                                                                                                                                                                             |
+| `internal/pipelines`                | Laufende GitLab-Pipelines je Objekt und Aktion (`State`, nur im Speicher) und `Tracker` (Status-Abfrage, entfernt beendete)                                                                                                                                             |
+| `internal/api`                      | HTTP-API, DTOs (`dto.go`), Event-Hub und SSE (`events.go`), `openapi.yaml`, `example-api.jsonc`, Swagger-UI                                                                                                                                                             |
 
 ## Build, Test, Start
 
 Alle Befehle laufen über das `Makefile` im Repository-Root:
 
-| Befehl              | Wirkung                                                                                   |
-|---------------------|-------------------------------------------------------------------------------------------|
-| `make test`         | Backend-Tests (`go test -race`)                                                           |
-| `make lint`         | `go vet`                                                                                  |
-| `make build`        | Binaries nach `backend/bin/` (`dashboard`, `nightly-scale-down`)                          |
-| `make run`          | Backend lokal starten (Port 8080)                                                         |
-| `make docker`       | Backend-Image bauen (`IMAGE=...`, optional `COMPANY_CA=...` hinter dem Proxy); Manifeste in `backend/deploy/` |
-| `make nightly-scale-down-run` | CronJob-Anwendung einmal lokal ausführen (Konfiguration aus der Umgebung)       |
+| Befehl                        | Wirkung                                                                                                       |
+|-------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `make test`                   | Backend-Tests (`go test -race`)                                                                               |
+| `make lint`                   | `go vet`                                                                                                      |
+| `make build`                  | Binaries nach `backend/bin/` (`dashboard`, `nightly-scale-down`)                                              |
+| `make run`                    | Backend lokal starten (Port 8080)                                                                             |
+| `make docker`                 | Backend-Image bauen (`IMAGE=...`, optional `COMPANY_CA=...` hinter dem Proxy); Manifeste in `backend/deploy/` |
+| `make nightly-scale-down-run` | CronJob-Anwendung einmal lokal ausführen (Konfiguration aus der Umgebung)                                     |
 
 Einzelschritte gibt es als `backend-build|test|vet|run`.
 Lokale Starts nutzen den Cluster aus `KUBECONFIG` (Standard `~/.kube/config`) und `backend/config.example.yaml`;
@@ -72,15 +73,15 @@ andere Config mit `make run CONFIG=pfad.yaml` (relativ zum Repository-Root).
 
 ## Fachliche Begriffe
 
-| Begriff            | Bedeutung                                                                                            |
-|--------------------|------------------------------------------------------------------------------------------------------|
-| Projekt            | In der `config.yaml` definiert. Hat mehrere Feature-Umgebungen.                                      |
-| Feature-Umgebung   | Genau ein Namespace. Gehört zu genau einem Projekt.                                                  |
-| Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                          |
-| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services, zugeordnet über Service-Labels; ein Reiter. |
-| Replica            | Ein Pod, der von einem Anwendungs-Service referenziert wird.                                         |
+| Begriff            | Bedeutung                                                                                              |
+|--------------------|--------------------------------------------------------------------------------------------------------|
+| Projekt            | In der `config.yaml` definiert. Hat mehrere Feature-Umgebungen.                                        |
+| Feature-Umgebung   | Genau ein Namespace. Gehört zu genau einem Projekt.                                                    |
+| Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                            |
+| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services, zugeordnet über Service-Labels; ein Reiter.   |
+| Replica            | Ein Pod, der von einem Anwendungs-Service referenziert wird.                                           |
 | Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts, beim Lesen aus dem Informer-Cache erzeugt. |
-| Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch genau einen ActionHandler. |
+| Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch genau einen ActionHandler.   |
 
 Ob ein Namespace eine Feature-Umgebung ist und zu welchem Projekt er gehört, wird ausschließlich über Labels am
 Namespace bestimmt. Welche Labels für welches Projekt gelten, steht in der `config.yaml`.
@@ -92,13 +93,12 @@ Namespace bestimmt. Welche Labels für welches Projekt gelten, steht in der `con
 ### Kubernetes-Anbindung
 
 - Es wird die Bibliothek `client-go` verwendet
-- Das Backend nutzt die Informer-API von `client-go` (`SharedInformerFactory`, Event-Handler, Lister), um stets aktuell zu sein.
+- Das Backend nutzt die Informer-API von `client-go` (`SharedInformerFactory`, Event-Handler, Lister), um stets aktuell
+  zu sein.
 - Relevant sind nur vier Objekt-Typen: **Namespace, Service, Ingress, Pod**. Keine weiteren Typen beobachten.
 - Von diesen Objekten werden nur wenige Kern-Informationen übernommen, nicht das vollständige Objekt.
 - Es werden nur Objekte verarbeitet, die zu einem Projekt gehören (erkennbar an den Labels ihres Namespaces). Alles
   andere wird verworfen.
-
-
 
 ### Converter
 
@@ -193,14 +193,15 @@ projects:
     service-areas:
       - area-name: business-services   # eindeutig je Projekt, "others" ist reserviert
         area-label: Business
-        label-combinations:            # ODER über die Einträge, UND innerhalb eines Eintrags; keine leeren Einträge
+        label-combinations: # ODER über die Einträge, UND innerhalb eines Eintrags; keine leeren Einträge
           - app.kubernetes.io/part-of: shop
             app.kubernetes.io/component: backend
           - app.kubernetes.io/part-of: billing
 ```
 
-  Ein Service kann in mehreren Bereichen liegen; nicht zugeordnete Services gehören zu `others`. Die Zuordnung
-  berechnet das Backend beim Aufbau der DTOs (`project.ServiceAreaIDs`, `areas` am Service). Gleiche Bereiche in mehreren Projekten per YAML-Anker (`&name` / `*name`) wiederverwenden.
+Ein Service kann in mehreren Bereichen liegen; nicht zugeordnete Services gehören zu `others`. Die Zuordnung
+berechnet das Backend beim Aufbau der DTOs (`project.ServiceAreaIDs`, `areas` am Service). Gleiche Bereiche in mehreren
+Projekten per YAML-Anker (`&name` / `*name`) wiederverwenden.
 
 Beispiel für ActionHandler:
 
@@ -210,7 +211,7 @@ action-handlers:
     action-title: Pod Löschen
     icon: trash
     icon-color: red
-    projects: [foo-projekt, bar-projekt]
+    projects: [ foo-projekt, bar-projekt ]
     extra-handler-configs:
       force-delete: true
 ```
@@ -234,13 +235,13 @@ Beispiel für den generischen Handler-Typ `gitlab-pipeline` (startet eine Pipeli
     action-title: Feature deployen
     icon: rocket
     icon-color: green
-    projects: [foo-projekt]
+    projects: [ foo-projekt ]
     extra-handler-configs:
       gitlab-url: https://gitlab.mycomp.de
       project: team/foo-deploy            # Projekt-ID oder Pfad
       ref: main                           # Go-Template erlaubt
       token-env: GITLAB_TRIGGER_TOKEN_FOO # Env-Variable mit dem Trigger-Token
-      applies-to: [namespace]             # namespace | service | ingress | pod
+      applies-to: [ namespace ]             # namespace | service | ingress | pod
       timeout: 15s                        # optional, Standard 10s
       variables:
         NAMESPACE: "{{ .Namespace }}"     # verfügbar: .Kind .Name .Namespace .Project .Labels .Annotations
@@ -254,9 +255,9 @@ ohne `applies-to`). Fehlt nichts, bleibt die Aktion sichtbar, das Dropdown ist l
     action-title: Fehlende Services deployen
     icon: package-plus
     icon-color: green
-    projects: [foo-projekt]
+    projects: [ foo-projekt ]
     extra-handler-configs:
-      services:                           # Abgleich per Service-Name; label optional
+      services: # Abgleich per Service-Name; label optional
         - name: foo-backend
           label: Foo Backend
       gitlab-url: https://gitlab.mycomp.de
@@ -271,14 +272,15 @@ Tokens stehen nie in der `config.yaml`, sondern nur in Umgebungsvariablen. Im Cl
 `feature-dashboard-gitlab` (siehe `backend/deploy/gitlab-secret.example.yaml`). Ist eine Token-Variable nicht
 gesetzt, startet das Backend nicht.
 
-**Laufende Pipelines:** Haben `gitlab-pipeline` bzw. `deploy-missing-services` zusätzlich `status-token-env` (Env-Variable
+**Laufende Pipelines:** Haben `gitlab-pipeline` bzw. `deploy-missing-services` zusätzlich `status-token-env`
+(Env-Variable
 mit einem Token mit `read_api`), merkt sich das Backend jede gestartete Pipeline am Objekt der Aktion (nur die letzte
 je Objekt und Aktion) und liefert sie als `pipelines` aus; das Frontend zeigt „Pipeline läuft“ mit Link nach GitLab.
 Der `Tracker` fragt den Status alle `pipelines.poll-interval` ab und entfernt beendete Pipelines (success, failed,
 canceled, skipped) sowie unbekannte. Ohne `status-token-env` wird nichts gemerkt.
 
 ```yaml
-pipelines:                                    # optional, gezeigt ist der Standardwert
+pipelines: # optional, gezeigt ist der Standardwert
   poll-interval: 15s                          # mindestens 5s
 ```
 
@@ -289,24 +291,23 @@ pipelines:                                    # optional, gezeigt ist der Standa
 - Änderungen an `State` lösen Events aus wie Änderungen im Cluster (der Event-Hub beachtet beide Revisionen je
   Namespace).
 
-
 Beispiel für Links (Absprung z. B. nach Kibana). Das Backend rendert die URLs je Objekt und liefert sie als `links`
 an jedem Objekt aus; das Frontend zeigt sie als Icon mit Tooltip und öffnet sie in einem neuen Tab:
 
 ```yaml
-link-variables:                       # statische Werte für .Vars
+link-variables: # statische Werte für .Vars
   fooUrl: https://foo.mycomp.de
 projects:
   - project-name: foo-projekt
-    link-variables-overrides:         # überschreibt/ergänzt link-variables für dieses Projekt
+    link-variables-overrides: # überschreibt/ergänzt link-variables für dieses Projekt
       fooUrl: https://other.mycomp.de
 links:
   - link-id: foo-system               # eindeutig
     title: Absprung nach Foo
     icon: scroll-text
     icon-color: "#00bfb3"
-    projects: [foo-projekt]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
-    targets:                          # je Objekt-Typ eine URL; nicht aufgeführte Typen haben den Link nicht
+    projects: [ foo-projekt ]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
+    targets: # je Objekt-Typ eine URL; nicht aufgeführte Typen haben den Link nicht
       namespace:
         url: "{{ .Vars.fooUrl }}/{{ pathescape .Namespace }}?foo=bar&ns={{ urlquery .Namespace }}"
       pod:
@@ -327,8 +328,8 @@ links:
   unverändert) und `extractRenewJiraTicketNumber` (Jira-Ticketnummer aus Namespaces der Form
   `renew-<f-|if-|hf-><story|hotfix|feat|bugfix|epic|intfix><nummer>…`, sonst leer).
 - Gemeinsame URL-Teile mehrerer Targets (z. B. die Kibana-Discover-Basis) in `link-variables` auslagern.
-- Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern
-  (z. B. fehlende Variable) oder ist das Ergebnis keine absolute http(s)-URL, wird nur dieser Link weggelassen.
+- Templates werden beim Start geparst (Fehler → Startabbruch). Lässt sich ein Link für ein Objekt nicht rendern (z. B.
+  fehlende Variable) oder ist das Ergebnis keine absolute http (s)-URL, wird nur dieser Link weggelassen.
 
 Beispiel für Kopier-Befehle (z. B. Shell im Pod). Das Backend rendert sie je Objekt und liefert sie als
 `copyCommands`; das Frontend zeigt je Befehl ein Icon (Tooltip mit Titel und Befehl), ein Klick kopiert den Befehl:
@@ -339,8 +340,8 @@ copy-commands:
     title: Shell im Pod öffnen
     icon: terminal
     icon-color: "#455a64"
-    projects: [foo-projekt]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
-    targets:                          # je Objekt-Typ ein Befehl (namespace | service | ingress | pod)
+    projects: [ foo-projekt ]           # Pflicht; [] = in keinem Projekt (Warnung beim Start)
+    targets: # je Objekt-Typ ein Befehl (namespace | service | ingress | pod)
       pod:
         command: kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh
 ```
@@ -369,13 +370,15 @@ teams:
 - Ein Namespace gehört zu einem Team, wenn sein Label `label-key` die `team-id` trägt. Die Aktion `assign-team`
   (Handler-Typ gleichen Namens, keine `extra-handler-configs`) bietet am Namespace ein Single-Select mit allen Teams
   und „Kein Team“ an und setzt bzw. entfernt das Label per Merge-Patch (RBAC: `patch` auf `namespaces`).
-- Die API liefert die Teams im Snapshot (`teams`: `id`, `label`, `teamColor`, leer ohne `team-color`) und am Namespace die Team-ID (`team`, nur für konfigurierte Teams).
+- Die API liefert die Teams im Snapshot (`teams`: `id`, `label`, `teamColor`, leer ohne `team-color`) und am Namespace
+  die Team-ID (`team`, nur für konfigurierte Teams).
   Das Frontend zeigt je Projekt einen Team-Filter (Chips, Mehrfachauswahl, „Ohne Team“; Auswahl in der URL als
   `?team.<projekt>=<team-id>`) und das Team an der Kachel.
 - Die Namespaces werden nicht per ArgoCD self-heal verwaltet; das Label bleibt daher bestehen.
 
 Beispiel für den Handler-Typ `nightly-scale-down-exclusion` (Namespace vom nächtlichen Herunterskalieren ausnehmen;
-eine externe Anwendung skaliert nachts alle Feature-Umgebungen auf 0 und lässt Namespaces mit dem Label aus):
+der CronJob `nightly-scale-down` skaliert nachts alle Feature-Umgebungen auf 0 und lässt Namespaces mit dem Label
+aus):
 
 ```yaml
   - action-name: exclude-from-nightly-scale-down
@@ -383,27 +386,25 @@ eine externe Anwendung skaliert nachts alle Feature-Umgebungen auf 0 und lässt 
     action-title: Nachts nicht herunterskalieren
     icon: sun
     icon-color: "#f9a825"
-    projects: [foo-projekt]
-    extra-handler-configs: &skip-scale-down
-      label-key: mycomp.de/skip-nightly-scale-down   # Pflicht, gültiger Label-Key
-      label-value: "true"                            # optional, Standard "true"
-      mode: mark                                     # mark = setzen, unmark = entfernen
+    projects: [ foo-projekt ]
+    extra-handler-configs:
+      mode: mark                                     # mark = Label setzen, unmark = Label entfernen
   - action-name: include-in-nightly-scale-down
     handler: nightly-scale-down-exclusion
     action-title: Nächtliches Herunterskalieren wieder zulassen
     icon: moon
     icon-color: "#455a64"
-    projects: [foo-projekt]
+    projects: [ foo-projekt ]
     extra-handler-configs:
-      <<: *skip-scale-down                           # gleiches Label wie oben
       mode: unmark
 ```
 
-- Nur für das nächtliche Herunterskalieren gedacht. Ein Handler-Typ, zwei Aktionen mit demselben Label. `mark` wird nur angeboten, solange das Label mit dem
-  konfigurierten Wert fehlt, `unmark` nur, solange es gesetzt ist (`IsApplicable`). Ein anderer Wert gilt als nicht
-  gesetzt. Nach der Ausführung tauscht der Event-Hub die angebotene Aktion über das `upsert` des Namespaces aus.
-- `label-value` ist optional (Standard `"true"`); Key und Wert werden beim Start geprüft. RBAC: `patch` auf
-  `namespaces`.
+- Das Label ist **fest im Code**: `nightlyscaledown.ExclusionLabelKey"`, `ExclusionLabelValue`. Dashboard-Handler und
+  CronJob nutzen dieselben Konstanten;.
+- Nur für das nächtliche Herunterskalieren gedacht. Ein Handler-Typ, zwei Aktionen (`mode`). `mark` wird nur
+  angeboten, solange das Label mit `true` fehlt, `unmark` nur, solange es gesetzt ist (`IsApplicable`). Ein anderer
+  Wert gilt als nicht gesetzt. Nach der Ausführung tauscht der Event-Hub die angebotene Aktion über das `upsert` des
+  Namespaces aus. RBAC: `patch` auf `namespaces`.
 
 Beispiel für Cluster-Angaben (Pflicht):
 
@@ -415,7 +416,6 @@ cluster:
 - `dns-name` gilt für alle NodePort-Services. Das Backend berechnet daraus je Port die Adresse
   `<dns-name>:<node-port>` und sendet sie als `addresses` am NodePort-Service. Fehlt `dns-name`, startet das Backend
   nicht.
-
 
 ### Aktionen
 
@@ -438,8 +438,8 @@ Eine neue Aktion hinzufügen heißt: neuen ActionHandler schreiben, in der Regis
 
 Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachliche Endpunkte:
 
-- `GET /api/events` (Server-Sent Events): zuerst ein `snapshot`-Event mit allen Objekten in der Hierarchie
-  **Projekt → Namespace → Services (→ Pods) / NodePort-Services / Ingresses**, danach nur noch `upsert`- und `delete`-Events.
+- `GET /api/events` (Server-Sent Events): zuerst ein `snapshot`-Event mit allen Objekten in der Hierarchie **Projekt →
+  Namespace → Services (→ Pods) / NodePort-Services / Ingresses**, danach nur noch `upsert`- und `delete`-Events.
   Beispiel des Snapshots: `backend/internal/api/example-api.jsonc`.
 - `GET /api/snapshot`: derselbe Snapshot einmalig als JSON (`application/json`), danach endet die Response; keine
   weiteren Events, kein Abo am Event-Hub (`Hub.Snapshot`).
@@ -448,7 +448,8 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 - Objekte tragen nur, was das Dashboard braucht (`kind`, `name`, `parents`, Aktionen, Links und je Typ wenige
   Felder), keine Labels/Annotations. Anwendungs-Services (ClusterIP) stehen in `services`; ihr `running` ist
   gesetzt, wenn mindestens ein Replica ready ist, `areas` nennt die IDs ihrer Service-Bereiche. Die Bereiche selbst
-  (`id`, `label`, Config-Reihenfolge, `others` zuletzt) stehen im Snapshot je Projekt in `serviceAreas`. Pods hängen unter jedem Service, der sie referenziert.
+  (`id`, `label`, Config-Reihenfolge, `others` zuletzt) stehen im Snapshot je Projekt in `serviceAreas`. Pods hängen
+  unter jedem Service, der sie referenziert.
   NodePort-Services stehen gesondert in `nodePortServices` (`kind: node-port-service`) und tragen nur `addresses`
   (`<dns-name>:<node-port>`, im Backend berechnet); für Aktionen sind sie Objekte vom Typ `service`. Andere
   Service-Typen werden nicht gesendet. Ingresses liefern fertige `https://<host><path>`-URLs (`urls`).
@@ -472,8 +473,8 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 
 - Der Event-Hub (`internal/api/events.go`) liest über die Schnittstelle `api.Source` (im Betrieb `kube.Cluster`).
   Er wartet auf `Changes()`, baut jeden Namespace mit geänderter Revision neu als DTO-Teilbaum auf und vergleicht ihn
-  Objekt für Objekt (JSON-Bytes) mit dem zuletzt verschickten Stand. So werden auch abgeleitete Änderungen
-  (`running`, URLs, Anwendbarkeit von Aktionen) erfasst.
+  Objekt für Objekt (JSON-Bytes) mit dem zuletzt verschickten Stand. So werden auch abgeleitete Änderungen (`running`,
+  URLs, Anwendbarkeit von Aktionen) erfasst.
 - Einmal pro Stunde baut der Hub alle Namespaces neu auf (`fullResyncInterval`), als Sicherheitsnetz gegen verpasste
   Signale; Events entstehen dabei nur für echte Unterschiede.
 - `upsert` enthält das Objekt ohne Kind-Listen und kommt Parent vor Kind; `delete` enthält `kind`, `name`,
@@ -488,11 +489,11 @@ Zweite Anwendung im selben Go-Modul und Image (`cmd/nightly-scale-down`, Binary 
 CronJob (`backend/deploy/nightly-scale-down.yaml`, Plan `plans/nightly-scale-down-cronjob.md`).
 
 - Der CronJob-Code liegt nur unter `cmd/nightly-scale-down` (Paket `main`), das Dashboard kennt ihn nicht. Aus
-  `internal/` nutzt er nur gemeinsame Bausteine: `kube.NewClient` und `gitlabpipeline.Trigger`.
+  `internal/` nutzt er nur gemeinsame Bausteine: `kube.NewClient`, `gitlabpipeline.Trigger` und die Label-Konstanten
+  aus `nightlyscaledown`.
 
-- Liest einmal alle Namespaces mit dem Ausnahme-Label (`SCALE_DOWN_EXCLUSION_LABEL_KEY`/`_VALUE`, muss zu
-  `label-key`/`label-value` der Aktion `nightly-scale-down-exclusion` passen). Kein Informer, keine `config.yaml`,
-  Projekt-Labels spielen keine Rolle.
+- Liest einmal alle Namespaces mit dem festen Ausnahme-Label (`nightlyscaledown.ExclusionLabelKey`/`Value`).
+  Kein Informer, keine `config.yaml`, Projekt-Labels spielen keine Rolle.
 - Startet die GitLab-Pipeline mit dem **Pipeline-Input** (`spec:inputs`, nicht Variable) `EXCLUDE_NAMESPACES`:
   komma-getrennt, sortiert, leer, wenn keiner ausgenommen ist. Dafür gibt es `gitlabpipeline.Trigger.Start`
   (fertige Werte, `variables` und `inputs`), das auch `Trigger.Run` nutzt.
@@ -510,8 +511,8 @@ Für dieses Repository gilt daraus:
 - **API maximal generisch halten:** Das Frontend kennt keine konkreten Aktionen. Buttons, Icons, Farben und Formulare
   werden vollständig aus den API-Daten aufgebaut. Aktionsspezifische Logik gehört ins Backend; fehlt dem Frontend eine
   Information, wird die API erweitert (`openapi.yaml`, `example-api.jsonc`).
-- **Kein CORS:** Das Backend setzt keine CORS-Header. Das Frontend muss unter derselben Origin wie die API laufen
-  (z. B. Ingress `/api` → Backend, lokal Dev-Proxy auf `localhost:8080`).
+- **Kein CORS:** Das Backend setzt keine CORS-Header. Das Frontend muss unter derselben Origin wie die API laufen (z. B.
+  Ingress `/api` → Backend, lokal Dev-Proxy auf `localhost:8080`).
 - `--static-dir` (`internal/api/static.go`) bleibt im Backend erhalten, wird im Image aber nicht mehr genutzt.
 
 ## Leitplanken für Änderungen
@@ -532,7 +533,8 @@ Für dieses Repository gilt daraus:
 - Das Frontend liegt nicht mehr in diesem Repository (Plan `plans/frontend-entfernen.md`); das Image enthält nur das
   Backend.
 - Aktualisierung über Server-Sent Events statt Polling/ETag; der Initialstand ist das erste Event desselben Streams.
-- Service-Bereiche sind Reiter in der Namespace-Kachel (kein seitenweiter Filter). NodePort-Services kommen als eigenes Attribut `nodePortServices` mit fertigen Adressen;
+- Service-Bereiche sind Reiter in der Namespace-Kachel (kein seitenweiter Filter). NodePort-Services kommen als eigenes
+  Attribut `nodePortServices` mit fertigen Adressen;
   `cluster.dns-name` ist dafür Pflicht.
 - Kein eigener Store und kein periodischer Neuaufbau mit frischen Informern (Plan
   `plans/informer-cache-statt-store.md`): Der Informer-Cache ist konsistent, der Event-Hub baut geänderte

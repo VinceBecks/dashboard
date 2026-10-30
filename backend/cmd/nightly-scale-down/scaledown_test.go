@@ -11,9 +11,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"feature-dashboard/internal/actions/gitlabpipeline"
+	"feature-dashboard/internal/actions/nightlyscaledown"
 )
 
-const key = "mycomp.de/skip-nightly-scale-down"
+const key = nightlyscaledown.ExclusionLabelKey
 
 func env(m map[string]string) func(string) string {
 	return func(name string) string { return m[name] }
@@ -21,7 +22,6 @@ func env(m map[string]string) func(string) string {
 
 func validEnv() map[string]string {
 	return map[string]string{
-		EnvLabelKey:      key,
 		EnvGitLabURL:     "https://gitlab.example",
 		EnvGitLabProject: "team/scale-down",
 		EnvGitLabRef:     "main",
@@ -29,34 +29,27 @@ func validEnv() map[string]string {
 	}
 }
 
-func TestFromEnv(t *testing.T) {
+func TestConfigFromEnv(t *testing.T) {
 	c, err := configFromEnv(env(validEnv()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.LabelValue != DefaultLabelValue || c.Ref != "main" || c.Trigger.TokenEnv != EnvTriggerToken || c.Trigger.Project != "team/scale-down" {
+	if c.Ref != "main" || c.Trigger.TokenEnv != EnvTriggerToken || c.Trigger.Project != "team/scale-down" {
 		t.Fatalf("config = %+v", c)
 	}
 
 	// Alle fehlenden Pflichtvariablen werden gemeinsam gemeldet.
 	_, err = configFromEnv(env(nil))
-	for _, name := range []string{EnvLabelKey, EnvGitLabURL, EnvGitLabProject, EnvGitLabRef, EnvTriggerToken} {
+	for _, name := range []string{EnvGitLabURL, EnvGitLabProject, EnvGitLabRef, EnvTriggerToken} {
 		if err == nil || !strings.Contains(err.Error(), name) {
 			t.Errorf("Fehler zu %s erwartet: %v", name, err)
 		}
 	}
 
-	invalid := map[string][2]string{
-		"Label-Key ungültig":  {EnvLabelKey, "a b"},
-		"Label-Wert ungültig": {EnvLabelValue, "nicht gültig!"},
-		"Timeout ungültig":    {EnvGitLabTimeout, "bald"},
-	}
-	for name, kv := range invalid {
-		e := validEnv()
-		e[kv[0]] = kv[1]
-		if _, err := configFromEnv(env(e)); err == nil {
-			t.Errorf("%s: Fehler erwartet", name)
-		}
+	e := validEnv()
+	e[EnvGitLabTimeout] = "bald"
+	if _, err := configFromEnv(env(e)); err == nil {
+		t.Error("ungültiger Timeout: Fehler erwartet")
 	}
 }
 
@@ -74,7 +67,7 @@ func client() *fake.Clientset {
 }
 
 func TestExcludedNamespaces(t *testing.T) {
-	got, err := excludedNamespaces(context.Background(), client(), key, "true")
+	got, err := excludedNamespaces(context.Background(), client())
 	if err != nil || strings.Join(got, ",") != "foo-feat-1,foo-feat-2" {
 		t.Fatalf("got %v, err %v", got, err)
 	}
@@ -91,8 +84,8 @@ func (f *fakeStarter) Start(_ context.Context, ref string, _, inputs map[string]
 	return gitlabpipeline.Pipeline{ID: 7, WebURL: "https://gitlab.example/p/-/pipelines/7"}, f.err
 }
 
-func TestRun(t *testing.T) {
-	cfg := config{LabelKey: key, LabelValue: "true", Ref: "main"}
+func TestStartScaleDown(t *testing.T) {
+	cfg := config{Ref: "main"}
 	s := &fakeStarter{}
 	p, excluded, err := startScaleDown(context.Background(), cfg, client(), s)
 	if err != nil || p.ID != 7 || len(excluded) != 2 {

@@ -4,6 +4,11 @@
 > `internal/actions/nightlyscaledown`; Meldungen fachlich formuliert. Der Handler ist nur für das nächtliche
 > Herunterskalieren gedacht, nicht als generischer Label-Handler.
 
+> **Nachtrag (festes Label):** Das Ausnahme-Label ist inzwischen fest im Code
+> (`nightlyscaledown.ExclusionLabelKey = "mycomp.de/skip-nightly-scale-down"`, `ExclusionLabelValue = "true"`).
+> `label-key`/`label-value` und `SCALE_DOWN_EXCLUSION_LABEL_KEY`/`_VALUE` gibt es nicht mehr, siehe
+> `plans/scale-down-label-konstant.md`.
+
 ## Kontext
 
 Eine externe Anwendung skaliert jede Nacht alle Feature-Umgebungen auf 0 Replicas. Ein Label am Namespace soll

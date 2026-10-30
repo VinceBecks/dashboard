@@ -4,6 +4,11 @@
 > (Paket `main`, Bezeichner nicht exportiert: `configFromEnv`, `excludedNamespaces`, `startScaleDown`) verschoben,
 > damit das Dashboard-Backend den CronJob-Code nicht kennt.
 
+> **Nachtrag (festes Label):** Das Ausnahme-Label ist inzwischen fest im Code
+> (`nightlyscaledown.ExclusionLabelKey = "mycomp.de/skip-nightly-scale-down"`, `ExclusionLabelValue = "true"`).
+> `label-key`/`label-value` und `SCALE_DOWN_EXCLUSION_LABEL_KEY`/`_VALUE` gibt es nicht mehr, siehe
+> `plans/scale-down-label-konstant.md`.
+
 ## Kontext
 
 Das Herunterskalieren aller Feature-Umgebungen übernimmt eine GitLab-Pipeline. Bisher fehlt der Auslöser. Im

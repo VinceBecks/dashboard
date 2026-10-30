@@ -3,7 +3,8 @@
 Ein Dashboard, in dem Software-Entwickler sehen, welche **Feature-Umgebungen** (Namespaces) sie in einem
 Kubernetes-Cluster hochgefahren haben und welche **Services, Ingresses und Pods** darin laufen. Über das Dashboard
 lassen sich außerdem **Aktionen** auf diesen Objekten auslösen, z. B. einen Pod löschen, die Replicas eines
-Services neu starten oder eine GitLab-Pipeline starten. Konfigurierbare **Links** springen von Objekten in andere Systeme, etwa
+Services neu starten oder eine GitLab-Pipeline starten. Konfigurierbare **Links** springen von Objekten in andere
+Systeme, etwa
 zu den Logs in Kibana.
 
 Dieses Repository enthält nur das **Backend** (Go, `client-go` v0.33 mit Informern, `net/http`, Ordner `backend/`).
@@ -87,16 +88,16 @@ Ein Helm-Chart mit einer Demo-Anwendung liegt unter `helpers/demo-app`.
 
 ## Fachliche Begriffe
 
-| Begriff            | Bedeutung                                                                                      |
-|--------------------|------------------------------------------------------------------------------------------------|
-| Projekt            | In der `config.yaml` definiert. Hat mehrere Feature-Umgebungen.                                |
-| Feature-Umgebung   | Genau ein Namespace, der über seine Labels genau einem Projekt zugeordnet ist.                 |
-| Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                    |
-| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services; im Dashboard ein Reiter der Kachel.   |
-| Replica            | Ein Pod, der von einem Service über dessen Selector referenziert wird.                         |
+| Begriff            | Bedeutung                                                                                              |
+|--------------------|--------------------------------------------------------------------------------------------------------|
+| Projekt            | In der `config.yaml` definiert. Hat mehrere Feature-Umgebungen.                                        |
+| Feature-Umgebung   | Genau ein Namespace, der über seine Labels genau einem Projekt zugeordnet ist.                         |
+| Anwendungs-Service | Ein Kubernetes-Service vom Typ `ClusterIP`.                                                            |
+| Service-Bereich    | Je Projekt konfigurierte Gruppe von Anwendungs-Services; im Dashboard ein Reiter der Kachel.           |
+| Replica            | Ein Pod, der von einem Service über dessen Selector referenziert wird.                                 |
 | Stored-Object      | Die reduzierte, konvertierte Form eines Kubernetes-Objekts, beim Lesen aus dem Informer-Cache erzeugt. |
-| Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch einen ActionHandler. |
-| Link               | Ein konfigurierter Absprung von einem Objekt in ein anderes System (z. B. Kibana).             |
+| Aktion             | Eine vom Dashboard auslösbare Operation auf einem Objekt, umgesetzt durch einen ActionHandler.         |
+| Link               | Ein konfigurierter Absprung von einem Objekt in ein anderes System (z. B. Kibana).                     |
 
 ---
 
@@ -108,7 +109,7 @@ flowchart LR
     Inf -- Events: Revision je Namespace --> Hub[Event-Hub<br/>Diff je Namespace]
     Inf -- Lister + Converter --> Hub
     Pip[Laufende Pipelines<br/>im Speicher] -- Changes --> Hub
-    Hub -- Server-Sent Events --> FE[Frontend]
+    Hub -- Server - Sent Events --> FE[Frontend]
     FE -- PATCH /api/actions --> API[HTTP-API]
     API --> Reg[ActionRegistry] --> H[ActionHandler] -- z . B . Pod löschen --> K8s
     H -- Pipeline starten --> GitLab[(GitLab)]
@@ -175,28 +176,28 @@ Variablen. Das Backend liefert fertige URLs aus, das Frontend zeigt sie nur noch
 
 ### Paketstruktur
 
-| Paket                              | Aufgabe                                                                    |
-|------------------------------------|----------------------------------------------------------------------------|
-| `cmd/dashboard`                    | Start, Flags, Verdrahtung, Registrierung der Handler-Typen                 |
-| `internal/config`                  | `config.yaml` laden und prüfen                                             |
-| `internal/model`                   | Stored-Object-Strukturen, `NamespaceView`                                  |
-| `internal/project`                 | Namespace-Labels → Projekt                                                 |
-| `internal/converter`               | k8s-Objekt → Stored-Object, Referenzauflösung beim Aufbau                  |
-| `internal/kube`                    | Kubernetes-Client, Informer-Cache als Datenquelle, Revisionen je Namespace |
-| `internal/testsource`              | In-Memory-Datenquelle für Tests                                            |
-| `internal/actions`                 | Handler-Interface, ActionRegistry, Prüfung der Formular-Eingaben           |
-| `internal/actions/deletepod`       | Aktion `delete-pod`                                                        |
-| `internal/actions/nodeportservice` | Aktionen `node-port-service-on-service-base`, `delete-node-port-service`   |
-| `internal/actions/restartservice`  | Aktion `restart-service-replicas`                                          |
-| `internal/actions/gitlabpipeline`  | Handler-Typ `gitlab-pipeline`                                              |
-| `internal/actions/assignteam`      | Aktion `assign-team`                                                       |
-| `internal/actions/missingservices` | Handler-Typ `deploy-missing-services`                                      |
-| `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`                               |
-| `internal/objecttemplate`          | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)            |
-| `internal/links`                   | Rendert die konfigurierten Links je Objekt                                 |
-| `internal/copycommands`            | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container) |
-| `internal/pipelines`               | Laufende GitLab-Pipelines im Speicher, Status-Abfrage                      |
-| `internal/api`                     | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, optionale Auslieferung statischer Dateien |
+| Paket                               | Aufgabe                                                                                                           |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `cmd/dashboard`                     | Start, Flags, Verdrahtung, Registrierung der Handler-Typen                                                        |
+| `internal/config`                   | `config.yaml` laden und prüfen                                                                                    |
+| `internal/model`                    | Stored-Object-Strukturen, `NamespaceView`                                                                         |
+| `internal/project`                  | Namespace-Labels → Projekt                                                                                        |
+| `internal/converter`                | k8s-Objekt → Stored-Object, Referenzauflösung beim Aufbau                                                         |
+| `internal/kube`                     | Kubernetes-Client, Informer-Cache als Datenquelle, Revisionen je Namespace                                        |
+| `internal/testsource`               | In-Memory-Datenquelle für Tests                                                                                   |
+| `internal/actions`                  | Handler-Interface, ActionRegistry, Prüfung der Formular-Eingaben                                                  |
+| `internal/actions/deletepod`        | Aktion `delete-pod`                                                                                               |
+| `internal/actions/nodeportservice`  | Aktionen `node-port-service-on-service-base`, `delete-node-port-service`                                          |
+| `internal/actions/restartservice`   | Aktion `restart-service-replicas`                                                                                 |
+| `internal/actions/gitlabpipeline`   | Handler-Typ `gitlab-pipeline`                                                                                     |
+| `internal/actions/assignteam`       | Aktion `assign-team`                                                                                              |
+| `internal/actions/missingservices`  | Handler-Typ `deploy-missing-services`                                                                             |
+| `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`                                                                        |
+| `internal/objecttemplate`           | Go-Templates mit Objekt-Daten (für Links und `gitlab-pipeline`)                                                   |
+| `internal/links`                    | Rendert die konfigurierten Links je Objekt                                                                        |
+| `internal/copycommands`             | Rendert die konfigurierten Kopier-Befehle je Objekt (bei Pods je Container)                                       |
+| `internal/pipelines`                | Laufende GitLab-Pipelines im Speicher, Status-Abfrage                                                             |
+| `internal/api`                      | HTTP-API, Event-Hub und Server-Sent Events, `openapi.yaml`, Swagger-UI, optionale Auslieferung statischer Dateien |
 
 ---
 
@@ -231,16 +232,16 @@ Die Konfiguration wird **einmal beim Start** gelesen. Änderungen werden erst na
 
 ### Übersicht
 
-| Schlüssel        | Pflicht | Inhalt                                                               |
-|------------------|---------|----------------------------------------------------------------------|
-| `projects`       | ja      | Projekte, ihre Namespace-Labels, Service-Bereiche, Link-Variablen    |
-| `action-handlers` | nein    | Aktionen, die das Dashboard anbietet                                 |
-| `links`          | nein    | Links von Objekten in andere Systeme                                 |
-| `link-variables` | nein    | Statische Variablen für Link-Templates und Kopier-Befehle            |
-| `copy-commands`  | nein    | Befehle (z. B. `kubectl exec`), die das Dashboard zum Kopieren anbietet |
-| `cluster`        | ja      | Angaben zum Cluster: der DNS-Name der Nodes für NodePort-Adressen    |
-| `teams`          | nein    | Entwickler-Teams und das Namespace-Label, das die Zuordnung trägt    |
-| `pipelines`      | nein    | Ablage und Status-Abfrage laufender GitLab-Pipelines                 |
+| Schlüssel         | Pflicht | Inhalt                                                                  |
+|-------------------|---------|-------------------------------------------------------------------------|
+| `projects`        | ja      | Projekte, ihre Namespace-Labels, Service-Bereiche, Link-Variablen       |
+| `action-handlers` | nein    | Aktionen, die das Dashboard anbietet                                    |
+| `links`           | nein    | Links von Objekten in andere Systeme                                    |
+| `link-variables`  | nein    | Statische Variablen für Link-Templates und Kopier-Befehle               |
+| `copy-commands`   | nein    | Befehle (z. B. `kubectl exec`), die das Dashboard zum Kopieren anbietet |
+| `cluster`         | ja      | Angaben zum Cluster: der DNS-Name der Nodes für NodePort-Adressen       |
+| `teams`           | nein    | Entwickler-Teams und das Namespace-Label, das die Zuordnung trägt       |
+| `pipelines`       | nein    | Ablage und Status-Abfrage laufender GitLab-Pipelines                    |
 
 > **YAML-Hinweise**
 > - Unquotierte Werte wie `true` oder `8080` werden bei Labels und Variablen als Text gelesen. `true` passt also
@@ -269,13 +270,13 @@ projects:
       kibanaDataView: logs-foo
 ```
 
-| Feld                       | Pflicht | Bedeutung                                                                                                                   |
-|----------------------------|---------|-----------------------------------------------------------------------------------------------------------------------------|
-| `project-name`             | ja      | Eindeutiger Name. Er wird in `projects` von Aktionen und Links referenziert.                                                |
-| `namespace-labels`         | ja      | Labels samt Werten, die ein Namespace **alle** tragen muss, um zum Projekt zu gehören. Darf nicht leer sein.                |
-| `service-areas`            | nein    | Teilt die Anwendungs-Services einer Namespace-Kachel in Reiter auf.                                                         |
-| `others-area-label`        | nein    | Reiter-Titel für Services ohne Bereich. Standard ist „Andere“.                                                              |
-| `link-variables-overrides` | nein    | Überschreibt oder ergänzt die globalen `link-variables` für dieses Projekt.                                                 |
+| Feld                       | Pflicht | Bedeutung                                                                                                    |
+|----------------------------|---------|--------------------------------------------------------------------------------------------------------------|
+| `project-name`             | ja      | Eindeutiger Name. Er wird in `projects` von Aktionen und Links referenziert.                                 |
+| `namespace-labels`         | ja      | Labels samt Werten, die ein Namespace **alle** tragen muss, um zum Projekt zu gehören. Darf nicht leer sein. |
+| `service-areas`            | nein    | Teilt die Anwendungs-Services einer Namespace-Kachel in Reiter auf.                                          |
+| `others-area-label`        | nein    | Reiter-Titel für Services ohne Bereich. Standard ist „Andere“.                                               |
+| `link-variables-overrides` | nein    | Überschreibt oder ergänzt die globalen `link-variables` für dieses Projekt.                                  |
 
 **Zuordnung von Namespaces:** Passt ein Namespace zu mehreren Projekten, gewinnt das erste in der Reihenfolge der
 Config. Das Backend loggt dazu eine Warnung.
@@ -480,14 +481,16 @@ Keine `extra-handler-configs`; ohne Abschnitt `teams` startet das Backend nicht.
 
 #### `nightly-scale-down-exclusion`
 
-Eine externe Anwendung skaliert jede Nacht alle Feature-Umgebungen auf 0 Replicas und lässt Namespaces mit einem
-bestimmten Label aus. Dieser Handler-Typ setzt das Label (`mode: mark`, Namespace ausnehmen) oder entfernt es
-(`mode: unmark`, Namespace wird wieder herunterskaliert). Er wird als **zwei Aktionen** mit demselben `label-key`
-konfiguriert, die sich gegenseitig ablösen:
+Der [CronJob `nightly-scale-down`](#nächtliches-herunterskalieren-cronjob) skaliert jede Nacht alle
+Feature-Umgebungen auf 0 Replicas und lässt Namespaces mit einem Label aus. Das Label steht fest im Code
+(`nightlyscaledown.ExclusionLabelKey`/`ExclusionLabelValue`) und wird nicht
+konfiguriert, Dashboard und CronJob nutzen dieselben Konstanten. Dieser Handler-Typ setzt das Label (`mode: mark`,
+Namespace ausnehmen) oder entfernt es (`mode: unmark`, Namespace wird wieder herunterskaliert). Er
+wird als **zwei Aktionen** konfiguriert, die sich gegenseitig ablösen:
 
-- `mark` wird nur angeboten, solange das Label mit dem konfigurierten Wert **fehlt**. Ein anderer Wert gilt als
-  nicht gesetzt und wird überschrieben.
-- `unmark` wird nur angeboten, solange das Label mit dem konfigurierten Wert **gesetzt** ist.
+- `mark` wird nur angeboten, solange das Label mit dem Wert `true` **fehlt**. Ein anderer Wert gilt als nicht
+  gesetzt und wird überschrieben.
+- `unmark` wird nur angeboten, solange das Label mit dem Wert `true` **gesetzt** ist.
 
 Nach der Ausführung kommt die Änderung über den Informer. Am Namespace steht dann automatisch die jeweils andere
 Aktion. Gesetzt bzw. entfernt wird per Merge-Patch, andere Labels bleiben unberührt.
@@ -499,10 +502,8 @@ Aktion. Gesetzt bzw. entfernt wird per Merge-Patch, andere Labels bleiben unber�
     icon: sun
     icon-color: "#f9a825"
     projects: [ foo-projekt ]
-    extra-handler-configs: &skip-scale-down
-      label-key: mycomp.de/skip-nightly-scale-down   # Pflicht, gültiger Label-Key
-      label-value: "true"                            # optional, Standard "true"
-      mode: mark                                     # mark = setzen, unmark = entfernen
+    extra-handler-configs:
+      mode: mark                                     # mark = Label setzen, unmark = Label entfernen
   - action-name: include-in-nightly-scale-down
     handler: nightly-scale-down-exclusion
     action-title: Nächtliches Herunterskalieren wieder zulassen
@@ -510,15 +511,15 @@ Aktion. Gesetzt bzw. entfernt wird per Merge-Patch, andere Labels bleiben unber�
     icon-color: "#455a64"
     projects: [ foo-projekt ]
     extra-handler-configs:
-      <<: *skip-scale-down                           # gleiches Label wie oben
       mode: unmark
 ```
 
-| Feld          | Pflicht | Bedeutung                                                       |
-|---------------|---------|-----------------------------------------------------------------|
-| `label-key`   | ja      | Label, das die Skalierungs-Anwendung auswertet; gültiger Key    |
-| `label-value` | nein    | Wert beim Setzen und für „gesetzt“, Standard `"true"`           |
-| `mode`        | ja      | `mark` (Label setzen) oder `unmark` (Label entfernen)           |
+| Feld   | Pflicht | Bedeutung                                             |
+|--------|---------|-------------------------------------------------------|
+| `mode` | ja      | `mark` (Label setzen) oder `unmark` (Label entfernen) |
+
+Stehen noch `label-key` oder `label-value` aus einer älteren Config in den `extra-handler-configs`, bricht der Start
+mit einem Fehler ab.
 
 Keine Formular-Felder (nur Bestätigung). Benötigt `patch` auf `namespaces`. Namespaces werden nicht per ArgoCD
 self-heal verwaltet, das Label bleibt also bestehen.
@@ -549,10 +550,10 @@ genau wie bei [`gitlab-pipeline`](#gitlab-pipeline). Die gewählten Services ste
         SERVICES: '{{ join .Services "," }}'
 ```
 
-| `extra-handler-configs` | Pflicht | Bedeutung                                                                       |
-|-------------------------|---------|---------------------------------------------------------------------------------|
-| `services`              | ja      | Erwartete Services, mindestens einer. Je Eintrag `name` (eindeutig) und optional `label` für die Anzeige, Standard ist `name`. |
-| `gitlab-url` … `variables` | wie bei `gitlab-pipeline` | ohne `applies-to`, die Aktion gilt immer für Namespaces |
+| `extra-handler-configs`    | Pflicht                   | Bedeutung                                                                                                                      |
+|----------------------------|---------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `services`                 | ja                        | Erwartete Services, mindestens einer. Je Eintrag `name` (eindeutig) und optional `label` für die Anzeige, Standard ist `name`. |
+| `gitlab-url` … `variables` | wie bei `gitlab-pipeline` | ohne `applies-to`, die Aktion gilt immer für Namespaces                                                                        |
 
 - **Nichts fehlt:** Die Aktion bleibt sichtbar. Das Dropdown ist dann leer und die Ausführung wird abgelehnt.
 - **Prüfung:** Ausgewählt werden dürfen nur Services, die zum Zeitpunkt der Ausführung noch fehlen.
@@ -632,21 +633,21 @@ copy-commands:
     icon: terminal                          # Name eines Lucide-Icons
     icon-color: "#455a64"                   # beliebige CSS-Farbe
     projects: [ foo-projekt ]               # Pflicht; [] = in keinem Projekt
-    targets:                                # je Objekt-Typ ein Befehl; fehlende Typen haben den Befehl nicht
+    targets: # je Objekt-Typ ein Befehl; fehlende Typen haben den Befehl nicht
       pod:
         command: kubectl exec -it -n {{ .Namespace }} {{ .Name }} -c {{ .Container }} -- sh
       namespace:
         command: kubectl config set-context --current --namespace={{ shellquote .Namespace }}
 ```
 
-| Feld                | Pflicht | Bedeutung                                                                                  |
-|---------------------|---------|--------------------------------------------------------------------------------------------|
-| `command-id`        | ja      | Eindeutige ID                                                                              |
-| `title`             | ja      | Tooltip im Dashboard                                                                       |
-| `icon`              | nein    | Icon des Buttons                                                                           |
-| `icon-color`        | nein    | Farbe des Icons                                                                            |
-| `projects`          | ja      | Projekte, in denen der Befehl angeboten wird. `[]` heißt: in keinem (Warnung beim Start).  |
-| `targets.<typ>`     | ja      | `command` je Objekt-Typ (`namespace`, `service`, `ingress`, `pod`) als Template            |
+| Feld            | Pflicht | Bedeutung                                                                                 |
+|-----------------|---------|-------------------------------------------------------------------------------------------|
+| `command-id`    | ja      | Eindeutige ID                                                                             |
+| `title`         | ja      | Tooltip im Dashboard                                                                      |
+| `icon`          | nein    | Icon des Buttons                                                                          |
+| `icon-color`    | nein    | Farbe des Icons                                                                           |
+| `projects`      | ja      | Projekte, in denen der Befehl angeboten wird. `[]` heißt: in keinem (Warnung beim Start). |
+| `targets.<typ>` | ja      | `command` je Objekt-Typ (`namespace`, `service`, `ingress`, `pod`) als Template           |
 
 - **Je Container:** Bei Pods rendert das Backend den Befehl je Container (`.Container`). Unterscheiden sich die
   Ergebnisse, gibt es je Container ein Icon („Shell im Pod öffnen (app)“, „… (sidecar)“). Nutzt das Template
@@ -664,30 +665,30 @@ Templates in Links, Kopier-Befehlen und bei `gitlab-pipeline` bzw. `deploy-missi
 
 **Verfügbare Daten:**
 
-| Feld           | Inhalt                                                                                    |
-|----------------|-------------------------------------------------------------------------------------------|
-| `.Kind`        | `namespace`, `service`, `ingress` oder `pod`                                              |
-| `.Name`        | Name des Objekts, bei einem Namespace dessen Name                                         |
-| `.Namespace`   | Namespace des Objekts                                                                     |
-| `.Project`     | Dashboard-Projekt des Namespaces                                                          |
-| `.Labels`      | Labels des Objekts                                                                        |
-| `.Annotations` | Annotations des Objekts                                                                   |
-| `.Selector`    | Selector eines Services, bei anderen Objekten leer                                        |
+| Feld           | Inhalt                                                                                          |
+|----------------|-------------------------------------------------------------------------------------------------|
+| `.Kind`        | `namespace`, `service`, `ingress` oder `pod`                                                    |
+| `.Name`        | Name des Objekts, bei einem Namespace dessen Name                                               |
+| `.Namespace`   | Namespace des Objekts                                                                           |
+| `.Project`     | Dashboard-Projekt des Namespaces                                                                |
+| `.Labels`      | Labels des Objekts                                                                              |
+| `.Annotations` | Annotations des Objekts                                                                         |
+| `.Selector`    | Selector eines Services, bei anderen Objekten leer                                              |
 | `.Vars`        | `link-variables`, überschrieben durch `link-variables-overrides`. In Links und Kopier-Befehlen. |
-| `.Services`    | Gewählte Services, nur bei `deploy-missing-services` gefüllt, sonst leer                  |
-| `.Container`   | Name des Containers, nur bei Kopier-Befehlen für Pods gefüllt (je Container ein Befehl)   |
+| `.Services`    | Gewählte Services, nur bei `deploy-missing-services` gefüllt, sonst leer                        |
+| `.Container`   | Name des Containers, nur bei Kopier-Befehlen für Pods gefüllt (je Container ein Befehl)         |
 
 **Zusätzliche Funktionen** neben den Go-Standardfunktionen wie `urlquery`, `index`, `printf`, `range` und `if`:
 
-| Funktion     | Beispiel                                    | Ergebnis                         |
-|--------------|---------------------------------------------|----------------------------------|
-| `rison`      | `{{ rison "it's" }}`                        | `'it!'s'` (Kibana-Notation)      |
-| `pathescape` | `{{ pathescape "team/foo" }}`               | `team%2Ffoo`                     |
-| `replace`    | `{{ replace "app.kubernetes.io" "." "_" }}` | `app_kubernetes_io`              |
-| `join`       | `{{ join .Liste ", " }}`                    | verbindet eine Liste von Strings |
-| `shellquote` | `{{ shellquote "it's" }}`                   | `'it'\''s'` (ein Shell-Argument)  |
-| `trimPrefix` | `{{ trimPrefix (printf "%s-" .Project) .Namespace }}` | entfernt ein Präfix: `myproject-foo-bar` → `foo-bar` (Projekt `myproject`); ohne dieses Präfix unverändert |
-| `extractRenewJiraTicketNumber` | `{{ extractRenewJiraTicketNumber .Namespace }}` | Jira-Ticketnummer aus `renew-<f-\|if-\|hf-><story\|hotfix\|feat\|bugfix\|epic\|intfix><nummer>…`, z. B. `renew-f-feat1234-login` → `1234`; sonst leer |
+| Funktion                       | Beispiel                                              | Ergebnis                                                                                                                                              |
+|--------------------------------|-------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `rison`                        | `{{ rison "it's" }}`                                  | `'it!'s'` (Kibana-Notation)                                                                                                                           |
+| `pathescape`                   | `{{ pathescape "team/foo" }}`                         | `team%2Ffoo`                                                                                                                                          |
+| `replace`                      | `{{ replace "app.kubernetes.io" "." "_" }}`           | `app_kubernetes_io`                                                                                                                                   |
+| `join`                         | `{{ join .Liste ", " }}`                              | verbindet eine Liste von Strings                                                                                                                      |
+| `shellquote`                   | `{{ shellquote "it's" }}`                             | `'it'\''s'` (ein Shell-Argument)                                                                                                                      |
+| `trimPrefix`                   | `{{ trimPrefix (printf "%s-" .Project) .Namespace }}` | entfernt ein Präfix: `myproject-foo-bar` → `foo-bar` (Projekt `myproject`); ohne dieses Präfix unverändert                                            |
+| `extractRenewJiraTicketNumber` | `{{ extractRenewJiraTicketNumber .Namespace }}`       | Jira-Ticketnummer aus `renew-<f-\|if-\|hf-><story\|hotfix\|feat\|bugfix\|epic\|intfix><nummer>…`, z. B. `renew-f-feat1234-login` → `1234`; sonst leer |
 
 **Fallstricke:**
 
@@ -713,12 +714,12 @@ teams:
       team-label: Team Suche
 ```
 
-| Feld                 | Pflicht | Bedeutung                                                                         |
-|----------------------|---------|-----------------------------------------------------------------------------------|
-| `label-key`          | ja      | Label am Namespace, das die Team-Zuordnung trägt                                  |
-| `teams[].team-id`    | ja      | Eindeutige ID und zugleich Wert des Labels; muss ein gültiger Label-Wert sein     |
-| `teams[].team-label` | ja      | Anzeigename                                                                       |
-| `teams[].team-color` | nein    | Farbe des Teams als CSS-Wert; in der API `teamColor` (leer, wenn nicht gesetzt)   |
+| Feld                 | Pflicht | Bedeutung                                                                       |
+|----------------------|---------|---------------------------------------------------------------------------------|
+| `label-key`          | ja      | Label am Namespace, das die Team-Zuordnung trägt                                |
+| `teams[].team-id`    | ja      | Eindeutige ID und zugleich Wert des Labels; muss ein gültiger Label-Wert sein   |
+| `teams[].team-label` | ja      | Anzeigename                                                                     |
+| `teams[].team-color` | nein    | Farbe des Teams als CSS-Wert; in der API `teamColor` (leer, wenn nicht gesetzt) |
 
 Sind Teams konfiguriert, zeigt das Dashboard je Projekt einen **Team-Filter**: je Team ein Chip plus „Ohne Team“,
 mehrere gleichzeitig wählbar, ohne Auswahl werden alle Namespaces gezeigt. Die Auswahl steht in der URL
@@ -738,7 +739,7 @@ cluster:
 ### `pipelines`
 
 ```yaml
-pipelines:                                    # optional, gezeigt ist der Standardwert
+pipelines: # optional, gezeigt ist der Standardwert
   poll-interval: 15s
 ```
 
@@ -793,12 +794,12 @@ Die API ist in [`backend/internal/api/openapi.yaml`](backend/internal/api/openap
 Swagger-UI gibt es unter **`/api/swagger`**. Sie lädt ihre Skripte von unpkg.com, der Browser braucht dafür
 Internetzugang.
 
-| Methode | Pfad                                | Zweck                                                                   |
-|---------|-------------------------------------|-------------------------------------------------------------------------|
-| GET     | `/api/events`                       | Server-Sent Events: zuerst der komplette Stand, danach nur Änderungen   |
-| PATCH   | `/api/actions/{action-name}`        | Aktion auf einem Objekt ausführen                                       |
-| GET     | `/api/openapi.yaml`, `/api/swagger` | API-Beschreibung                                                        |
-| GET     | `/healthz`                          | Liveness, immer `200`                                                   |
+| Methode | Pfad                                | Zweck                                                                        |
+|---------|-------------------------------------|------------------------------------------------------------------------------|
+| GET     | `/api/events`                       | Server-Sent Events: zuerst der komplette Stand, danach nur Änderungen        |
+| PATCH   | `/api/actions/{action-name}`        | Aktion auf einem Objekt ausführen                                            |
+| GET     | `/api/openapi.yaml`, `/api/swagger` | API-Beschreibung                                                             |
+| GET     | `/healthz`                          | Liveness, immer `200`                                                        |
 | GET     | `/readyz`                           | Readiness: `200`, sobald der Informer-Cache synchronisiert ist, vorher `503` |
 
 Ältere Konfigurationen mit `frontend` starten weiterhin; der Schlüssel wird ignoriert. `cluster.dns-name` ist dagegen
@@ -806,14 +807,15 @@ Pflicht.
 
 ### Server-Sent Events (`GET /api/events`)
 
-| Event      | `data`                                         | Bedeutung                                         |
-|------------|------------------------------------------------|---------------------------------------------------|
-| `snapshot` | `{"projects": [...]}`                          | Immer das erste Event: der komplette Stand        |
-| `upsert`   | ein Objekt ohne Kind-Listen                    | Objekt neu oder geändert; vorhandene Kinder bleiben |
-| `delete`   | `{"kind": …, "name": …, "parents": {…}}`       | Objekt samt aller Kinder entfernen                |
+| Event      | `data`                                   | Bedeutung                                           |
+|------------|------------------------------------------|-----------------------------------------------------|
+| `snapshot` | `{"projects": [...]}`                    | Immer das erste Event: der komplette Stand          |
+| `upsert`   | ein Objekt ohne Kind-Listen              | Objekt neu oder geändert; vorhandene Kinder bleiben |
+| `delete`   | `{"kind": …, "name": …, "parents": {…}}` | Objekt samt aller Kinder entfernen                  |
 
 - **Teams:** Der Snapshot enthält `teams` (`id`, `label`), jeder Namespace optional `team` (ID des Teams).
-- **Hierarchie:** Projekt → Namespace → Services (→ Pods), NodePort-Services und Ingresses. Ein Beispiel des Snapshots mit allen
+- **Hierarchie:** Projekt → Namespace → Services (→ Pods), NodePort-Services und Ingresses. Ein Beispiel des Snapshots
+  mit allen
   Feldern steht in [`backend/internal/api/example-api.jsonc`](backend/internal/api/example-api.jsonc).
 - **Schlanke Objekte:** Jedes Objekt trägt `kind`, `name`, `parents`, `actions` (ID, Titel, Icon, Farbe, optional
   `formFields`), `links` (ID, Titel, Icon, Farbe, `url`), `copyCommands` (ID, Titel, Icon, Farbe, `command`) und
@@ -921,12 +923,12 @@ Bei einem lokalen Cluster ohne Registry lädst du das Image danach in den Cluste
 
 Die Manifeste liegen in `backend/deploy/`:
 
-| Datei                        | Inhalt                                                              |
-|------------------------------|---------------------------------------------------------------------|
-| `config.yaml`                | ConfigMap `feature-dashboard` mit der `config.yaml`                 |
-| `rbac.yaml`                  | ServiceAccount, ClusterRole, ClusterRoleBinding                     |
-| `deployment.yaml`            | Deployment (1 Replica, Strategie `Recreate`) und Service            |
-| `gitlab-secret.example.yaml` | Muster für das Secret `feature-dashboard-gitlab` mit Trigger-Tokens |
+| Datei                        | Inhalt                                                                                 |
+|------------------------------|----------------------------------------------------------------------------------------|
+| `config.yaml`                | ConfigMap `feature-dashboard` mit der `config.yaml`                                    |
+| `rbac.yaml`                  | ServiceAccount, ClusterRole, ClusterRoleBinding                                        |
+| `deployment.yaml`            | Deployment (1 Replica, Strategie `Recreate`) und Service                               |
+| `gitlab-secret.example.yaml` | Muster für das Secret `feature-dashboard-gitlab` mit Trigger-Tokens                    |
 | `network.example.yaml`       | Muster für Proxy und Company-CA (ConfigMaps `feature-dashboard-network`, `company-ca`) |
 
 ```sh
@@ -957,7 +959,8 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
 
 - **Proxy:** Die ConfigMap `feature-dashboard-network` wird per `envFrom` geladen und setzt `HTTPS_PROXY`,
   `HTTP_PROXY` und `NO_PROXY`. Alle ausgehenden HTTP-Aufrufe (GitLab-Trigger und Pipeline-Status) laufen darüber.
-- **Company-CA:** Die ConfigMap `company-ca` wird unter `/etc/company-ca` eingehängt. `SSL_CERT_DIR=/etc/ssl/certs:/etc/company-ca`
+- **Company-CA:** Die ConfigMap `company-ca` wird unter `/etc/company-ca` eingehängt.
+  `SSL_CERT_DIR=/etc/ssl/certs:/etc/company-ca`
   lässt das Backend den System-CAs des Images **und** der Company-CA vertrauen.
 - **`NO_PROXY` nicht vergessen:** Auch der Kubernetes-Client beachtet `HTTPS_PROXY`. Ohne Ausnahme liefen Informer und
   Aktionen über den Proxy. In `NO_PROXY` gehören mindestens die IP des API-Servers (`KUBERNETES_SERVICE_HOST`, bzw.
@@ -972,12 +975,12 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
 
 ### Benötigte Rechte (ClusterRole)
 
-| Ressource                         | Verben                           | Wofür                                              |
-|-----------------------------------|----------------------------------|----------------------------------------------------|
+| Ressource                         | Verben                           | Wofür                                                   |
+|-----------------------------------|----------------------------------|---------------------------------------------------------|
 | `namespaces`                      | get, list, watch, patch          | Informer, `assign-team`, `nightly-scale-down-exclusion` |
-| `services`                        | get, list, watch, create, delete | Informer, NodePort-Service erstellen und löschen   |
-| `pods`                            | get, list, watch, delete         | Informer, `delete-pod`, `restart-service-replicas` |
-| `ingresses` (`networking.k8s.io`) | get, list, watch                 | Informer                                           |
+| `services`                        | get, list, watch, create, delete | Informer, NodePort-Service erstellen und löschen        |
+| `pods`                            | get, list, watch, delete         | Informer, `delete-pod`, `restart-service-replicas`      |
+| `ingresses` (`networking.k8s.io`) | get, list, watch                 | Informer                                                |
 
 ---
 
@@ -992,8 +995,8 @@ Namespaces, die Entwickler im Dashboard mit der Aktion
 
 1. Konfiguration aus Umgebungsvariablen lesen. Fehlt etwas, endet die Anwendung mit Exit-Code 1 und nennt alle
    fehlenden bzw. ungültigen Variablen.
-2. Alle Namespaces mit dem Label `<SCALE_DOWN_EXCLUSION_LABEL_KEY>=<SCALE_DOWN_EXCLUSION_LABEL_VALUE>` lesen (ein
-   List-Aufruf mit Label-Selector, kein Informer). Projekt-Labels spielen dabei keine Rolle.
+2. Alle Namespaces mit dem festen Ausnahme-Label lesen (ein List-Aufruf mit Label-Selector, kein Informer).
+   Projekt-Labels spielen dabei keine Rolle.
 3. Die Pipeline über die Trigger-API starten, mit dem Pipeline-Input **`EXCLUDE_NAMESPACES`**: die Namen
    komma-getrennt und sortiert, z. B. `foo-feat-1,foo-feat-2`. Ist kein Namespace ausgenommen, ist der Wert leer,
    die Pipeline startet trotzdem.
@@ -1002,17 +1005,15 @@ Namespaces, die Entwickler im Dashboard mit der Aktion
 
 **Umgebungsvariablen:**
 
-| Variable                           | Pflicht | Bedeutung                                                                  |
-|------------------------------------|---------|----------------------------------------------------------------------------|
-| `SCALE_DOWN_EXCLUSION_LABEL_KEY`   | ja      | Ausnahme-Label; muss zum `label-key` der Aktion passen                     |
-| `SCALE_DOWN_EXCLUSION_LABEL_VALUE` | nein    | Wert des Labels, Standard `true` (wie `label-value` der Aktion)            |
-| `GITLAB_URL`                       | ja      | z. B. `https://gitlab.mycomp.de`                                           |
-| `GITLAB_PROJECT`                   | ja      | Projekt-ID oder Pfad des Projekts mit der Scale-down-Pipeline              |
-| `GITLAB_REF`                       | ja      | Branch oder Tag, z. B. `main`                                              |
-| `GITLAB_TRIGGER_TOKEN`             | ja      | Pipeline-Trigger-Token (im Cluster aus dem Secret)                         |
-| `GITLAB_TIMEOUT`                   | nein    | HTTP-Timeout, Standard `10s`                                               |
-| `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_DIR` | nein | Proxy und Company-CA wie beim Dashboard                           |
-| `KUBECONFIG`                       | nein    | Nur lokal; im Cluster gilt die In-Cluster-Konfiguration                    |
+| Variable                                  | Pflicht | Bedeutung                                                     |
+|-------------------------------------------|---------|---------------------------------------------------------------|
+| `GITLAB_URL`                              | ja      | z. B. `https://gitlab.mycomp.de`                              |
+| `GITLAB_PROJECT`                          | ja      | Projekt-ID oder Pfad des Projekts mit der Scale-down-Pipeline |
+| `GITLAB_REF`                              | ja      | Branch oder Tag, z. B. `main`                                 |
+| `GITLAB_TRIGGER_TOKEN`                    | ja      | Pipeline-Trigger-Token (im Cluster aus dem Secret)            |
+| `GITLAB_TIMEOUT`                          | nein    | HTTP-Timeout, Standard `10s`                                  |
+| `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_DIR` | nein    | Proxy und Company-CA wie beim Dashboard                       |
+| `KUBECONFIG`                              | nein    | Nur lokal; im Cluster gilt die In-Cluster-Konfiguration       |
 
 **Pipeline:** `EXCLUDE_NAMESPACES` ist ein Pipeline-Input (`spec:inputs`), keine CI/CD-Variable. Er wird als
 `inputs[EXCLUDE_NAMESPACES]` an die Trigger-API übergeben, dafür braucht es eine GitLab-Version, die Inputs über
@@ -1043,14 +1044,14 @@ kubectl apply -f backend/deploy/nightly-scale-down.yaml                  # vorhe
   Pipelines starten. Ein fehlgeschlagener Lauf wird nicht wiederholt.
 - **Rechte:** eigener ServiceAccount `nightly-scale-down` mit ClusterRole, nur `list` auf `namespaces`.
 - **Proxy und Company-CA:** wie beim Dashboard über die ConfigMaps `feature-dashboard-network` und `company-ca`.
-- **Label:** `SCALE_DOWN_EXCLUSION_LABEL_KEY` und `_VALUE` müssen zu `label-key` und `label-value` der Aktion in
-  der `config.yaml` des Dashboards passen. Sonst werden markierte Namespaces trotzdem herunterskaliert.
+- **Label:** fest im Code (`nightlyscaledown.ExclusionLabelKey`/`ExclusionLabelValue`), dieselben Konstanten wie
+  in der Dashboard-Aktion. Es gibt nichts abzustimmen.
 
 **Lokal ausführen** (startet wirklich eine Pipeline):
 
 ```sh
-SCALE_DOWN_EXCLUSION_LABEL_KEY=mycomp.de/skip-nightly-scale-down GITLAB_URL=https://gitlab.mycomp.de \
-  GITLAB_PROJECT=team/nightly-scale-down GITLAB_REF=main GITLAB_TRIGGER_TOKEN=… make nightly-scale-down-run
+GITLAB_URL=https://gitlab.mycomp.de GITLAB_PROJECT=team/nightly-scale-down GITLAB_REF=main \
+  GITLAB_TRIGGER_TOKEN=… make nightly-scale-down-run
 ```
 
 ---
@@ -1059,15 +1060,15 @@ SCALE_DOWN_EXCLUSION_LABEL_KEY=mycomp.de/skip-nightly-scale-down GITLAB_URL=http
 
 Alle Befehle laufen über das `Makefile` im Repository-Root:
 
-| Befehl              | Wirkung                                                                             |
-|---------------------|-------------------------------------------------------------------------------------|
-| `make test`         | Backend-Tests (`go test -race ./...`)                                               |
-| `make lint`         | `go vet`                                                                            |
-| `make build`        | Binaries nach `backend/bin/` (`dashboard`, `nightly-scale-down`)                    |
-| `make run`          | Backend lokal starten (`CONFIG=…`, `STATIC_DIR=…`, `KUBECONFIG=…` überschreibbar)   |
-| `make nightly-scale-down-run` | CronJob-Anwendung einmal lokal ausführen (Konfiguration aus der Umgebung) |
-| `make docker`       | Image bauen (`IMAGE=…` überschreibbar, `COMPANY_CA=…` für den Build hinter dem Proxy) |
-| `make clean`        | Build-Artefakte löschen                                                             |
+| Befehl                        | Wirkung                                                                               |
+|-------------------------------|---------------------------------------------------------------------------------------|
+| `make test`                   | Backend-Tests (`go test -race ./...`)                                                 |
+| `make lint`                   | `go vet`                                                                              |
+| `make build`                  | Binaries nach `backend/bin/` (`dashboard`, `nightly-scale-down`)                      |
+| `make run`                    | Backend lokal starten (`CONFIG=…`, `STATIC_DIR=…`, `KUBECONFIG=…` überschreibbar)     |
+| `make nightly-scale-down-run` | CronJob-Anwendung einmal lokal ausführen (Konfiguration aus der Umgebung)             |
+| `make docker`                 | Image bauen (`IMAGE=…` überschreibbar, `COMPANY_CA=…` für den Build hinter dem Proxy) |
+| `make clean`                  | Build-Artefakte löschen                                                               |
 
 Einzelschritte gibt es als `backend-build|test|vet|run`.
 
@@ -1085,13 +1086,13 @@ Umsetzungspläne in `plans/`.
 
 | Meldung / Symptom                                                         | Ursache und Lösung                                                                                                                                                     |
 |---------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `action-handlers[n]: projects fehlt …`                                     | `projects` ist Pflicht. Zum Deaktivieren `projects: []` setzen.                                                                                                        |
+| `action-handlers[n]: projects fehlt …`                                    | `projects` ist Pflicht. Zum Deaktivieren `projects: []` setzen.                                                                                                        |
 | `aktion "…": umgebungsvariable … mit dem Trigger-Token ist nicht gesetzt` | Token-Variable setzen bzw. Secret `feature-dashboard-gitlab` anlegen, oder die Aktion mit `projects: []` deaktivieren.                                                 |
 | `projects gehört nicht mehr in extra-handler-configs …`                   | `projects` bei `gitlab-pipeline` direkt an die Aktion verschieben.                                                                                                     |
 | `WARN Link konnte nicht erzeugt werden … can't evaluate field X`          | Das Template nutzt ein Feld, das es nicht gibt, siehe [Template-Daten](#templates-in-der-konfiguration).                                                               |
 | `WARN Link konnte nicht erzeugt werden … map has no entry for key`        | Die Variable fehlt in `link-variables` bzw. `link-variables-overrides`.                                                                                                |
 | Link-URL enthält Leerzeichen bzw. ist kaputt                              | Blockstil `>-` statt `\|-` verwendet, oder ein Wert wurde nicht mit `urlquery`/`pathescape` kodiert.                                                                   |
 | Namespace erscheint nicht im Dashboard                                    | Labels prüfen: Der Namespace muss **alle** `namespace-labels` eines Projekts mit genau diesen Werten tragen.                                                           |
-| `/readyz` liefert dauerhaft `503`                                         | Der Cluster ist nicht erreichbar, oder Rechte fehlen. Log prüfen: `Informer-Cache nicht synchronisiert` bzw. Fehler der Informer (Rechte, Erreichbarkeit).                                                        |
+| `/readyz` liefert dauerhaft `503`                                         | Der Cluster ist nicht erreichbar, oder Rechte fehlen. Log prüfen: `Informer-Cache nicht synchronisiert` bzw. Fehler der Informer (Rechte, Erreichbarkeit).             |
 | Aktion fehlt an einem Objekt                                              | Das Projekt steht nicht in `projects` der Aktion, oder der Handler hält sie nicht für anwendbar (Bedingungen siehe [Mitgelieferte Aktionen](#mitgelieferte-aktionen)). |
 | Kopieren-Button tut nichts                                                | Ohne HTTPS greift ein Ausweichweg über ein Textfeld. Manche Browser blockieren auch diesen.                                                                            |

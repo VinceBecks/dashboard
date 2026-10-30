@@ -1,6 +1,5 @@
 # CronJob nightly-scale-down: startet jede Nacht die GitLab-Pipeline, die alle Feature-Umgebungen auf 0 Replicas
-# skaliert. Namespaces mit dem Ausnahme-Label (Dashboard-Aktion nightly-scale-down-exclusion) bekommt die Pipeline
-# im Input EXCLUDE_NAMESPACES (komma-getrennt). Gleiches Image wie das Dashboard, andere Binary.
+# skaliert
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -53,11 +52,6 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["/nightly-scale-down"]
               env:
-                # Muss zu label-key/label-value der Dashboard-Aktion nightly-scale-down-exclusion passen.
-                - name: SCALE_DOWN_EXCLUSION_LABEL_KEY
-                  value: mycomp.de/skip-nightly-scale-down
-                - name: SCALE_DOWN_EXCLUSION_LABEL_VALUE
-                  value: "true"
                 - name: GITLAB_URL
                   value: https://gitlab.mycomp.de
                 - name: GITLAB_PROJECT

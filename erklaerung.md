@@ -247,8 +247,8 @@ Startpunkt. Hier steht auch die einzige Liste der verfügbaren Handler-Typen (`r
   - `assignteam` ordnet einen Namespace einem Team zu: Single-Select aus dem Abschnitt `teams`, setzt bzw. entfernt
     das Team-Label am Namespace per Merge-Patch.
   - `nightlyscaledown` nimmt einen Namespace vom nächtlichen Herunterskalieren aus: setzt (`mark`) bzw. entfernt
-    (`unmark`) das Label, das die Skalierungs-Anwendung auswertet. Zwei Aktionen, `IsApplicable` bietet jeweils nur
-    die passende an.
+    (`unmark`) das feste Label `ExclusionLabelKey`/`ExclusionLabelValue`, das auch der CronJob auswertet. Zwei
+    Aktionen, `IsApplicable` bietet jeweils nur die passende an.
 
 ### `internal/objecttemplate`, `internal/links`, `internal/copycommands`
 - **`objecttemplate`:** Go-Templates mit den Daten eines Objekts (`Data`: `.Kind .Name .Namespace .Project .Labels
