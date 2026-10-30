@@ -8,7 +8,6 @@ package nightlyscaledown
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -30,8 +29,8 @@ const (
 	ModeUnmark = "unmark"
 )
 
-// ExclusionLabelKey und ExclusionLabelValue markieren einen Namespace, der nachts nicht herunterskaliert wird. Fest im
-// Code, nicht konfigurierbar: Der CronJob nightly-scale-down sucht die Namespaces mit genau diesem Label.
+// ExclusionLabelKey und ExclusionLabelValue markieren einen Namespace, der nachts nicht herunterskaliert wird.
+// Der CronJob nightly-scale-down sucht die Namespaces mit genau diesem Label.
 const (
 	ExclusionLabelKey   = "mycomp.de/skip-nightly-scale-down"
 	ExclusionLabelValue = "true"
@@ -53,24 +52,17 @@ func New(deps actions.Deps) actions.Handler {
 	return &Handler{client: deps.Client}
 }
 
-// Configure liest mode (mark | unmark). Das Label ist fest; stehen label-key oder label-value noch in einer älteren
-// Config, bricht der Start ab, statt die Angabe still zu ignorieren.
+// Configure liest mode (mark | unmark)
 func (h *Handler) Configure(extra map[string]any) error {
 	var s settings
 	if err := gitlabpipeline.DecodeExtra(extra, &s); err != nil {
 		return err
 	}
-	var errs []error
-	for _, key := range []string{"label-key", "label-value"} {
-		if _, ok := extra[key]; ok {
-			errs = append(errs, fmt.Errorf("%s wird nicht mehr konfiguriert, das Label ist fest: %s=%s", key, ExclusionLabelKey, ExclusionLabelValue))
-		}
-	}
 	if s.Mode != ModeMark && s.Mode != ModeUnmark {
-		errs = append(errs, fmt.Errorf("mode muss %q oder %q sein, erhalten: %q", ModeMark, ModeUnmark, s.Mode))
+		return fmt.Errorf("mode muss %q oder %q sein, erhalten: %q", ModeMark, ModeUnmark, s.Mode)
 	}
 	h.mode = s.Mode
-	return errors.Join(errs...)
+	return nil
 }
 
 // IsApplicable gilt für Namespaces: mark, solange das Ausnahme-Label mit ExclusionLabelValue fehlt; unmark, solange

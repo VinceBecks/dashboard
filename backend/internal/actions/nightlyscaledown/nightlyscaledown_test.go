@@ -117,10 +117,8 @@ func TestConfigure(t *testing.T) {
 		t.Fatalf("err = %v, mode = %q", err, h.mode)
 	}
 	invalid := map[string]map[string]any{
-		"label-key (alte Config)":   {"label-key": key, "mode": ModeMark},
-		"label-value (alte Config)": {"label-value": "true", "mode": ModeMark},
-		"mode fehlt":                {},
-		"mode unbekannt":            {"mode": "toggle"},
+		"mode fehlt":     {},
+		"mode unbekannt": {"mode": "toggle"},
 	}
 	for name, e := range invalid {
 		if err := New(actions.Deps{}).Configure(e); err == nil {
