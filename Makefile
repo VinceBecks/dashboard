@@ -52,4 +52,4 @@ backend-run:
 
 # CronJob-Anwendung einmal lokal ausführen; Konfiguration nur über Umgebungsvariablen (siehe README).
 nightly-scale-down-run:
-	KUBECONFIG="$(KUBECONFIG)" go -C backend run ./cmd/nightly-scale-down
+	KUBECONFIG="$(KUBECONFIG)" go -C backend run ./cmd/renew/nightly-scale-down

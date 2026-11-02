@@ -495,6 +495,9 @@ wird als **zwei Aktionen** konfiguriert, die sich gegenseitig ablösen:
 Nach der Ausführung kommt die Änderung über den Informer. Am Namespace steht dann automatisch die jeweils andere
 Aktion. Gesetzt bzw. entfernt wird per Merge-Patch, andere Labels bleiben unberührt.
 
+Die Ausnahme gilt **nur für den nächsten Lauf** des CronJobs: Nach dem Pipeline-Start entfernt er das Label wieder.
+Soll ein Namespace mehrere Nächte ausgenommen bleiben, muss die Aktion jeden Tag erneut ausgeführt werden.
+
 ```yaml
   - action-name: exclude-from-nightly-scale-down
     handler: nightly-scale-down-exclusion
@@ -987,7 +990,7 @@ kubectl -n feature-dashboard rollout restart deployment/feature-dashboard-backen
 ## Nächtliches Herunterskalieren (CronJob)
 
 Eine GitLab-Pipeline skaliert jede Nacht alle Feature-Umgebungen auf 0 Replicas. Ausgelöst wird sie von einer
-zweiten, kleinen Anwendung im selben Repository (`backend/cmd/nightly-scale-down`). Sie läuft als Kubernetes-CronJob.
+zweiten, kleinen Anwendung im selben Repository (`backend/cmd/renew/nightly-scale-down`). Sie läuft als Kubernetes-CronJob.
 Namespaces, die Entwickler im Dashboard mit der Aktion
 [`nightly-scale-down-exclusion`](#nightly-scale-down-exclusion) ausgenommen haben, bekommt die Pipeline als Liste.
 
@@ -1000,7 +1003,11 @@ Namespaces, die Entwickler im Dashboard mit der Aktion
 3. Die Pipeline über die Trigger-API starten, mit dem Pipeline-Input **`EXCLUDE_NAMESPACES`**: die Namen
    komma-getrennt und sortiert, z. B. `foo-feat-1,foo-feat-2`. Ist kein Namespace ausgenommen, ist der Wert leer,
    die Pipeline startet trotzdem.
-4. Pipeline-ID und URL loggen und mit Exit-Code 0 enden. Jeder Fehler führt zu Exit-Code 1, der Job gilt dann als
+4. Nach erfolgreichem Start das Ausnahme-Label an allen gelesenen Namespaces entfernen (Merge-Patch, andere Labels
+   bleiben). Die Ausnahme gilt damit nur für diesen Lauf. Schlägt der Start fehl, bleiben die Labels erhalten.
+   Inzwischen gelöschte Namespaces werden ignoriert; andere Fehler beim Entfernen führen zu Exit-Code 1, die
+   Pipeline läuft dann aber bereits.
+5. Pipeline-ID und URL loggen und mit Exit-Code 0 enden. Jeder Fehler führt zu Exit-Code 1, der Job gilt dann als
    fehlgeschlagen.
 
 **Umgebungsvariablen:**
@@ -1042,7 +1049,8 @@ kubectl apply -f backend/deploy/nightly-scale-down.yaml                  # vorhe
 - **Zeitplan:** `schedule: "0 20 * * *"` mit `timeZone: Europe/Berlin` ist ein Platzhalter.
 - **Kein Retry:** `concurrencyPolicy: Forbid` und `backoffLimit: 0` verhindern, dass in einer Nacht zwei
   Pipelines starten. Ein fehlgeschlagener Lauf wird nicht wiederholt.
-- **Rechte:** eigener ServiceAccount `nightly-scale-down` mit ClusterRole, nur `list` auf `namespaces`.
+- **Rechte:** eigener ServiceAccount `nightly-scale-down` mit ClusterRole, `list` und `patch` auf `namespaces` (Label lesen und
+  nach dem Start entfernen).
 - **Proxy und Company-CA:** wie beim Dashboard über die ConfigMaps `feature-dashboard-network` und `company-ca`.
 - **Label:** fest im Code (`nightlyscaledown.ExclusionLabelKey`/`ExclusionLabelValue`), dieselben Konstanten wie
   in der Dashboard-Aktion. Es gibt nichts abzustimmen.

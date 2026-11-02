@@ -1,5 +1,5 @@
 # CronJob nightly-scale-down: startet jede Nacht die GitLab-Pipeline, die alle Feature-Umgebungen auf 0 Replicas
-# skaliert
+# skaliert, und entfernt danach das Ausnahme-Label (eine Ausnahme gilt nur für einen Lauf)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -13,7 +13,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [namespaces]
-    verbs: [list] # Namespaces mit dem Ausnahme-Label lesen
+    verbs: [list, patch] # Namespaces mit dem Ausnahme-Label lesen, Label nach dem Pipeline-Start entfernen
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

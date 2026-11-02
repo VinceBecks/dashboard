@@ -3,10 +3,12 @@ package main
 // Logik des CronJobs: Er liest die Namespaces, die über das feste Label der Dashboard-Aktion
 // nightly-scale-down-exclusion (nightlyscaledown.ExclusionLabelKey) vom nächtlichen Herunterskalieren ausgenommen sind, und startet die GitLab-Pipeline, die das Herunterskalieren
 // ausführt. Die ausgenommenen Namespaces bekommt sie als Input EXCLUDE_NAMESPACES (komma-getrennt, sortiert).
+// Nach dem erfolgreichen Start entfernt er das Label wieder: Eine Ausnahme gilt nur für einen Lauf.
 // Konfiguriert wird nur über Umgebungsvariablen. Der Code gehört nur zu dieser Anwendung, nicht zum Dashboard.
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -14,8 +16,10 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"feature-dashboard/internal/actions/gitlabpipeline"
@@ -86,7 +90,31 @@ type starter interface {
 	Start(ctx context.Context, ref string, variables, inputs map[string]string) (gitlabpipeline.Pipeline, error)
 }
 
-// startScaleDown liest die ausgenommenen Namespaces und startet die Pipeline mit ihnen als Input EXCLUDE_NAMESPACES.
+// removeExclusions entfernt das Ausnahme-Label an den Namespaces per JSON-Merge-Patch; andere Labels bleiben
+// unberührt. Alle Namespaces werden versucht, Fehler gesammelt gemeldet. Inzwischen gelöschte Namespaces sind kein
+// Fehler.
+func removeExclusions(ctx context.Context, client kubernetes.Interface, names []string) error {
+	patch, err := json.Marshal(map[string]any{"metadata": map[string]any{"labels": map[string]any{nightlyscaledown.ExclusionLabelKey: nil}}})
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, name := range names {
+		_, err := client.CoreV1().Namespaces().Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("label %s konnte an Namespace %s nicht entfernt werden: %w", nightlyscaledown.ExclusionLabelKey, name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// errRemoveExclusions kennzeichnet Fehler beim Entfernen des Labels; die Pipeline läuft dann bereits.
+var errRemoveExclusions = errors.New("ausnahme-label konnte nicht entfernt werden")
+
+// startScaleDown liest die ausgenommenen Namespaces, startet die Pipeline mit ihnen als Input EXCLUDE_NAMESPACES und
+// entfernt danach das Ausnahme-Label, damit die Namespaces beim nächsten Lauf wieder herunterskaliert werden.
+// Schlägt der Start fehl, bleiben die Labels. Schlägt nur das Entfernen fehl, kommt die gestartete Pipeline zusammen
+// mit einem Fehler zurück, der errRemoveExclusions enthält.
 func startScaleDown(ctx context.Context, cfg config, client kubernetes.Interface, st starter) (gitlabpipeline.Pipeline, []string, error) {
 	excluded, err := excludedNamespaces(ctx, client)
 	if err != nil {
@@ -96,6 +124,9 @@ func startScaleDown(ctx context.Context, cfg config, client kubernetes.Interface
 	pipeline, err := st.Start(ctx, cfg.Ref, nil, inputs)
 	if err != nil {
 		return gitlabpipeline.Pipeline{}, excluded, fmt.Errorf("pipeline konnte nicht gestartet werden: %w", err)
+	}
+	if err := removeExclusions(ctx, client, excluded); err != nil {
+		return pipeline, excluded, errors.Join(errRemoveExclusions, err)
 	}
 	return pipeline, excluded, nil
 }

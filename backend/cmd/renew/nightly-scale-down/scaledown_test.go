@@ -7,8 +7,11 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"feature-dashboard/internal/actions/gitlabpipeline"
 	"feature-dashboard/internal/actions/nightlyscaledown"
@@ -84,15 +87,39 @@ func (f *fakeStarter) Start(_ context.Context, ref string, _, inputs map[string]
 	return gitlabpipeline.Pipeline{ID: 7, WebURL: "https://gitlab.example/p/-/pipelines/7"}, f.err
 }
 
+// labelsOf liefert die Labels eines Namespaces aus dem Fake-Client.
+func labelsOf(t *testing.T, c *fake.Clientset, name string) map[string]string {
+	t.Helper()
+	ns, err := c.CoreV1().Namespaces().Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ns.Labels
+}
+
 func TestStartScaleDown(t *testing.T) {
 	cfg := config{Ref: "main"}
 	s := &fakeStarter{}
-	p, excluded, err := startScaleDown(context.Background(), cfg, client(), s)
+	c := client()
+	p, excluded, err := startScaleDown(context.Background(), cfg, c, s)
 	if err != nil || p.ID != 7 || len(excluded) != 2 {
 		t.Fatalf("pipeline = %+v, excluded = %v, err = %v", p, excluded, err)
 	}
 	if s.ref != "main" || s.inputs[InputExcludeNamespaces] != "foo-feat-1,foo-feat-2" || len(s.inputs) != 1 {
 		t.Fatalf("ref = %q, inputs = %v", s.ref, s.inputs)
+	}
+
+	// Nach dem Start ist das Ausnahme-Label entfernt, andere Labels und andere Werte bleiben.
+	for _, name := range []string{"foo-feat-1", "foo-feat-2"} {
+		if _, ok := labelsOf(t, c, name)[key]; ok {
+			t.Errorf("%s: Label %s sollte entfernt sein", name, key)
+		}
+	}
+	if l := labelsOf(t, c, "foo-feat-1"); l["a"] != "b" {
+		t.Errorf("foo-feat-1: andere Labels verloren: %v", l)
+	}
+	if l := labelsOf(t, c, "foo-feat-3"); l[key] != "false" {
+		t.Errorf("foo-feat-3: Labels verändert: %v", l)
 	}
 
 	// Ohne markierte Namespaces wird trotzdem gestartet, mit leerem Input.
@@ -104,9 +131,41 @@ func TestStartScaleDown(t *testing.T) {
 		t.Fatalf("inputs = %v", s.inputs)
 	}
 
-	// Fehler beim Start werden durchgereicht.
+	// Fehler beim Start werden durchgereicht, die Labels bleiben.
 	s = &fakeStarter{err: errors.New("GitLab antwortete mit 401")}
-	if _, _, err := startScaleDown(context.Background(), cfg, client(), s); err == nil || !strings.Contains(err.Error(), "401") {
+	c = client()
+	if _, _, err := startScaleDown(context.Background(), cfg, c, s); err == nil || !strings.Contains(err.Error(), "401") || errors.Is(err, errRemoveExclusions) {
 		t.Fatalf("err = %v", err)
+	}
+	if l := labelsOf(t, c, "foo-feat-1"); l[key] != "true" {
+		t.Errorf("foo-feat-1: Label sollte bleiben: %v", l)
+	}
+}
+
+func TestStartScaleDownRemoveFails(t *testing.T) {
+	c := client()
+	c.PrependReactor("patch", "namespaces", func(a k8stesting.Action) (bool, runtime.Object, error) {
+		if a.(k8stesting.PatchAction).GetName() == "foo-feat-1" {
+			return true, nil, errors.New("forbidden")
+		}
+		return false, nil, nil
+	})
+	p, _, err := startScaleDown(context.Background(), config{Ref: "main"}, c, &fakeStarter{})
+	if !errors.Is(err, errRemoveExclusions) || !strings.Contains(err.Error(), "foo-feat-1") || p.ID != 7 {
+		t.Fatalf("pipeline = %+v, err = %v", p, err)
+	}
+	// Der zweite Namespace wird trotzdem bearbeitet.
+	if _, ok := labelsOf(t, c, "foo-feat-2")[key]; ok {
+		t.Error("foo-feat-2: Label sollte entfernt sein")
+	}
+}
+
+func TestRemoveExclusionsIgnoresNotFound(t *testing.T) {
+	c := fake.NewClientset()
+	c.PrependReactor("patch", "namespaces", func(a k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewNotFound(corev1.Resource("namespaces"), "weg")
+	})
+	if err := removeExclusions(context.Background(), c, []string{"weg"}); err != nil {
+		t.Fatal(err)
 	}
 }

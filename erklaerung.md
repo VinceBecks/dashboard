@@ -268,10 +268,11 @@ Startpunkt. Hier steht auch die einzige Liste der verfügbaren Handler-Typen (`r
 Eine In-Memory-Datenquelle **nur für Tests**. Sie erfüllt `api.Source` und `actions.ObjectReader`. Mit
 `Update(func(tx) …)` legen Tests Objekte direkt an, ohne Fake-Cluster und Informer.
 
-### Zweite Anwendung: `cmd/nightly-scale-down`
+### Zweite Anwendung: `cmd/renew/nightly-scale-down`
 Ein CronJob, kein Teil des Dashboards. Er liest einmal alle Namespaces mit dem Ausnahme-Label der Aktion
 `nightly-scale-down-exclusion` und startet die GitLab-Pipeline für das nächtliche Herunterskalieren. Die
-ausgenommenen Namespaces übergibt er komma-getrennt als Pipeline-Input `EXCLUDE_NAMESPACES`. Konfiguration nur über
+ausgenommenen Namespaces übergibt er komma-getrennt als Pipeline-Input `EXCLUDE_NAMESPACES`. Nach dem erfolgreichen
+Start entfernt er das Ausnahme-Label wieder (`removeExclusions`), die Ausnahme gilt also nur für einen Lauf. Konfiguration nur über
 Umgebungsvariablen (`configFromEnv` in `scaledown.go`), GitLab über `gitlabpipeline.Trigger.Start`. Der Code liegt
 nur im Paket `main` der Anwendung, das Dashboard kennt ihn nicht. Details in der `README.md`.
 

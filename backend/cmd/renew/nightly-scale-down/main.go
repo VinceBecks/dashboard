@@ -1,10 +1,12 @@
 // Command nightly-scale-down läuft als Kubernetes-CronJob: Er liest die Namespaces, die im Dashboard vom nächtlichen
 // Herunterskalieren ausgenommen wurden, und startet die GitLab-Pipeline, die alle übrigen Feature-Umgebungen auf
-// 0 Replicas skaliert. Konfiguration nur über Umgebungsvariablen (siehe scaledown.go).
+// 0 Replicas skaliert. Danach entfernt er das Ausnahme-Label, die Ausnahme gilt also nur für einen Lauf.
+// Konfiguration nur über Umgebungsvariablen (siehe scaledown.go).
 package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -19,7 +21,7 @@ const runTimeout = 2 * time.Minute
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("Nächtliches Herunterskalieren nicht gestartet", "error", err)
+		slog.Error("Nächtliches Herunterskalieren fehlgeschlagen", "error", err)
 		os.Exit(1)
 	}
 }
@@ -45,9 +47,13 @@ func run() error {
 	if excluded != nil {
 		slog.Info("Ausgenommene Namespaces gelesen", "count", len(excluded), "namespaces", strings.Join(excluded, ","))
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, errRemoveExclusions) {
 		return err
 	}
 	slog.Info("Pipeline für das nächtliche Herunterskalieren gestartet", "id", pipeline.ID, "url", pipeline.WebURL)
+	if err != nil {
+		return err
+	}
+	slog.Info("Ausnahme-Labels entfernt", "count", len(excluded), "namespaces", strings.Join(excluded, ","))
 	return nil
 }

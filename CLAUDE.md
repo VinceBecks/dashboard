@@ -33,7 +33,7 @@ Backend-Pakete (`backend/`):
 | Paket                               | Aufgabe                                                                                                                                                                                                                                                                 |
 |-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `cmd/dashboard`                     | Startup, Wiring, Registrierung der ActionHandler                                                                                                                                                                                                                        |
-| `cmd/nightly-scale-down`            | Zweite Anwendung (CronJob): startet die Pipeline für das nächtliche Herunterskalieren; Logik in `scaledown.go` (Konfiguration aus Umgebungsvariablen, Namespaces mit Ausnahme-Label lesen, Pipeline mit Input `EXCLUDE_NAMESPACES` starten)                             |
+| `cmd/renew/nightly-scale-down`      | Zweite Anwendung (CronJob): startet die Pipeline für das nächtliche Herunterskalieren; Logik in `scaledown.go` (Konfiguration aus Umgebungsvariablen, Namespaces mit Ausnahme-Label lesen, Pipeline mit Input `EXCLUDE_NAMESPACES` starten, danach Label entfernen) |
 | `internal/config`                   | `config.yaml` laden/validieren                                                                                                                                                                                                                                          |
 | `internal/model`                    | Stored-Object-Structs, `NamespaceView`                                                                                                                                                                                                                                  |
 | `internal/project`                  | Namespace-Labels → Projekt                                                                                                                                                                                                                                              |
@@ -401,6 +401,7 @@ aus):
 
 - Das Label ist **fest im Code**: `nightlyscaledown.ExclusionLabelKey"`, `ExclusionLabelValue`. Dashboard-Handler und
   CronJob nutzen dieselben Konstanten;.
+- Die Ausnahme gilt nur für den nächsten Lauf des CronJobs; danach entfernt er das Label.
 - Nur für das nächtliche Herunterskalieren gedacht. Ein Handler-Typ, zwei Aktionen (`mode`). `mark` wird nur
   angeboten, solange das Label mit `true` fehlt, `unmark` nur, solange es gesetzt ist (`IsApplicable`). Ein anderer
   Wert gilt als nicht gesetzt. Nach der Ausführung tauscht der Event-Hub die angebotene Aktion über das `upsert` des
@@ -485,10 +486,10 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
 
 ## CronJob `nightly-scale-down`
 
-Zweite Anwendung im selben Go-Modul und Image (`cmd/nightly-scale-down`, Binary `/nightly-scale-down`), deployt als
+Zweite Anwendung im selben Go-Modul und Image (`cmd/renew/nightly-scale-down`, Binary `/nightly-scale-down`), deployt als
 CronJob (`backend/deploy/nightly-scale-down.yaml`, Plan `plans/nightly-scale-down-cronjob.md`).
 
-- Der CronJob-Code liegt nur unter `cmd/nightly-scale-down` (Paket `main`), das Dashboard kennt ihn nicht. Aus
+- Der CronJob-Code liegt nur unter `cmd/renew/nightly-scale-down` (Paket `main`), das Dashboard kennt ihn nicht. Aus
   `internal/` nutzt er nur gemeinsame Bausteine: `kube.NewClient`, `gitlabpipeline.Trigger` und die Label-Konstanten
   aus `nightlyscaledown`.
 
@@ -500,7 +501,11 @@ CronJob (`backend/deploy/nightly-scale-down.yaml`, Plan `plans/nightly-scale-dow
 - Konfiguration nur über Umgebungsvariablen (`GITLAB_URL`, `GITLAB_PROJECT`, `GITLAB_REF`, `GITLAB_TRIGGER_TOKEN`,
   optional `GITLAB_TIMEOUT`), Token aus dem Secret `nightly-scale-down-gitlab`. Proxy und CA wie beim Dashboard.
 - Fehler führen zu Exit-Code 1. Kein Retry (`backoffLimit: 0`, `concurrencyPolicy: Forbid`).
-- RBAC: eigener ServiceAccount, nur `list` auf `namespaces`.
+- **Ausnahme gilt nur für einen Lauf:** Nach dem erfolgreichen Pipeline-Start entfernt der CronJob das Ausnahme-Label
+  an allen gelesenen Namespaces (Merge-Patch, andere Labels bleiben; gelöschte Namespaces werden ignoriert). Schlägt
+  der Start fehl, bleiben die Labels. Schlägt nur das Entfernen fehl, endet der Job mit Exit-Code 1 (Pipeline läuft
+  bereits). Plan: `plans/nightly-scale-down-einmalige-ausnahme.md`.
+- RBAC: eigener ServiceAccount, `list` und `patch` auf `namespaces`.
 
 ## Frontend (nicht in diesem Repository)
 

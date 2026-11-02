@@ -18,7 +18,7 @@ RUN --mount=type=secret,id=company_ca,required=false \
     go mod download
 COPY backend/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /dashboard ./cmd/dashboard && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /nightly-scale-down ./cmd/nightly-scale-down
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /nightly-scale-down ./cmd/renew/nightly-scale-down
 
 # Zur Laufzeit wird die Company-CA nicht ins Image gebacken, sondern im Cluster eingehängt
 # (SSL_CERT_DIR, siehe backend/deploy/network.example.yaml).
