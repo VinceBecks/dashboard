@@ -37,8 +37,14 @@ func TestConfigFromEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Ref != "main" || c.Trigger.TokenEnv != EnvTriggerToken || c.Trigger.Project != "team/scale-down" {
+	if c.Ref != "main" || c.Trigger.TokenEnv != EnvTriggerToken || c.Trigger.Project != "team/scale-down" || c.TrimNamespacePrefix != "" {
 		t.Fatalf("config = %+v", c)
+	}
+
+	e := validEnv()
+	e[EnvTrimNamespacePrefix] = "foo-"
+	if c, err := configFromEnv(env(e)); err != nil || c.TrimNamespacePrefix != "foo-" {
+		t.Fatalf("config = %+v, err = %v", c, err)
 	}
 
 	// Alle fehlenden Pflichtvariablen werden gemeinsam gemeldet.
@@ -49,7 +55,7 @@ func TestConfigFromEnv(t *testing.T) {
 		}
 	}
 
-	e := validEnv()
+	e = validEnv()
 	e[EnvGitLabTimeout] = "bald"
 	if _, err := configFromEnv(env(e)); err == nil {
 		t.Error("ungültiger Timeout: Fehler erwartet")
@@ -73,6 +79,26 @@ func TestExcludedNamespaces(t *testing.T) {
 	got, err := excludedNamespaces(context.Background(), client())
 	if err != nil || strings.Join(got, ",") != "foo-feat-1,foo-feat-2" {
 		t.Fatalf("got %v, err %v", got, err)
+	}
+}
+
+func TestPipelineNamespaces(t *testing.T) {
+	tests := []struct {
+		names  []string
+		prefix string
+		want   string
+	}{
+		{[]string{"foo-feat-1", "foo-feat-2"}, "", "foo-feat-1,foo-feat-2"},
+		{[]string{"foo-feat-1", "foo-feat-2"}, "foo-", "feat-1,feat-2"},
+		{[]string{"bar-x", "foo-feat-1"}, "foo-", "bar-x,feat-1"}, // ohne Präfix unverändert, sortiert
+		{[]string{"foo-"}, "foo-", ""},                            // leerer Name fällt weg
+		{[]string{"feat-1", "foo-feat-1"}, "foo-", "feat-1"},      // Duplikat nur einmal
+		{nil, "foo-", ""},
+	}
+	for _, tt := range tests {
+		if got := strings.Join(pipelineNamespaces(tt.names, tt.prefix), ","); got != tt.want {
+			t.Errorf("pipelineNamespaces(%v, %q) = %q, want %q", tt.names, tt.prefix, got, tt.want)
+		}
 	}
 }
 
@@ -120,6 +146,21 @@ func TestStartScaleDown(t *testing.T) {
 	}
 	if l := labelsOf(t, c, "foo-feat-3"); l[key] != "false" {
 		t.Errorf("foo-feat-3: Labels verändert: %v", l)
+	}
+
+	// Mit Präfix wird nur der Input gekürzt, die Labels werden an den echten Namespaces entfernt.
+	s = &fakeStarter{}
+	c = client()
+	if _, _, err := startScaleDown(context.Background(), config{Ref: "main", TrimNamespacePrefix: "foo-"}, c, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.inputs[InputExcludeNamespaces]; got != "feat-1,feat-2" {
+		t.Errorf("input = %q", got)
+	}
+	for _, name := range []string{"foo-feat-1", "foo-feat-2"} {
+		if _, ok := labelsOf(t, c, name)[key]; ok {
+			t.Errorf("%s: Label %s sollte entfernt sein", name, key)
+		}
 	}
 
 	// Ohne markierte Namespaces wird trotzdem gestartet, mit leerem Input.

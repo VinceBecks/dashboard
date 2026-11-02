@@ -60,6 +60,9 @@ spec:
                   value: main
                 - name: GITLAB_TIMEOUT
                   value: 15s
+                # Optional: Präfix, das von den Namen in EXCLUDE_NAMESPACES entfernt wird.
+                # - name: TRIM_NAMESPACE_PREFIX
+                #   value: foo-
               envFrom:
                 # GITLAB_TRIGGER_TOKEN, siehe nightly-scale-down-secret.example.yaml.
                 - secretRef:

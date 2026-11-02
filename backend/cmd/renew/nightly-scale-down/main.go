@@ -50,7 +50,9 @@ func run() error {
 	if err != nil && !errors.Is(err, errRemoveExclusions) {
 		return err
 	}
-	slog.Info("Pipeline für das nächtliche Herunterskalieren gestartet", "id", pipeline.ID, "url", pipeline.WebURL)
+	input := strings.Join(pipelineNamespaces(excluded, cfg.TrimNamespacePrefix), ",")
+	slog.Info("Pipeline für das nächtliche Herunterskalieren gestartet", "id", pipeline.ID, "url", pipeline.WebURL,
+		InputExcludeNamespaces, input)
 	if err != nil {
 		return err
 	}

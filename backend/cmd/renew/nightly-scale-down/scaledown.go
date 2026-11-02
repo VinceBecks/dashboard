@@ -4,6 +4,7 @@ package main
 // nightly-scale-down-exclusion (nightlyscaledown.ExclusionLabelKey) vom nächtlichen Herunterskalieren ausgenommen sind, und startet die GitLab-Pipeline, die das Herunterskalieren
 // ausführt. Die ausgenommenen Namespaces bekommt sie als Input EXCLUDE_NAMESPACES (komma-getrennt, sortiert).
 // Nach dem erfolgreichen Start entfernt er das Label wieder: Eine Ausnahme gilt nur für einen Lauf.
+// Optional entfernt er vor der Übergabe ein Präfix von den Namen (TRIM_NAMESPACE_PREFIX).
 // Konfiguriert wird nur über Umgebungsvariablen. Der Code gehört nur zu dieser Anwendung, nicht zum Dashboard.
 
 import (
@@ -36,18 +37,22 @@ const (
 	EnvGitLabRef     = "GITLAB_REF"
 	EnvTriggerToken  = "GITLAB_TRIGGER_TOKEN"
 	EnvGitLabTimeout = "GITLAB_TIMEOUT"
+	// EnvTrimNamespacePrefix ist optional: Präfix, das von den Namen in EXCLUDE_NAMESPACES entfernt wird.
+	EnvTrimNamespacePrefix = "TRIM_NAMESPACE_PREFIX"
 )
 
 // config ist die Konfiguration aus den Umgebungsvariablen.
 type config struct {
 	Ref     string
 	Trigger gitlabpipeline.TriggerConfig
+	// TrimNamespacePrefix wird von den Namen im Pipeline-Input entfernt; leer = nicht kürzen.
+	TrimNamespacePrefix string
 }
 
 // configFromEnv liest und prüft die Konfiguration; alle Fehler werden gemeinsam gemeldet. Das Trigger-Token prüft erst
 // gitlabpipeline.NewTrigger (es liest EnvTriggerToken selbst).
 func configFromEnv(getenv func(string) string) (config, error) {
-	c := config{Ref: getenv(EnvGitLabRef)}
+	c := config{Ref: getenv(EnvGitLabRef), TrimNamespacePrefix: getenv(EnvTrimNamespacePrefix)}
 	c.Trigger = gitlabpipeline.TriggerConfig{
 		GitLabURL: getenv(EnvGitLabURL),
 		Project:   getenv(EnvGitLabProject),
@@ -85,6 +90,19 @@ func excludedNamespaces(ctx context.Context, client kubernetes.Interface) ([]str
 	return names, nil
 }
 
+// pipelineNamespaces liefert die Namen für den Pipeline-Input: prefix entfernt (Namen ohne prefix bleiben
+// unverändert), leere Namen weggelassen, sortiert und ohne Duplikate.
+func pipelineNamespaces(names []string, prefix string) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if trimmed := strings.TrimPrefix(name, prefix); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // starter startet eine Pipeline (erfüllt von *gitlabpipeline.Trigger).
 type starter interface {
 	Start(ctx context.Context, ref string, variables, inputs map[string]string) (gitlabpipeline.Pipeline, error)
@@ -111,7 +129,8 @@ func removeExclusions(ctx context.Context, client kubernetes.Interface, names []
 // errRemoveExclusions kennzeichnet Fehler beim Entfernen des Labels; die Pipeline läuft dann bereits.
 var errRemoveExclusions = errors.New("ausnahme-label konnte nicht entfernt werden")
 
-// startScaleDown liest die ausgenommenen Namespaces, startet die Pipeline mit ihnen als Input EXCLUDE_NAMESPACES und
+// startScaleDown liest die ausgenommenen Namespaces, startet die Pipeline mit ihnen als Input EXCLUDE_NAMESPACES
+// (ohne cfg.TrimNamespacePrefix, siehe pipelineNamespaces) und
 // entfernt danach das Ausnahme-Label, damit die Namespaces beim nächsten Lauf wieder herunterskaliert werden.
 // Schlägt der Start fehl, bleiben die Labels. Schlägt nur das Entfernen fehl, kommt die gestartete Pipeline zusammen
 // mit einem Fehler zurück, der errRemoveExclusions enthält.
@@ -120,11 +139,12 @@ func startScaleDown(ctx context.Context, cfg config, client kubernetes.Interface
 	if err != nil {
 		return gitlabpipeline.Pipeline{}, nil, err
 	}
-	inputs := map[string]string{InputExcludeNamespaces: strings.Join(excluded, ",")}
+	inputs := map[string]string{InputExcludeNamespaces: strings.Join(pipelineNamespaces(excluded, cfg.TrimNamespacePrefix), ",")}
 	pipeline, err := st.Start(ctx, cfg.Ref, nil, inputs)
 	if err != nil {
 		return gitlabpipeline.Pipeline{}, excluded, fmt.Errorf("pipeline konnte nicht gestartet werden: %w", err)
 	}
+	// Das Label sitzt an den echten Namespaces, daher die ungekürzten Namen.
 	if err := removeExclusions(ctx, client, excluded); err != nil {
 		return pipeline, excluded, errors.Join(errRemoveExclusions, err)
 	}

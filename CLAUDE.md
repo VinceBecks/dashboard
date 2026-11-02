@@ -500,6 +500,9 @@ CronJob (`backend/deploy/nightly-scale-down.yaml`, Plan `plans/nightly-scale-dow
   (fertige Werte, `variables` und `inputs`), das auch `Trigger.Run` nutzt.
 - Konfiguration nur über Umgebungsvariablen (`GITLAB_URL`, `GITLAB_PROJECT`, `GITLAB_REF`, `GITLAB_TRIGGER_TOKEN`,
   optional `GITLAB_TIMEOUT`), Token aus dem Secret `nightly-scale-down-gitlab`. Proxy und CA wie beim Dashboard.
+- Optional `TRIM_NAMESPACE_PREFIX`: Präfix, das von den Namen in `EXCLUDE_NAMESPACES` entfernt wird
+  (`pipelineNamespaces`; Namen ohne Präfix unverändert, danach sortiert und ohne Duplikate). Nur der Pipeline-Input
+  wird gekürzt, das Label wird an den vollen Namespace-Namen entfernt.
 - Fehler führen zu Exit-Code 1. Kein Retry (`backoffLimit: 0`, `concurrencyPolicy: Forbid`).
 - **Ausnahme gilt nur für einen Lauf:** Nach dem erfolgreichen Pipeline-Start entfernt der CronJob das Ausnahme-Label
   an allen gelesenen Namespaces (Merge-Patch, andere Labels bleiben; gelöschte Namespaces werden ignoriert). Schlägt

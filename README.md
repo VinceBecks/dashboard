@@ -1002,7 +1002,8 @@ Namespaces, die Entwickler im Dashboard mit der Aktion
    Projekt-Labels spielen dabei keine Rolle.
 3. Die Pipeline über die Trigger-API starten, mit dem Pipeline-Input **`EXCLUDE_NAMESPACES`**: die Namen
    komma-getrennt und sortiert, z. B. `foo-feat-1,foo-feat-2`. Ist kein Namespace ausgenommen, ist der Wert leer,
-   die Pipeline startet trotzdem.
+   die Pipeline startet trotzdem. Ist `TRIM_NAMESPACE_PREFIX` gesetzt, wird dieses Präfix vorher von den Namen
+   entfernt (`foo-` → `feat-1,feat-2`); Namen ohne das Präfix bleiben unverändert, doppelte nur einmal.
 4. Nach erfolgreichem Start das Ausnahme-Label an allen gelesenen Namespaces entfernen (Merge-Patch, andere Labels
    bleiben). Die Ausnahme gilt damit nur für diesen Lauf. Schlägt der Start fehl, bleiben die Labels erhalten.
    Inzwischen gelöschte Namespaces werden ignoriert; andere Fehler beim Entfernen führen zu Exit-Code 1, die
@@ -1019,6 +1020,7 @@ Namespaces, die Entwickler im Dashboard mit der Aktion
 | `GITLAB_REF`                              | ja      | Branch oder Tag, z. B. `main`                                 |
 | `GITLAB_TRIGGER_TOKEN`                    | ja      | Pipeline-Trigger-Token (im Cluster aus dem Secret)            |
 | `GITLAB_TIMEOUT`                          | nein    | HTTP-Timeout, Standard `10s`                                  |
+| `TRIM_NAMESPACE_PREFIX`                   | nein    | Präfix, das von den Namen in `EXCLUDE_NAMESPACES` entfernt wird; das Label wird trotzdem an den vollen Namespaces entfernt |
 | `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_DIR` | nein    | Proxy und Company-CA wie beim Dashboard                       |
 | `KUBECONFIG`                              | nein    | Nur lokal; im Cluster gilt die In-Cluster-Konfiguration       |
 
