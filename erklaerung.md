@@ -271,7 +271,8 @@ Eine In-Memory-Datenquelle **nur für Tests**. Sie erfüllt `api.Source` und `ac
 ### Zweite Anwendung: `cmd/renew/nightly-scale-down`
 Ein CronJob, kein Teil des Dashboards. Er liest einmal alle Namespaces mit dem Ausnahme-Label der Aktion
 `nightly-scale-down-exclusion` und startet die GitLab-Pipeline für das nächtliche Herunterskalieren. Die
-ausgenommenen Namespaces übergibt er komma-getrennt als Pipeline-Input `EXCLUDE_NAMESPACES`. Nach dem erfolgreichen
+ausgenommenen Namespaces übergibt er komma-getrennt als Pipeline-Input `EXCLUDE_NAMESPACES`, dazu den festen Input
+`ACTION=STOP_ALL_FUs`. Nach dem erfolgreichen
 Start entfernt er das Ausnahme-Label wieder (`removeExclusions`), die Ausnahme gilt also nur für einen Lauf. Konfiguration nur über
 Umgebungsvariablen (`configFromEnv` in `scaledown.go`), GitLab über `gitlabpipeline.Trigger.Start`. Der Code liegt
 nur im Paket `main` der Anwendung, das Dashboard kennt ihn nicht. Details in der `README.md`.

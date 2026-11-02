@@ -4,6 +4,7 @@ package main
 // nightly-scale-down-exclusion (nightlyscaledown.ExclusionLabelKey) vom nächtlichen Herunterskalieren ausgenommen sind, und startet die GitLab-Pipeline, die das Herunterskalieren
 // ausführt. Die ausgenommenen Namespaces bekommt sie als Input EXCLUDE_NAMESPACES (komma-getrennt, sortiert).
 // Nach dem erfolgreichen Start entfernt er das Label wieder: Eine Ausnahme gilt nur für einen Lauf.
+// Zusätzlich setzt er den festen Input ACTION=STOP_ALL_FUs.
 // Optional entfernt er vor der Übergabe ein Präfix von den Namen (TRIM_NAMESPACE_PREFIX).
 // Konfiguriert wird nur über Umgebungsvariablen. Der Code gehört nur zu dieser Anwendung, nicht zum Dashboard.
 
@@ -27,8 +28,12 @@ import (
 	"feature-dashboard/internal/actions/nightlyscaledown"
 )
 
-// InputExcludeNamespaces ist der Pipeline-Input (spec:inputs) mit den ausgenommenen Namespaces.
-const InputExcludeNamespaces = "EXCLUDE_NAMESPACES"
+// Pipeline-Inputs (spec:inputs).
+const (
+	InputExcludeNamespaces = "EXCLUDE_NAMESPACES"
+	InputAction            = "ACTION"
+	InputActionValue       = "STOP_ALL_FUs"
+)
 
 // Namen der Umgebungsvariablen.
 const (
@@ -139,7 +144,10 @@ func startScaleDown(ctx context.Context, cfg config, client kubernetes.Interface
 	if err != nil {
 		return gitlabpipeline.Pipeline{}, nil, err
 	}
-	inputs := map[string]string{InputExcludeNamespaces: strings.Join(pipelineNamespaces(excluded, cfg.TrimNamespacePrefix), ",")}
+	inputs := map[string]string{
+		InputExcludeNamespaces: strings.Join(pipelineNamespaces(excluded, cfg.TrimNamespacePrefix), ","),
+		InputAction:            InputActionValue,
+	}
 	pipeline, err := st.Start(ctx, cfg.Ref, nil, inputs)
 	if err != nil {
 		return gitlabpipeline.Pipeline{}, excluded, fmt.Errorf("pipeline konnte nicht gestartet werden: %w", err)

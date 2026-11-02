@@ -1004,6 +1004,7 @@ Namespaces, die Entwickler im Dashboard mit der Aktion
    komma-getrennt und sortiert, z. B. `foo-feat-1,foo-feat-2`. Ist kein Namespace ausgenommen, ist der Wert leer,
    die Pipeline startet trotzdem. Ist `TRIM_NAMESPACE_PREFIX` gesetzt, wird dieses Präfix vorher von den Namen
    entfernt (`foo-` → `feat-1,feat-2`); Namen ohne das Präfix bleiben unverändert, doppelte nur einmal.
+   Zusätzlich wird immer der feste Input **`ACTION`** mit dem Wert `STOP_ALL_FUs` gesetzt (nicht konfigurierbar).
 4. Nach erfolgreichem Start das Ausnahme-Label an allen gelesenen Namespaces entfernen (Merge-Patch, andere Labels
    bleiben). Die Ausnahme gilt damit nur für diesen Lauf. Schlägt der Start fehl, bleiben die Labels erhalten.
    Inzwischen gelöschte Namespaces werden ignoriert; andere Fehler beim Entfernen führen zu Exit-Code 1, die
@@ -1024,9 +1025,9 @@ Namespaces, die Entwickler im Dashboard mit der Aktion
 | `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_DIR` | nein    | Proxy und Company-CA wie beim Dashboard                       |
 | `KUBECONFIG`                              | nein    | Nur lokal; im Cluster gilt die In-Cluster-Konfiguration       |
 
-**Pipeline:** `EXCLUDE_NAMESPACES` ist ein Pipeline-Input (`spec:inputs`), keine CI/CD-Variable. Er wird als
-`inputs[EXCLUDE_NAMESPACES]` an die Trigger-API übergeben, dafür braucht es eine GitLab-Version, die Inputs über
-die Trigger-API annimmt. Beispiel für den Kopf der `.gitlab-ci.yml`:
+**Pipeline:** `EXCLUDE_NAMESPACES` und `ACTION` sind Pipeline-Inputs (`spec:inputs`), keine CI/CD-Variablen. Sie
+werden als `inputs[EXCLUDE_NAMESPACES]` und `inputs[ACTION]` an die Trigger-API übergeben, dafür braucht es eine
+GitLab-Version, die Inputs über die Trigger-API annimmt. Beispiel für den Kopf der `.gitlab-ci.yml`:
 
 ```yaml
 spec:
@@ -1035,6 +1036,10 @@ spec:
       type: string
       default: ""
       description: Komma-getrennte Namespaces, die nicht herunterskaliert werden
+    ACTION:
+      type: string
+      default: ""
+      description: Vom CronJob immer STOP_ALL_FUs
 ---
 scale-down:
   script:

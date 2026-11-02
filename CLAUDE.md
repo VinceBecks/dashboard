@@ -497,7 +497,8 @@ CronJob (`backend/deploy/nightly-scale-down.yaml`, Plan `plans/nightly-scale-dow
   Kein Informer, keine `config.yaml`, Projekt-Labels spielen keine Rolle.
 - Startet die GitLab-Pipeline mit dem **Pipeline-Input** (`spec:inputs`, nicht Variable) `EXCLUDE_NAMESPACES`:
   komma-getrennt, sortiert, leer, wenn keiner ausgenommen ist. Dafür gibt es `gitlabpipeline.Trigger.Start`
-  (fertige Werte, `variables` und `inputs`), das auch `Trigger.Run` nutzt.
+  (fertige Werte, `variables` und `inputs`), das auch `Trigger.Run` nutzt. Zusätzlich immer den festen Input
+  `ACTION=STOP_ALL_FUs` (Konstanten `InputAction`/`InputActionValue`, nicht konfigurierbar).
 - Konfiguration nur über Umgebungsvariablen (`GITLAB_URL`, `GITLAB_PROJECT`, `GITLAB_REF`, `GITLAB_TRIGGER_TOKEN`,
   optional `GITLAB_TIMEOUT`), Token aus dem Secret `nightly-scale-down-gitlab`. Proxy und CA wie beim Dashboard.
 - Optional `TRIM_NAMESPACE_PREFIX`: Präfix, das von den Namen in `EXCLUDE_NAMESPACES` entfernt wird

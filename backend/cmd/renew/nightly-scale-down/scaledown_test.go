@@ -131,7 +131,7 @@ func TestStartScaleDown(t *testing.T) {
 	if err != nil || p.ID != 7 || len(excluded) != 2 {
 		t.Fatalf("pipeline = %+v, excluded = %v, err = %v", p, excluded, err)
 	}
-	if s.ref != "main" || s.inputs[InputExcludeNamespaces] != "foo-feat-1,foo-feat-2" || len(s.inputs) != 1 {
+	if s.ref != "main" || s.inputs[InputExcludeNamespaces] != "foo-feat-1,foo-feat-2" || s.inputs[InputAction] != "STOP_ALL_FUs" || len(s.inputs) != 2 {
 		t.Fatalf("ref = %q, inputs = %v", s.ref, s.inputs)
 	}
 
@@ -168,7 +168,7 @@ func TestStartScaleDown(t *testing.T) {
 	if _, _, err := startScaleDown(context.Background(), cfg, fake.NewClientset(), s); err != nil {
 		t.Fatal(err)
 	}
-	if v, ok := s.inputs[InputExcludeNamespaces]; !ok || v != "" {
+	if v, ok := s.inputs[InputExcludeNamespaces]; !ok || v != "" || s.inputs[InputAction] != "STOP_ALL_FUs" {
 		t.Fatalf("inputs = %v", s.inputs)
 	}
 
