@@ -92,7 +92,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	go pipelines.NewTracker(pipelineState, cfg.Pipelines.Poll()).Run(ctx)
 
 	apiServer := api.NewServer(cluster, registry, cfg.Projects, cluster.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).
-		WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster).WithPipelines(pipelineState).WithTeams(cfg.Teams)
+		WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster).WithPipelines(pipelineState).WithTeams(cfg.Teams).WithCORS(cfg.CORS)
 	// Endet ctx, beendet der Hub alle Event-Streams; erst dann kann srv.Shutdown abschließen.
 	go apiServer.Run(ctx)
 	// Kein WriteTimeout: GET /api/events hält die Verbindung dauerhaft offen.

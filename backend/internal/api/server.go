@@ -37,6 +37,8 @@ type Server struct {
 	projects  map[string]config.Project
 	teams     config.TeamsConfig
 	hub       *Hub
+	// corsOrigins sind die erlaubten Origins; leer heißt: keine CORS-Header.
+	corsOrigins []string
 }
 
 // Source ist die Datenquelle des Servers, im Betrieb der Informer-Cache (kube.Cluster).
@@ -87,6 +89,13 @@ func (s *Server) WithTeams(t config.TeamsConfig) *Server {
 	return s
 }
 
+// WithCORS erlaubt Browser-Aufrufe von den angegebenen Origins ("*" = alle). Ohne Origins setzt der Server keine
+// CORS-Header.
+func (s *Server) WithCORS(c config.CORSConfig) *Server {
+	s.corsOrigins = c.AllowedOrigins
+	return s
+}
+
 // WithPipelines lässt den Server an jedem Objekt dessen laufende Pipelines ausliefern. Änderungen daran lösen
 // Events aus wie Änderungen im Cluster.
 func (s *Server) WithPipelines(p *pipelines.State) *Server {
@@ -126,7 +135,7 @@ func (s *Server) Handler() http.Handler {
 	if s.staticDir != "" {
 		mux.Handle("GET /", staticHandler(s.staticDir))
 	}
-	return mux
+	return corsMiddleware(s.corsOrigins, mux)
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {

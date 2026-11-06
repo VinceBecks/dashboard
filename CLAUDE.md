@@ -166,6 +166,7 @@ Wird beim Startup einmal eingelesen. Enthält:
 5. Kopier-Befehle (optional)
 6. Abfrage laufender Pipelines (optional)
 7. Entwickler-Teams (optional)
+8. CORS: erlaubte Origins (optional, Standard: keine, also kein CORS)
 
 Beispiel für Projekte:
 
@@ -520,8 +521,10 @@ Für dieses Repository gilt daraus:
 - **API maximal generisch halten:** Das Frontend kennt keine konkreten Aktionen. Buttons, Icons, Farben und Formulare
   werden vollständig aus den API-Daten aufgebaut. Aktionsspezifische Logik gehört ins Backend; fehlt dem Frontend eine
   Information, wird die API erweitert (`openapi.yaml`, `example-api.jsonc`).
-- **Kein CORS:** Das Backend setzt keine CORS-Header. Das Frontend muss unter derselben Origin wie die API laufen (z. B.
-  Ingress `/api` → Backend, lokal Dev-Proxy auf `localhost:8080`).
+- **CORS optional:** Standardmäßig setzt das Backend keine CORS-Header; das Frontend muss dann unter derselben Origin
+  wie die API laufen (z. B. Ingress `/api` → Backend, lokal Dev-Proxy auf `localhost:8080`). Mit
+  `cors.allowed-origins` (Liste von `http(s)://host[:port]`, `*` = alle) erlaubt das Backend Browser-Aufrufe von
+  anderen Origins (`internal/api/cors.go`; Methoden GET/PATCH/OPTIONS, Header Content-Type, nie Credentials).
 - `--static-dir` (`internal/api/static.go`) bleibt im Backend erhalten, wird im Image aber nicht mehr genutzt.
 
 ## Leitplanken für Änderungen

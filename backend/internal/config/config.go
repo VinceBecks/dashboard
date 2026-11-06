@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ type Config struct {
 	ActionHandlers []ActionHandlerConfig `yaml:"action-handlers"`
 	Cluster        ClusterConfig         `yaml:"cluster"`
 	Pipelines      PipelinesConfig       `yaml:"pipelines"`
+	CORS           CORSConfig            `yaml:"cors"`
 	// Teams sind die Entwickler-Teams, denen Feature-Umgebungen per Namespace-Label zugeordnet werden.
 	Teams TeamsConfig `yaml:"teams"`
 	// LinkVariables sind statische Werte für Link-Templates (.Vars); je Projekt per link-variables-overrides
@@ -49,6 +51,28 @@ type CopyCommand struct {
 type CommandTarget struct {
 	// Command ist ein Go-Template; nutzt es bei Pods .Container, entsteht je Container ein Befehl.
 	Command string `yaml:"command"`
+}
+
+// CORSConfig legt fest, von welchen Origins Browser die API aufrufen dürfen.
+type CORSConfig struct {
+	// AllowedOrigins sind die erlaubten Origins (Schema, Host, optional Port, ohne Pfad), z. B.
+	// https://dashboard.mycomp.de. "*" erlaubt jede Origin. Leer (Standard): keine CORS-Header, die API ist nur
+	// von der eigenen Origin aus nutzbar.
+	AllowedOrigins []string `yaml:"allowed-origins"`
+}
+
+func (c CORSConfig) validate() []error {
+	var errs []error
+	for i, o := range c.AllowedOrigins {
+		if o == "*" {
+			continue
+		}
+		u, err := url.Parse(o)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			errs = append(errs, fmt.Errorf("cors.allowed-origins[%d]: %q muss die Form http(s)://host[:port] haben (ohne Pfad und Slash am Ende) oder * sein", i, o))
+		}
+	}
+	return errs
 }
 
 // PipelinesConfig legt fest, wie oft das Backend den Status laufender GitLab-Pipelines abfragt.
@@ -267,6 +291,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, validateCopyCommands(c.CopyCommands, projects)...)
 	errs = append(errs, c.Cluster.validate()...)
 	errs = append(errs, c.Pipelines.validate()...)
+	errs = append(errs, c.CORS.validate()...)
 	errs = append(errs, c.Teams.validate()...)
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {

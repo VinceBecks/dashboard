@@ -187,6 +187,13 @@ teams:
     - team-id: platform
       team-label: Team Plattform
 
+# Origins, von denen Browser die API aufrufen dürfen (CORS). Optional; ohne Angabe (Standard) setzt das Backend keine
+# CORS-Header und die API ist nur von der eigenen Origin nutzbar. Form: http(s)://host[:port], "*" erlaubt alle.
+cors:
+  allowed-origins: [ ]
+#    - https://dashboard.mycomp.de
+#    - http://localhost:5173
+
 cluster:
   dns-name: demo-cluster-control-plane   # Pflicht; DNS-Name oder IP der Nodes für <dns-name>:<node-port>
 
