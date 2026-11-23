@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"feature-dashboard/internal/config"
+	"feature-dashboard/internal/labelselector"
 )
 
 // Matcher bestimmt das Projekt eines Namespaces.
@@ -21,7 +22,7 @@ func NewMatcher(projects []config.Project) *Matcher {
 func (m *Matcher) Match(nsName string, labels map[string]string) (string, bool) {
 	var match string
 	for _, p := range m.projects {
-		if !hasAll(labels, p.NamespaceLabels) {
+		if !labelselector.HasAll(labels, p.NamespaceLabels) {
 			continue
 		}
 		if match != "" {
@@ -32,13 +33,4 @@ func (m *Matcher) Match(nsName string, labels map[string]string) (string, bool) 
 		match = p.Name
 	}
 	return match, match != ""
-}
-
-func hasAll(labels, required map[string]string) bool {
-	for k, v := range required {
-		if got, ok := labels[k]; !ok || got != v {
-			return false
-		}
-	}
-	return true
 }

@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/util/validation"
 
+	"feature-dashboard/internal/labelselector"
 	"feature-dashboard/internal/model"
 )
 
@@ -298,14 +299,7 @@ func validateServiceAreas(prefix string, areas []ServiceArea) []error {
 		if a.Label == "" {
 			errs = append(errs, fmt.Errorf("%s: area-label fehlt", at))
 		}
-		if len(a.LabelCombinations) == 0 {
-			errs = append(errs, fmt.Errorf("%s: label-combinations dürfen nicht leer sein", at))
-		}
-		for j, c := range a.LabelCombinations {
-			if len(c) == 0 {
-				errs = append(errs, fmt.Errorf("%s.label-combinations[%d]: leere Kombination würde alle Services treffen", at, j))
-			}
-		}
+		errs = append(errs, labelselector.Validate(at+".label-combinations", a.LabelCombinations)...)
 	}
 	return errs
 }

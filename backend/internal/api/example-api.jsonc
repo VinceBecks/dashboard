@@ -62,7 +62,10 @@
               "running": true,                      // grün: mindestens ein Replica ready
               "areas": ["business-services"],       // IDs aus serviceAreas; mehrere möglich
               "actions": [
-                { "id": "restart-service-replicas", "title": "Neu starten", "icon": "rotate-cw", "iconColor": "orange" }
+                { "id": "restart-service-replicas", "title": "Neu starten", "icon": "rotate-cw", "iconColor": "orange" },
+                // lazyFormFields: keine formFields hier; beim Klick POST /api/actions/download-service-files/form-fields,
+                // danach PATCH /api/actions/download-service-files mit inputs; die Antwort ist die Datei bzw. ein ZIP
+                { "id": "download-service-files", "title": "Dateien herunterladen", "icon": "download", "iconColor": "#1565c0", "lazyFormFields": true }
               ],
               "links": [],
               "copyCommands": [],

@@ -46,6 +46,8 @@ Backend-Pakete (`backend/`):
 | `internal/actions/restartservice`   | ActionHandler `restart-service-replicas`: löscht alle Pods eines Services (Neustart), nur Pods mit Controller                                                                                                                                                           |
 | `internal/actions/gitlabpipeline`   | Handler-Typ `gitlab-pipeline`: startet GitLab-Pipelines per Trigger-API, beliebig viele Aktionen; `Trigger` ist wiederverwendbar                                                                                                                                        |
 | `internal/actions/assignteam`       | ActionHandler `assign-team`: ordnet einen Namespace einem Team zu (setzt/entfernt das Label `teams.label-key` per Merge-Patch)                                                                                                                                          |
+| `internal/actions/s3download`       | Handler-Typ `s3-download`: listet die Dateien eines Services im S3-Bucket (Lazy-Formular-Felder) und liefert eine Datei bzw. ein ZIP als Download; `minio-go`                                                                                                           |
+| `internal/labelselector`            | Label-Abgleich (`HasAll`, `MatchesAny`, `Validate`): ODER über Kombinationen, UND innerhalb; genutzt von `project`, `config`, `s3download`                                                                                                                              |
 | `internal/actions/nightlyscaledown` | Handler-Typ `nightly-scale-down-exclusion`: nimmt einen Namespace vom nächtlichen Herunterskalieren aus, indem er das von der Skalierungs-Anwendung ausgewertete Label setzt (`mode: mark`) bzw. entfernt (`mode: unmark`); zwei Aktionen, die sich gegenseitig ablösen |
 | `internal/actions/missingservices`  | Handler-Typ `deploy-missing-services`: bietet am Namespace die fehlenden konfigurierten Services (Abgleich per Name) zur Mehrfachauswahl an und startet dafür eine GitLab-Pipeline                                                                                      |
 | `internal/objecttemplate`           | Go-Templates mit Objekt-Daten (gemeinsam für `gitlab-pipeline` und Links)                                                                                                                                                                                               |
@@ -407,6 +409,38 @@ aus):
   Wert gilt als nicht gesetzt. Nach der Ausführung tauscht der Event-Hub die angebotene Aktion über das `upsert` des
   Namespaces aus. RBAC: `patch` auf `namespaces`.
 
+Beispiel für den Handler-Typ `s3-download` (Dateien eines Services aus einem self-hosted S3-Bucket laden):
+
+```yaml
+  - action-name: download-service-files
+    handler: s3-download
+    action-title: Dateien herunterladen
+    icon: download
+    icon-color: "#1565c0"
+    projects: [ foo-projekt ]
+    extra-handler-configs:
+      endpoint: https://s3.mycomp.de            # Schema bestimmt TLS
+      bucket: feature-files
+      prefix: "{{ .Namespace }}/{{ .Name }}/"   # Go-Template (wie Links), rekursiv gelistet
+      access-key-id-env: S3_ACCESS_KEY_ID       # Env-Variablen mit den Zugangsdaten (Secret feature-dashboard-s3)
+      secret-access-key-env: S3_SECRET_ACCESS_KEY
+      service-selectors:                        # ODER über Einträge, UND innerhalb; Pflicht, keine leeren Einträge
+        - app.kubernetes.io/part-of: shop
+          app.kubernetes.io/component: backend
+```
+
+- Optional `region`, `path-style` (Standard `true`), `timeout` (Standard 30s, nur Auflisten/Prüfen). Fehlt eine
+  Env-Variable, startet das Backend nicht (`backend/deploy/s3-secret.example.yaml`).
+- **Lazy-Felder:** Die Aktion trägt `lazyFormFields: true` ohne `formFields`; S3 wird nur beim Klick
+  (`form-fields`-Endpunkt) und beim Ausführen abgefragt, **nie im Snapshot/Event-Aufbau**. Handler implementieren dafür
+  die optionalen Interfaces `actions.LazyFormHandler` (`LoadFormFields`, `FormFields` bleibt `nil`) und
+  `actions.DownloadHandler` (`Download` liefert `actions.File`). Die Registry validiert die Eingaben gegen die frisch
+  geladenen Felder, es lassen sich also nur aktuell vorhandene Dateien laden.
+- Eine ausgewählte Datei kommt direkt, mehrere als gestreamtes ZIP (`<service>.zip`, Ordnerstruktur relativ zum
+  Prefix). Pfade mit `..` werden nicht angeboten. Fehler vor dem ersten Byte kommen als JSON (422 mit Meldung für den
+  Nutzer); bricht das Streamen ab, trennt der Server die Verbindung.
+- S3-Zugriffe nutzen den Standard-Transport (Proxy/CA aus der Umgebung); ein direkt erreichbarer S3 gehört in `NO_PROXY`.
+
 Beispiel für Cluster-Angaben (Pflicht):
 
 ```yaml
@@ -444,7 +478,10 @@ Die API bietet neben management-endpunkte wie dem health-endpunkt folgende fachl
   Beispiel des Snapshots: `backend/internal/api/example-api.jsonc`.
 - `GET /api/snapshot`: derselbe Snapshot einmalig als JSON (`application/json`), danach endet die Response; keine
   weiteren Events, kein Abo am Event-Hub (`Hub.Snapshot`).
-- `PATCH /api/actions/{action-name}` zum Ausführen von Aktionen auf einem Objekt
+- `PATCH /api/actions/{action-name}` zum Ausführen von Aktionen auf einem Objekt; bei Download-Aktionen ist die
+  Antwort die Datei (bzw. ein ZIP) statt JSON (Unterscheidung am `Content-Type`)
+- `POST /api/actions/{action-name}/form-fields` lädt die Formular-Felder von Aktionen mit `lazyFormFields: true` beim
+  Klick nach (Antwort `{"formFields": [...]}`)
 
 - Objekte tragen nur, was das Dashboard braucht (`kind`, `name`, `parents`, Aktionen, Links und je Typ wenige
   Felder), keine Labels/Annotations. Anwendungs-Services (ClusterIP) stehen in `services`; ihr `running` ist

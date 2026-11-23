@@ -25,6 +25,10 @@ spec:
             - secretRef:
                 name: feature-dashboard-gitlab
                 optional: true
+            # Zugangsdaten für die s3-download-Aktion, siehe s3-secret.example.yaml.
+            - secretRef:
+                name: feature-dashboard-s3
+                optional: true
             # Proxy und Company-CA (HTTPS_PROXY, NO_PROXY, SSL_CERT_DIR), siehe network.example.yaml.
             - configMapRef:
                 name: feature-dashboard-network

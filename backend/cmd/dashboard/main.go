@@ -20,6 +20,7 @@ import (
 	"feature-dashboard/internal/actions/nightlyscaledown"
 	"feature-dashboard/internal/actions/nodeportservice"
 	"feature-dashboard/internal/actions/restartservice"
+	"feature-dashboard/internal/actions/s3download"
 	"feature-dashboard/internal/api"
 	"feature-dashboard/internal/config"
 	"feature-dashboard/internal/copycommands"
@@ -76,6 +77,7 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 	registry.Register(missingservices.HandlerType, missingservices.New)
 	registry.Register(assignteam.HandlerType, assignteam.New)
 	registry.Register(nightlyscaledown.HandlerType, nightlyscaledown.New)
+	registry.Register(s3download.HandlerType, s3download.New)
 	if err := registry.Activate(cfg.ActionHandlers, actions.Deps{Client: client, Store: cluster, Pipelines: pipelineState, Teams: cfg.Teams}); err != nil {
 		return err
 	}

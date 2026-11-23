@@ -4,6 +4,8 @@
 # Wer nutzt was?
 # - GitLab-Aufrufe (gitlab-pipeline, deploy-missing-services, Pipeline-Status) gehen über HTTPS_PROXY und vertrauen
 #   allen CAs aus SSL_CERT_DIR.
+# - S3-Zugriffe (s3-download) nutzen ebenfalls HTTPS_PROXY. Ein clusterinterner oder direkt erreichbarer S3 gehört
+#   in NO_PROXY; ein S3 mit eigener CA braucht diese in SSL_CERT_DIR.
 # - Der Kubernetes-Client (Informer, Aktionen) beachtet HTTPS_PROXY ebenfalls. Der API-Server muss daher in NO_PROXY
 #   stehen, sonst laufen auch diese Verbindungen über den Proxy. Er vertraut weiter der CA des ServiceAccounts.
 apiVersion: v1

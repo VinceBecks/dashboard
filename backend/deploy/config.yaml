@@ -92,6 +92,27 @@ data:
         projects: [foo-projekt, bar-projekt, foobar-projekt]
         extra-handler-configs:
           mode: unmark
+      # Dateien eines Services aus einem S3-Bucket laden (Handler-Typ s3-download). Die Dateiliste wird erst beim Klick
+      # geladen (lazyFormFields), eine Datei kommt direkt, mehrere als ZIP. Braucht die Umgebungsvariablen
+      # aus dem Secret feature-dashboard-s3.
+      - action-name: download-service-files
+        action-title: Dateien herunterladen
+        icon: download
+        icon-color: "#1565c0"
+        projects: [foo-projekt]
+        extra-handler-configs:
+          endpoint: https://s3.mycomp.de        # Schema bestimmt TLS; self-hosted S3, Path-Style
+          bucket: feature-files
+          prefix: "{{ .Namespace }}/{{ .Name }}/"   # Go-Template wie bei Links; rekursiv gelistet
+          access-key-id-env: S3_ACCESS_KEY_ID
+          secret-access-key-env: S3_SECRET_ACCESS_KEY
+          # region: us-east-1                   # optional
+          # path-style: true                    # optional, Standard true
+          # timeout: 30s                        # optional, Standard 30s (Auflisten/Prüfen)
+          service-selectors:                    # ODER über die Einträge, UND innerhalb eines Eintrags
+            - app.kubernetes.io/part-of: shop
+              app.kubernetes.io/component: backend
+            - app.kubernetes.io/part-of: billing
       # Startet eine GitLab-Pipeline für den Namespace; Tokens aus dem Secret feature-dashboard-gitlab.
       - action-name: redeploy-namespace
         handler: gitlab-pipeline

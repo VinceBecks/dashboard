@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
+	"strconv"
 	"time"
 
 	"feature-dashboard/internal/actions"
@@ -115,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("PATCH /api/actions/{action}", s.handleAction)
+	mux.HandleFunc("POST /api/actions/{action}/form-fields", s.handleFormFields)
 	mux.HandleFunc("GET /api/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write(openAPISpec)
@@ -249,8 +252,9 @@ type ActionRequest struct {
 	Inputs map[string]any  `json:"inputs"`
 }
 
-func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("action")
+// actionTarget liest Aktion und Objekt eines Requests. Bei einem Fehler ist die Antwort bereits geschrieben.
+func (s *Server) actionTarget(w http.ResponseWriter, r *http.Request) (name string, obj actions.StoredObject, inputs map[string]any, ok bool) {
+	name = r.PathValue("action")
 	if !s.registry.Has(name) {
 		writeError(w, http.StatusNotFound, actions.ErrUnknownAction)
 		return
@@ -273,32 +277,101 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, errors.New("objekt nicht gefunden"))
 		return
 	}
+	return name, obj, req.Inputs, true
+}
 
-	result, err := s.registry.Execute(r.Context(), name, obj, req.Inputs)
+// writeActionError übersetzt Fehler der Registry in eine JSON-Antwort.
+func writeActionError(w http.ResponseWriter, err error) {
 	var verr *actions.ValidationError
+	var uerr *actions.UserError
 	switch {
 	case errors.As(err, &verr):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": verr.Error(), "problems": verr.Problems})
-		return
-	case errors.Is(err, actions.ErrNotApplicable):
+	case errors.Is(err, actions.ErrNotApplicable), errors.Is(err, actions.ErrNotLazy), errors.Is(err, actions.ErrNotDownload):
 		writeError(w, http.StatusBadRequest, err)
-		return
-	case err != nil:
+	case errors.As(err, &uerr):
+		// Der Request war gültig, das externe System lieferte aber nichts; die Meldung ist für den Nutzer formuliert.
+		writeError(w, http.StatusUnprocessableEntity, uerr)
+	default:
 		writeError(w, http.StatusInternalServerError, err)
+	}
+}
+
+func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
+	name, obj, inputs, ok := s.actionTarget(w, r)
+	if !ok {
 		return
-	case !result.Success:
+	}
+	if s.registry.IsDownload(name) {
+		s.handleDownload(w, r, name, obj, inputs)
+		return
+	}
+
+	result, err := s.registry.Execute(r.Context(), name, obj, inputs)
+	if err != nil {
+		writeActionError(w, err)
+		return
+	}
+	if !result.Success {
 		// Der Request war gültig, die Aktion ließ sich aber nicht ausführen (z. B. Objekt inzwischen verändert,
 		// Kubernetes oder GitLab lehnt ab). Die Meldung des Handlers ist für den Nutzer formuliert.
 		msg := result.Message
 		if msg == "" {
 			msg = "Aktion konnte nicht ausgeführt werden"
 		}
-		slog.Warn("Aktion fehlgeschlagen", "action", name, "object", ref, "project", obj.Project, "message", result.Message)
+		slog.Warn("Aktion fehlgeschlagen", "action", name, "object", obj.Ref, "project", obj.Project, "message", result.Message)
 		writeError(w, http.StatusUnprocessableEntity, errors.New(msg))
 		return
 	}
-	slog.Info("Aktion ausgeführt", "action", name, "object", ref, "success", result.Success, "message", result.Message)
+	slog.Info("Aktion ausgeführt", "action", name, "object", obj.Ref, "success", result.Success, "message", result.Message)
 	writeJSON(w, http.StatusOK, result)
+}
+
+// handleDownload beantwortet eine Download-Aktion mit der Datei statt mit JSON. Fehler vor dem ersten Byte
+// kommen wie bei anderen Aktionen als JSON; bricht das Streamen danach ab, wird die Verbindung abgebrochen, damit
+// der Client keinen scheinbar vollständigen Download erhält.
+func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, name string, obj actions.StoredObject, inputs map[string]any) {
+	file, err := s.registry.Download(r.Context(), name, obj, inputs)
+	if err != nil {
+		slog.Warn("Download fehlgeschlagen", "action", name, "object", obj.Ref, "project", obj.Project, "error", err)
+		writeActionError(w, err)
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", file.ContentType)
+	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": file.Name}))
+	h.Set("Cache-Control", "no-store")
+	if file.Size >= 0 {
+		h.Set("Content-Length", strconv.FormatInt(file.Size, 10))
+	}
+	if err := file.Write(w); err != nil {
+		slog.Error("Download abgebrochen", "action", name, "object", obj.Ref, "file", file.Name, "error", err)
+		panic(http.ErrAbortHandler)
+	}
+	slog.Info("Download ausgeliefert", "action", name, "object", obj.Ref, "file", file.Name)
+}
+
+// FormFieldsResponse ist die Antwort auf POST /api/actions/{action}/form-fields.
+type FormFieldsResponse struct {
+	FormFields []actions.FormField `json:"formFields"`
+}
+
+// handleFormFields lädt die Formular-Felder einer Aktion mit lazyFormFields beim Klick nach.
+func (s *Server) handleFormFields(w http.ResponseWriter, r *http.Request) {
+	name, obj, _, ok := s.actionTarget(w, r)
+	if !ok {
+		return
+	}
+	fields, err := s.registry.FormFieldsFor(r.Context(), name, obj)
+	if err != nil {
+		slog.Warn("Formular-Felder nicht ladbar", "action", name, "object", obj.Ref, "project", obj.Project, "error", err)
+		writeActionError(w, err)
+		return
+	}
+	if fields == nil {
+		fields = []actions.FormField{}
+	}
+	writeJSON(w, http.StatusOK, FormFieldsResponse{FormFields: fields})
 }
 
 // load liest das referenzierte Objekt als Kopie aus der Datenquelle.

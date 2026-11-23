@@ -76,6 +76,12 @@ paths:
       description: |
         Führt die Aktion aus. Änderungen am Cluster erscheinen erst über die Informer-Events
         und kommen dann als Events über `GET /api/events`.
+
+        **Download-Aktionen** (z. B. `s3-download`) antworten bei Erfolg nicht mit `ActionResult`, sondern mit der
+        Datei: eine einzelne Datei direkt, mehrere als `application/zip`. Der Dateiname steht in
+        `Content-Disposition`. Fehler kommen weiterhin als JSON (`Error`), solange noch kein Byte gesendet wurde;
+        bricht der Server das Streamen danach ab, wird die Verbindung getrennt (der Download ist unvollständig).
+        Das Frontend unterscheidet die Antworten am `Content-Type`.
       parameters:
         - { name: action, in: path, required: true, description: Aktion-ID, schema: { type: string } }
       requestBody:
@@ -85,10 +91,16 @@ paths:
             schema: { $ref: '#/components/schemas/ActionRequest' }
       responses:
         '200':
-          description: Aktion wurde erfolgreich ausgeführt (`success` ist immer `true`).
+          description: |
+            Aktion wurde erfolgreich ausgeführt (`success` ist immer `true`). Bei Download-Aktionen stattdessen die
+            Datei bzw. das ZIP.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ActionResult' }
+            application/zip:
+              schema: { type: string, format: binary }
+            application/octet-stream:
+              schema: { type: string, format: binary }
         '400':
           description: Ungültiger Request, Aktion nicht anwendbar oder ungültige Eingaben
           content:
@@ -104,6 +116,49 @@ paths:
             Der Request war gültig, der ActionHandler konnte die Aktion aber nicht ausführen (z. B. Objekt inzwischen
             verändert, Kubernetes oder GitLab lehnt ab). `error` enthält die für den Nutzer formulierte Meldung des
             Handlers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Interner Fehler im Backend
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/actions/{action}/form-fields:
+    post:
+      summary: Formular-Felder einer Aktion beim Klick nachladen
+      description: |
+        Für Aktionen mit `lazyFormFields: true` (am `Action`-Objekt fehlen dann die `formFields`). Der Server
+        ermittelt die Felder erst jetzt (z. B. die Dateien eines Services im S3-Bucket) und liefert sie wie
+        `formFields` am `Action`-Objekt. Anschließend wird die Aktion wie üblich mit `inputs` per
+        `PATCH /api/actions/{action}` ausgeführt; der Server prüft die Eingaben dabei erneut gegen den dann
+        aktuellen Stand.
+      parameters:
+        - { name: action, in: path, required: true, description: Aktion-ID, schema: { type: string } }
+      requestBody:
+        required: true
+        description: Nur `object` wird ausgewertet (`inputs` entfällt).
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActionRequest' }
+      responses:
+        '200':
+          description: Die Formular-Felder (die Liste kann leere `options` enthalten)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormFieldsResponse' }
+        '400':
+          description: Ungültiger Request, Aktion nicht anwendbar oder lädt keine Felder nach
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Aktion unbekannt/deaktiviert oder Objekt nicht gefunden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Das externe System (z. B. S3) war nicht lesbar; `error` enthält eine Meldung für den Nutzer.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -152,6 +207,18 @@ components:
         title: { type: string }
         icon: { type: string }
         iconColor: { type: string }
+        formFields:
+          type: array
+          items: { $ref: '#/components/schemas/FormField' }
+        lazyFormFields:
+          type: boolean
+          description: |
+            `true`: Die Felder stehen nicht hier, sondern werden beim Klick über
+            `POST /api/actions/{action}/form-fields` geladen. Fehlt, wenn nicht gesetzt.
+    FormFieldsResponse:
+      type: object
+      required: [formFields]
+      properties:
         formFields:
           type: array
           items: { $ref: '#/components/schemas/FormField' }

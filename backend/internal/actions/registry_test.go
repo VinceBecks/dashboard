@@ -165,3 +165,82 @@ func TestDisabledActions(t *testing.T) {
 		t.Fatal("unbekannter Handler-Typ muss auch bei deaktivierter Aktion auffallen")
 	}
 }
+
+type lazyDownloadHandler struct {
+	loadErr  error
+	received map[string]any
+}
+
+func (l *lazyDownloadHandler) Configure(map[string]any) error      { return nil }
+func (l *lazyDownloadHandler) IsApplicable(StoredObject) bool      { return true }
+func (l *lazyDownloadHandler) FormFields(StoredObject) []FormField { return nil }
+func (l *lazyDownloadHandler) Execute(context.Context, StoredObject, map[string]any) Result {
+	return Result{}
+}
+func (l *lazyDownloadHandler) LoadFormFields(context.Context, StoredObject) ([]FormField, error) {
+	if l.loadErr != nil {
+		return nil, l.loadErr
+	}
+	return []FormField{{ID: "files", Type: FieldMultiSelect, IsRequired: true, Options: []Option{{Value: "a"}}}}, nil
+}
+func (l *lazyDownloadHandler) Download(_ context.Context, _ StoredObject, in map[string]any) (File, error) {
+	l.received = in
+	return File{Name: "a.txt", Size: -1}, nil
+}
+
+func TestRegistryLazyDownload(t *testing.T) {
+	h := &lazyDownloadHandler{}
+	r := NewRegistry()
+	r.Register("dl", func(Deps) Handler { return h })
+	r.Register("plain", func(Deps) Handler { return &configuredHandler{} })
+	err := r.Activate([]config.ActionHandlerConfig{
+		{Name: "dl", Projects: []string{"foo"}},
+		{Name: "plain", Projects: []string{"foo"}},
+	}, Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := StoredObject{Ref: model.ObjectRef{Kind: model.KindService, Namespace: "ns", Name: "s"}, Project: "foo"}
+	ctx := context.Background()
+
+	actions := r.ActionsFor(obj)
+	if len(actions) != 2 || !actions[0].LazyFormFields || actions[0].FormFields != nil || actions[1].LazyFormFields {
+		t.Fatalf("ActionsFor = %+v", actions)
+	}
+	if !r.IsDownload("dl") || r.IsDownload("plain") || r.IsDownload("nope") {
+		t.Fatal("IsDownload falsch")
+	}
+
+	fields, err := r.FormFieldsFor(ctx, "dl", obj)
+	if err != nil || len(fields) != 1 || fields[0].ID != "files" {
+		t.Fatalf("fields = %+v, err = %v", fields, err)
+	}
+	if _, err := r.FormFieldsFor(ctx, "plain", obj); !errors.Is(err, ErrNotLazy) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := r.FormFieldsFor(ctx, "nope", obj); !errors.Is(err, ErrUnknownAction) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := r.FormFieldsFor(ctx, "dl", StoredObject{Ref: obj.Ref, Project: "bar"}); !errors.Is(err, ErrNotApplicable) {
+		t.Fatalf("err = %v", err)
+	}
+
+	var verr *ValidationError
+	if _, err := r.Download(ctx, "dl", obj, nil); !errors.As(err, &verr) {
+		t.Fatalf("Pflichtfeld erwartet: %v", err)
+	}
+	if _, err := r.Download(ctx, "dl", obj, map[string]any{"files": []any{"unbekannt"}}); !errors.As(err, &verr) {
+		t.Fatalf("ungültige Option erwartet: %v", err)
+	}
+	if _, err := r.Download(ctx, "plain", obj, nil); !errors.Is(err, ErrNotDownload) {
+		t.Fatalf("err = %v", err)
+	}
+	if f, err := r.Download(ctx, "dl", obj, map[string]any{"files": []any{"a"}}); err != nil || f.Name != "a.txt" {
+		t.Fatalf("f = %+v, err = %v", f, err)
+	}
+	h.loadErr = &UserError{Message: "S3 nicht erreichbar"}
+	var uerr *UserError
+	if _, err := r.Download(ctx, "dl", obj, map[string]any{"files": []any{"a"}}); !errors.As(err, &uerr) {
+		t.Fatalf("UserError erwartet: %v", err)
+	}
+}

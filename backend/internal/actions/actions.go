@@ -3,6 +3,7 @@ package actions
 
 import (
 	"context"
+	"io"
 
 	"k8s.io/client-go/kubernetes"
 
@@ -62,6 +63,37 @@ type Handler interface {
 	// Execute führt die Aktion aus. inputs sind bereits gegen FormFields validiert.
 	Execute(ctx context.Context, obj StoredObject, inputs map[string]any) Result
 }
+
+// LazyFormHandler ist ein optionales Interface für Handler, deren Formular-Felder erst beim Klick geladen werden
+// (z. B. weil sie ein externes System abfragen). FormFields liefert bei solchen Handlern nil; das Frontend erkennt
+// sie an Action.LazyFormFields und fragt die Felder über LoadFormFields an.
+type LazyFormHandler interface {
+	// LoadFormFields liefert die benötigten Eingaben. Fehler sind für den Nutzer formuliert.
+	LoadFormFields(ctx context.Context, obj StoredObject) ([]FormField, error)
+}
+
+// File ist eine herunterladbare Datei als Ergebnis einer DownloadHandler-Aktion.
+type File struct {
+	Name        string
+	ContentType string
+	// Size ist die Größe in Bytes, -1 wenn unbekannt.
+	Size int64
+	// Write schreibt den Inhalt; es wird erst nach dem Senden der Header aufgerufen.
+	Write func(w io.Writer) error
+}
+
+// DownloadHandler ist ein optionales Interface für Handler, deren Aktion eine Datei statt eines Result liefert.
+// Fehler vor dem Streamen (in Download) sind für den Nutzer formuliert; wie bei Execute gilt: nur Meldungen
+// aus UserError werden an den Nutzer durchgereicht.
+type DownloadHandler interface {
+	// Download bereitet die Datei vor. inputs sind bereits gegen die (ggf. lazy geladenen) Felder validiert.
+	Download(ctx context.Context, obj StoredObject, inputs map[string]any) (File, error)
+}
+
+// UserError ist ein Fehler mit einer Meldung, die dem Nutzer direkt angezeigt werden darf.
+type UserError struct{ Message string }
+
+func (e *UserError) Error() string { return e.Message }
 
 // ObjectReader liest Stored-Objects aus dem Informer-Cache (siehe kube.Cluster.Get und kube.Cluster.Services).
 // Die Werte sind Kopien; Änderungen kommen ausschließlich über die Informer-Events.

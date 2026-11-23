@@ -107,6 +107,27 @@ action-handlers:
       variables:
         NAMESPACE: "{{ .Namespace }}"
         SERVICES: '{{ join .Services "," }}'
+  # Dateien eines Services aus einem S3-Bucket laden (Handler-Typ s3-download). Die Dateiliste wird erst beim Klick
+  # geladen (lazyFormFields), eine Datei kommt direkt, mehrere als ZIP. Braucht die Umgebungsvariablen
+  # S3_ACCESS_KEY_ID und S3_SECRET_ACCESS_KEY, sonst startet das Backend nicht.
+  - action-name: download-service-files
+    action-title: Dateien herunterladen
+    icon: download
+    icon-color: "#1565c0"
+    projects: [foo-projekt]
+    extra-handler-configs:
+      endpoint: https://s3.mycomp.de        # Schema bestimmt TLS; self-hosted S3, Path-Style
+      bucket: feature-files
+      prefix: "{{ .Namespace }}/{{ .Name }}/"   # Go-Template wie bei Links; rekursiv gelistet
+      access-key-id-env: S3_ACCESS_KEY_ID
+      secret-access-key-env: S3_SECRET_ACCESS_KEY
+      # region: us-east-1                   # optional
+      # path-style: true                    # optional, Standard true
+      # timeout: 30s                        # optional, Standard 30s (Auflisten/Prüfen)
+      service-selectors:                    # ODER über die Einträge, UND innerhalb eines Eintrags
+        - app.kubernetes.io/part-of: shop
+          app.kubernetes.io/component: backend
+        - app.kubernetes.io/part-of: billing
   # Startet eine GitLab-Pipeline für den Namespace (Handler-Typ gitlab-pipeline). Die Pipeline-Variablen sind
   # Go-Templates mit den Daten des Namespaces; verfügbar sind .Kind .Name .Namespace .Project .Labels .Annotations.
   # Nutzt dasselbe Trigger-Token wie deploy-missing-services.

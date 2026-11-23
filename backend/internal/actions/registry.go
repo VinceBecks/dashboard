@@ -15,6 +15,10 @@ var (
 	ErrUnknownAction = errors.New("unbekannte oder deaktivierte Aktion")
 	// ErrNotApplicable: Aktion ist auf dem Objekt nicht ausführbar.
 	ErrNotApplicable = errors.New("aktion ist auf diesem Objekt nicht ausführbar")
+	// ErrNotLazy: Die Aktion lädt ihre Formular-Felder nicht nach.
+	ErrNotLazy = errors.New("aktion lädt keine Formular-Felder nach")
+	// ErrNotDownload: Die Aktion liefert keine Datei.
+	ErrNotDownload = errors.New("aktion liefert keinen Download")
 )
 
 // ValidationError meldet ungültige Formular-Eingaben.
@@ -29,6 +33,8 @@ type Action struct {
 	Icon       string      `json:"icon"`
 	IconColor  string      `json:"iconColor"`
 	FormFields []FormField `json:"formFields,omitempty"`
+	// LazyFormFields: Die Felder fehlen hier und werden beim Klick über den form-fields-Endpunkt geladen.
+	LazyFormFields bool `json:"lazyFormFields,omitempty"`
 }
 
 type activeAction struct {
@@ -86,12 +92,14 @@ func (r *Registry) ActionsFor(obj StoredObject) []Action {
 		if !a.applicable(obj) {
 			continue
 		}
+		_, lazy := a.handler.(LazyFormHandler)
 		result = append(result, Action{
-			ID:         a.cfg.Name,
-			Title:      a.cfg.Title,
-			Icon:       a.cfg.Icon,
-			IconColor:  a.cfg.IconColor,
-			FormFields: a.handler.FormFields(obj),
+			ID:             a.cfg.Name,
+			Title:          a.cfg.Title,
+			Icon:           a.cfg.Icon,
+			IconColor:      a.cfg.IconColor,
+			FormFields:     a.handler.FormFields(obj),
+			LazyFormFields: lazy,
 		})
 	}
 	return result
@@ -109,6 +117,59 @@ func (r *Registry) Title(name string) string {
 func (r *Registry) Has(name string) bool {
 	_, ok := r.find(name)
 	return ok
+}
+
+// IsDownload meldet, ob die Aktion eine Datei statt eines Result liefert.
+func (r *Registry) IsDownload(name string) bool {
+	a, ok := r.find(name)
+	if !ok {
+		return false
+	}
+	_, ok = a.handler.(DownloadHandler)
+	return ok
+}
+
+// FormFieldsFor lädt die Formular-Felder einer Aktion mit LazyFormFields nach.
+func (r *Registry) FormFieldsFor(ctx context.Context, name string, obj StoredObject) ([]FormField, error) {
+	a, ok := r.find(name)
+	if !ok {
+		return nil, ErrUnknownAction
+	}
+	if !a.applicable(obj) {
+		return nil, ErrNotApplicable
+	}
+	lazy, ok := a.handler.(LazyFormHandler)
+	if !ok {
+		return nil, ErrNotLazy
+	}
+	return lazy.LoadFormFields(ctx, obj)
+}
+
+// Download prüft Applicability und Eingaben (bei Lazy-Handlern gegen die frisch geladenen Felder) und bereitet
+// die Datei vor.
+func (r *Registry) Download(ctx context.Context, name string, obj StoredObject, inputs map[string]any) (File, error) {
+	a, ok := r.find(name)
+	if !ok {
+		return File{}, ErrUnknownAction
+	}
+	if !a.applicable(obj) {
+		return File{}, ErrNotApplicable
+	}
+	d, ok := a.handler.(DownloadHandler)
+	if !ok {
+		return File{}, ErrNotDownload
+	}
+	fields := a.handler.FormFields(obj)
+	if lazy, ok := a.handler.(LazyFormHandler); ok {
+		var err error
+		if fields, err = lazy.LoadFormFields(ctx, obj); err != nil {
+			return File{}, err
+		}
+	}
+	if err := validate(fields, inputs); err != nil {
+		return File{}, err
+	}
+	return d.Download(ctx, obj, inputs)
 }
 
 // Execute prüft Applicability und Eingaben und führt die Aktion aus.

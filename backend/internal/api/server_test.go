@@ -576,3 +576,104 @@ func TestActionsRespectProjects(t *testing.T) {
 		t.Fatal("Aktion darf in fremdem Projekt nicht ausgeführt werden")
 	}
 }
+
+// downloadAction ist eine Test-Aktion mit Lazy-Feldern und Datei-Antwort auf Services.
+type downloadAction struct {
+	loadErr    error
+	abortWrite bool
+}
+
+func (d *downloadAction) Configure(map[string]any) error { return nil }
+func (d *downloadAction) IsApplicable(o actions.StoredObject) bool {
+	_, ok := o.Object.(model.StoredService)
+	return ok
+}
+func (d *downloadAction) FormFields(actions.StoredObject) []actions.FormField { return nil }
+func (d *downloadAction) Execute(context.Context, actions.StoredObject, map[string]any) actions.Result {
+	return actions.Result{}
+}
+func (d *downloadAction) LoadFormFields(context.Context, actions.StoredObject) ([]actions.FormField, error) {
+	if d.loadErr != nil {
+		return nil, d.loadErr
+	}
+	return []actions.FormField{{ID: "files", Label: "Dateien", Type: actions.FieldMultiSelect, IsRequired: true,
+		Options: []actions.Option{{Value: "a.txt", Label: "a.txt"}}}}, nil
+}
+func (d *downloadAction) Download(context.Context, actions.StoredObject, map[string]any) (actions.File, error) {
+	return actions.File{Name: "a.txt", ContentType: "text/plain", Size: 5, Write: func(w io.Writer) error {
+		if d.abortWrite {
+			return io.ErrUnexpectedEOF
+		}
+		_, err := io.WriteString(w, "hello")
+		return err
+	}}, nil
+}
+
+func TestLazyFormFieldsAndDownload(t *testing.T) {
+	st, _, _ := setup(t)
+	dl := &downloadAction{}
+	reg := actions.NewRegistry()
+	reg.Register("files", func(actions.Deps) actions.Handler { return dl })
+	reg.Register("plain", func(actions.Deps) actions.Handler { return &podAction{} })
+	err := reg.Activate([]config.ActionHandlerConfig{
+		{Name: "files", Title: "Dateien", Icon: "download", Projects: []string{"foo"}},
+		{Name: "plain", Projects: []string{"foo"}},
+	}, actions.Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(st, reg, []config.Project{{Name: "foo"}}, func() bool { return true })
+	h := srv.Handler()
+	svc := `{"object":{"kind":"service","namespace":"feat-1","name":"web"}`
+
+	// Snapshot trägt nur das Flag, keine Felder.
+	_, _, raw := subscribe(t, srv)
+	if !strings.Contains(raw, `"lazyFormFields":true`) || strings.Contains(raw, `"files","label"`) {
+		t.Errorf("snapshot: %s", raw)
+	}
+
+	rec := do(h, "POST", "/api/actions/files/form-fields", svc+`}`)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"formFields":[{"id":"files"`) {
+		t.Errorf("form-fields: %d %s", rec.Code, rec.Body)
+	}
+	for name, c := range map[string]struct {
+		path, body string
+		status     int
+	}{
+		"unbekannte Aktion":     {"/api/actions/nope/form-fields", svc + `}`, 404},
+		"nicht lazy":            {"/api/actions/plain/form-fields", `{"object":{"kind":"pod","namespace":"feat-1","name":"web-1"}}`, 400},
+		"nicht anwendbar":       {"/api/actions/files/form-fields", `{"object":{"kind":"namespace","name":"feat-1"}}`, 400},
+		"Objekt unbekannt":      {"/api/actions/files/form-fields", `{"object":{"kind":"service","namespace":"feat-1","name":"x"}}`, 404},
+		"Download ohne Auswahl": {"/api/actions/files", svc + `}`, 400},
+	} {
+		method := "POST"
+		if c.path == "/api/actions/files" {
+			method = "PATCH"
+		}
+		if rec := do(h, method, c.path, c.body); rec.Code != c.status {
+			t.Errorf("%s: status = %d, want %d (%s)", name, rec.Code, c.status, rec.Body)
+		}
+	}
+
+	rec = do(h, "PATCH", "/api/actions/files", svc+`,"inputs":{"files":["a.txt"]}}`)
+	if rec.Code != 200 || rec.Body.String() != "hello" || rec.Header().Get("Content-Type") != "text/plain" ||
+		rec.Header().Get("Content-Length") != "5" || rec.Header().Get("Content-Disposition") != `attachment; filename=a.txt` {
+		t.Errorf("download: %d %q %v", rec.Code, rec.Body, rec.Header())
+	}
+
+	// Fehler des externen Systems: 422 mit nutzerfreundlicher Meldung.
+	dl.loadErr = &actions.UserError{Message: "S3 nicht erreichbar"}
+	rec = do(h, "POST", "/api/actions/files/form-fields", svc+`}`)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "S3 nicht erreichbar") {
+		t.Errorf("form-fields-Fehler: %d %s", rec.Code, rec.Body)
+	}
+
+	// Bricht das Streamen ab, wird die Verbindung abgebrochen.
+	dl.loadErr, dl.abortWrite = nil, true
+	defer func() {
+		if r := recover(); r != http.ErrAbortHandler {
+			t.Errorf("recover = %v, want http.ErrAbortHandler", r)
+		}
+	}()
+	do(h, "PATCH", "/api/actions/files", svc+`,"inputs":{"files":["a.txt"]}}`)
+}
