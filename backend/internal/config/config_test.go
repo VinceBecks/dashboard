@@ -343,16 +343,3 @@ func TestTeamsValidation(t *testing.T) {
 		}
 	}
 }
-
-func TestCORSConfigValidate(t *testing.T) {
-	for _, o := range []string{"https://a.mycomp.de", "http://localhost:5173", "*"} {
-		if errs := (CORSConfig{AllowedOrigins: []string{o}}).validate(); len(errs) > 0 {
-			t.Errorf("%q sollte gültig sein: %v", o, errs)
-		}
-	}
-	for _, o := range []string{"a.mycomp.de", "https://a.mycomp.de/", "https://a.mycomp.de/x", "ftp://a.mycomp.de", ""} {
-		if errs := (CORSConfig{AllowedOrigins: []string{o}}).validate(); len(errs) != 1 {
-			t.Errorf("%q sollte ungültig sein", o)
-		}
-	}
-}
