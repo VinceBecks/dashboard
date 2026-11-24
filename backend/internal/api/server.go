@@ -90,8 +90,8 @@ func (s *Server) WithTeams(t config.TeamsConfig) *Server {
 	return s
 }
 
-// WithCORS lässt den Server an jedem Objekt dessen laufende Pipelines ausliefern. Änderungen daran lösen
-// Events aus wie Änderungen im Cluster.
+// WithCORS erlaubt den konfigurierten Origins den Abruf von GET /api/snapshot (inkl. Preflight).
+// Alle anderen Endpunkte bleiben ohne CORS-Header.
 func (s *Server) WithCORS(cors config.CORSConfig) *Server {
 	s.corsOrigins = make(map[string]bool, len(cors.AllowedOrigins))
 	for _, origin := range cors.AllowedOrigins {

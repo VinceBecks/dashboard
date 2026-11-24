@@ -31,6 +31,7 @@ type Config struct {
 	Links         []Link            `yaml:"links"`
 	// CopyCommands sind Befehle (z. B. kubectl exec), die das Dashboard je Objekt zum Kopieren anbietet.
 	CopyCommands []CopyCommand `yaml:"copy-commands"`
+	// CORS erlaubt einzelnen Origins den Abruf von GET /api/snapshot; leer heißt: kein CORS.
 	CORS CORSConfig `yaml:"cors"`
 }
 
@@ -228,7 +229,7 @@ func (a ActionHandlerConfig) HandlerType() string {
 	return a.Name
 }
 
-// foo
+// CORSConfig gibt fremden Origins lesenden Zugriff auf GET /api/snapshot (siehe cors-Abschnitt der config.yaml).
 type CORSConfig struct {
 	AllowedOrigins []string `yaml:"allowed-origins"`
 }
@@ -306,6 +307,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.Cluster.validate()...)
 	errs = append(errs, c.Pipelines.validate()...)
 	errs = append(errs, c.Teams.validate()...)
+	errs = append(errs, c.CORS.validate()...)
 	actions := map[string]bool{}
 	for i, a := range c.ActionHandlers {
 		if a.Name == "" {

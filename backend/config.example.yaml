@@ -215,3 +215,8 @@ cluster:
 # Optional; ohne Angabe gilt der hier gezeigte Wert.
 pipelines:
   poll-interval: 15s   # so oft wird der Status laufender Pipelines bei GitLab abgefragt
+
+# Optional: erlaubt diesen Origins den Browser-Abruf von GET /api/snapshot (nur dieser Endpunkt).
+# cors:
+#   allowed-origins:
+#     - https://jira.mycomp.de

@@ -168,6 +168,7 @@ Wird beim Startup einmal eingelesen. Enthält:
 5. Kopier-Befehle (optional)
 6. Abfrage laufender Pipelines (optional)
 7. Entwickler-Teams (optional)
+8. CORS für `GET /api/snapshot` (optional)
 
 Beispiel für Projekte:
 
@@ -441,6 +442,27 @@ Beispiel für den Handler-Typ `s3-download` (Dateien eines Services aus einem se
   Nutzer); bricht das Streamen ab, trennt der Server die Verbindung.
 - S3-Zugriffe nutzen den Standard-Transport (Proxy/CA aus der Umgebung); ein direkt erreichbarer S3 gehört in `NO_PROXY`.
 
+Beispiel für CORS (optional; erlaubt anderen Webanwendungen, z. B. Jira, den Snapshot per Browser abzurufen):
+
+```yaml
+cors:
+  allowed-origins:
+    - https://jira.mycomp.de
+    - http://localhost:4200
+```
+
+- CORS gilt **nur für `GET /api/snapshot`** (und dessen Preflight `OPTIONS /api/snapshot`). Alle anderen Endpunkte
+  (`/api/events`, Aktionen) bleiben ohne CORS-Header, Aktionen sind also nur Same-Origin auslösbar.
+- Ein Origin ist `http://` oder `https://` plus Host und optionalem Port, ohne Pfad, Query, Userinfo und Wildcard
+  (`*` ist verboten). Ungültige oder doppelte Einträge führen zum Startabbruch (`CORSConfig.validate`). Ohne
+  `cors` oder mit leerer Liste gibt es kein CORS.
+- Der Abgleich ist exakt (Schema, Host, Port). Ein erlaubter Origin bekommt `Access-Control-Allow-Origin: <origin>`;
+  jede Antwort auf eine Anfrage mit `Origin`-Header trägt `Vary: Origin`. Fremde Origins erhalten keinen Header,
+  der Browser blockiert dann die Antwort. Keine Credentials (`Access-Control-Allow-Credentials` wird nie gesetzt).
+- Preflight: erlaubter Origin → `204` mit `Access-Control-Allow-Methods: GET, OPTIONS` und
+  `Access-Control-Max-Age: 600`; fremder Origin → `405` ohne CORS-Header. Umsetzung in `internal/api/cors.go`
+  (`withCORS`, `handleSnapshotPreflight`), verdrahtet über `Server.WithCORS`.
+
 Beispiel für Cluster-Angaben (Pflicht):
 
 ```yaml
@@ -557,8 +579,9 @@ Für dieses Repository gilt daraus:
 - **API maximal generisch halten:** Das Frontend kennt keine konkreten Aktionen. Buttons, Icons, Farben und Formulare
   werden vollständig aus den API-Daten aufgebaut. Aktionsspezifische Logik gehört ins Backend; fehlt dem Frontend eine
   Information, wird die API erweitert (`openapi.yaml`, `example-api.jsonc`).
-- **Kein CORS:** Das Backend setzt keine CORS-Header. Das Frontend muss unter derselben Origin wie die API laufen (z. B.
-  Ingress `/api` → Backend, lokal Dev-Proxy auf `localhost:8080`).
+- **CORS nur für den Snapshot:** Das Backend setzt CORS-Header ausschließlich an `GET /api/snapshot`, und nur für die
+  in `cors.allowed-origins` konfigurierten Origins. Das Frontend (SSE, Aktionen) muss unter derselben Origin wie die
+  API laufen (z. B. Ingress `/api` → Backend, lokal Dev-Proxy auf `localhost:8080`).
 - `--static-dir` (`internal/api/static.go`) bleibt im Backend erhalten, wird im Image aber nicht mehr genutzt.
 
 ## Leitplanken für Änderungen

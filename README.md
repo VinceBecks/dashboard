@@ -17,7 +17,8 @@ aktuell gehalten.
 
 Das Backend läuft im Cluster als ein Image in genau einem Deployment mit **einem** Replica.
 
-**Hinweis für das Frontend:** Das Backend setzt keine CORS-Header. Das Frontend muss daher unter derselben Origin wie
+**Hinweis für das Frontend:** Das Backend setzt CORS-Header nur an `GET /api/snapshot` und nur für die in `cors.allowed-origins`
+konfigurierten Origins. Für `/api/events` und die Aktionen muss das Frontend unter derselben Origin wie
 die API erreichbar sein, z. B. per Ingress (`/api` → Backend, `/` → Frontend) oder lokal über einen Dev-Proxy, der
 `/api` an `localhost:8080` weiterleitet.
 

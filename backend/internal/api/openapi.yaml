@@ -54,6 +54,10 @@ paths:
       description: |
         Liefert den kompletten Stand einmalig als JSON und beendet die Response. Der Inhalt entspricht dem
         `snapshot`-Event von `GET /api/events`; es folgen keine weiteren Events.
+
+        Dieser Endpunkt ist der einzige mit CORS: Für die in `cors.allowed-origins` konfigurierten Origins setzt das
+        Backend `Access-Control-Allow-Origin` (exakt der Origin, keine Credentials); `Vary: Origin` steht bei jeder
+        Anfrage mit `Origin`-Header.
       responses:
         '200':
           description: Snapshot
@@ -67,6 +71,20 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '503':
           description: Informer-Cache wird noch synchronisiert oder Server fährt herunter
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    options:
+      summary: CORS-Preflight für den Snapshot
+      description: |
+        Beantwortet den Preflight für `GET /api/snapshot`. Nur für Origins aus `cors.allowed-origins`.
+      parameters:
+        - { name: Origin, in: header, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: Origin erlaubt (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Max-Age: 600`)
+        '405':
+          description: Origin nicht erlaubt oder fehlt; keine CORS-Header
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
