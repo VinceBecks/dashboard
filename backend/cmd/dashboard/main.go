@@ -93,8 +93,12 @@ func run(configPath, listen, kubeconfig, staticDir string) error {
 
 	go pipelines.NewTracker(pipelineState, cfg.Pipelines.Poll()).Run(ctx)
 
+	if len(cfg.CORS.AllowedOrigins) > 0 {
+		slog.Info("CORS für GET /api/snapshot aktiv", "allowed-origins", cfg.CORS.AllowedOrigins)
+	}
+
 	apiServer := api.NewServer(cluster, registry, cfg.Projects, cluster.Ready).WithStaticDir(staticDir).WithLinks(linkRegistry).
-		WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster).WithPipelines(pipelineState).WithTeams(cfg.Teams)
+		WithCopyCommands(copyCommandRegistry).WithCluster(cfg.Cluster).WithPipelines(pipelineState).WithTeams(cfg.Teams).WithCORS(cfg.CORS)
 	// Endet ctx, beendet der Hub alle Event-Streams; erst dann kann srv.Shutdown abschließen.
 	go apiServer.Run(ctx)
 	// Kein WriteTimeout: GET /api/events hält die Verbindung dauerhaft offen.

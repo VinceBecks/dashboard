@@ -34,11 +34,12 @@ type Server struct {
 	// copyCommands rendert die Kopier-Befehle je Objekt; nil heißt: keine.
 	copyCommands *copycommands.Registry
 	// pipelines kennt die laufenden GitLab-Pipelines; nil heißt: keine.
-	pipelines *pipelines.State
-	dnsName   string
-	projects  map[string]config.Project
-	teams     config.TeamsConfig
-	hub       *Hub
+	pipelines   *pipelines.State
+	dnsName     string
+	projects    map[string]config.Project
+	teams       config.TeamsConfig
+	hub         *Hub
+	corsOrigins map[string]bool
 }
 
 // Source ist die Datenquelle des Servers, im Betrieb der Informer-Cache (kube.Cluster).
@@ -89,6 +90,16 @@ func (s *Server) WithTeams(t config.TeamsConfig) *Server {
 	return s
 }
 
+// WithCORS lässt den Server an jedem Objekt dessen laufende Pipelines ausliefern. Änderungen daran lösen
+// Events aus wie Änderungen im Cluster.
+func (s *Server) WithCORS(cors config.CORSConfig) *Server {
+	s.corsOrigins = make(map[string]bool, len(cors.AllowedOrigins))
+	for _, origin := range cors.AllowedOrigins {
+		s.corsOrigins[origin] = true
+	}
+	return s
+}
+
 // WithPipelines lässt den Server an jedem Objekt dessen laufende Pipelines ausliefern. Änderungen daran lösen
 // Events aus wie Änderungen im Cluster.
 func (s *Server) WithPipelines(p *pipelines.State) *Server {
@@ -115,7 +126,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
-	mux.HandleFunc("GET /api/snapshot", s.handleSnapshot)
+	mux.HandleFunc("GET /api/snapshot", s.withCORS(s.handleSnapshot))
+	mux.HandleFunc("OPTIONS /api/snapshot", s.handleSnapshotPreflight)
 	mux.HandleFunc("PATCH /api/actions/{action}", s.handleAction)
 	mux.HandleFunc("POST /api/actions/{action}/form-fields", s.handleFormFields)
 	mux.HandleFunc("GET /api/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {

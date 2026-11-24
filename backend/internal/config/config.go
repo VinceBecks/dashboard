@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ type Config struct {
 	Links         []Link            `yaml:"links"`
 	// CopyCommands sind Befehle (z. B. kubectl exec), die das Dashboard je Objekt zum Kopieren anbietet.
 	CopyCommands []CopyCommand `yaml:"copy-commands"`
+	CORS CORSConfig `yaml:"cors"`
 }
 
 // CopyCommand ist ein konfigurierbarer Befehl, den das Dashboard an Objekten zum Kopieren in die Zwischenablage
@@ -224,6 +226,41 @@ func (a ActionHandlerConfig) HandlerType() string {
 		return a.Handler
 	}
 	return a.Name
+}
+
+// foo
+type CORSConfig struct {
+	AllowedOrigins []string `yaml:"allowed-origins"`
+}
+
+func (c CORSConfig) validate() []error {
+	var errs []error
+	seen := map[string]bool{}
+	for i, o := range c.AllowedOrigins {
+		at := fmt.Sprintf("cors.allowed-origins[%d]", i)
+		if !isOrigin(o) {
+			errs = append(errs, fmt.Errorf("%s: %q ist kein gültiger Origin (http:// oder https://, Host optionaler Port, ohne Pfad, Query und Wildcard)", at, o))
+		}
+
+		if seen[o] {
+			errs = append(errs, fmt.Errorf("%s: Origin %q ist nicht eindeutig", at, o))
+		}
+
+		seen[o] = true
+	}
+	return errs
+}
+
+func isOrigin(s string) bool {
+	if strings.ContainsRune(s, '*') {
+		return false
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil &&
+		u.Path == "" && u.RawQuery == "" && u.Fragment == ""
 }
 
 // Load liest die Konfiguration aus der angegebenen Datei.

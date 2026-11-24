@@ -677,3 +677,77 @@ func TestLazyFormFieldsAndDownload(t *testing.T) {
 	}()
 	do(h, "PATCH", "/api/actions/files", svc+`,"inputs":{"files":["a.txt"]}}`)
 }
+
+// request holt einen Pfad und setzt dabei, wenn gegeben, den Origin-Header
+func request(h http.Handler, method, path, origin string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestCORS prüft den Dekorator für sich: nur der freigegebene Origin bekommt den Antwort-Header,
+// Vary: Origin steht in jedem Fall mit Origin-Header.
+func TestCORS(t *testing.T) {
+	srv := &Server{corsOrigins: map[string]bool{"https://jira.mycomp.de": true}}
+	h := srv.withCORS(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	cases := []struct {
+		name, origin, want string
+	}{
+		{"freigegebener origin", "https://jira.mycomp.de", "https://jira.mycomp.de"},
+		{"fremder origin", "https://other.example", ""},
+		{"ohne origin-header", "", ""},
+	}
+	for _, c := range cases {
+		rec := request(h, http.MethodGet, "/api/snapshot", c.origin)
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != c.want {
+			t.Errorf("%s: Access-Control-Allow-Origin = %q, want %q", c.name, got, c.want)
+		}
+		if got, want := rec.Header().Get("Vary") == "Origin", c.origin != ""; got != want {
+			t.Errorf("%s: Vary: Origin = %v, want %v", c.name, got, want)
+		}
+	}
+}
+
+// TestSnapshotEndpointCORS prüft die verdrahteten Routen: den Snapshot selbst und seinen Preflight.
+func TestSnapshotEndpointCORS(t *testing.T) {
+	_, srv, _ := setup(t)
+	srv.WithCORS(config.CORSConfig{AllowedOrigins: []string{"https://jira.mycomp.de"}})
+	h := srv.Handler()
+
+	if rec := request(h, http.MethodGet, "/api/snapshot", "https://jira.mycomp.de"); rec.Code != 200 ||
+		rec.Header().Get("Access-Control-Allow-Origin") != "https://jira.mycomp.de" || rec.Body.Len() == 0 {
+		t.Fatalf("freigegebener origin: status = %d, header = %q, body = %d bytes", rec.Code,
+			rec.Header().Get("Access-Control-Allow-Origin"), rec.Body.Len())
+	}
+	if rec := request(h, http.MethodGet, "/api/snapshot", "https://other.example"); rec.Code != 200 ||
+		rec.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("fremder origin: status = %d, header = %q", rec.Code,
+			rec.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	preflight := func(origin string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodOptions, "/api/snapshot", nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", "GET")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := preflight("https://jira.mycomp.de"); rec.Code != http.StatusNoContent ||
+		rec.Header().Get("Access-Control-Allow-Methods") != "GET, OPTIONS" ||
+		rec.Header().Get("Access-Control-Max-Age") != "600" || rec.Body.Len() != 0 {
+		t.Fatalf("Preflight: status = %d, methods = %q, max-age = %q, body = %q", rec.Code,
+			rec.Header().Get("Access-Control-Allow-Methods"), rec.Header().Get("Access-Control-Max-Age"), rec.Body)
+	}
+	// Der Snapshot-Inhalt darf einen fremden Ursprung auch in der Preflight-Antwort nicht erreichen.
+	if rec := preflight("https://other.example"); rec.Code != http.StatusMethodNotAllowed ||
+		rec.Header().Get("Access-Control-Allow-Origin") != "" ||
+		strings.Contains(rec.Body.String(), "\"projects\"") {
+		t.Fatalf("Preflight fremder origin: status = %d, header = %q, body = %s", rec.Code,
+			rec.Header().Get("Access-Control-Allow-Origin"), rec.Body)
+	}
+}

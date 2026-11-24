@@ -343,3 +343,50 @@ func TestTeamsValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestCORS(t *testing.T) {
+	cfg, err := parse([]byte(`
+cors:
+  allowed-origins:
+    - https://jira.mycomp.de
+    - https://git-ee.mycomp.de:8443
+    - http://localhost:4200
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"https://jira.mycomp.de", "https://git-ee.mycomp.de:8443", "http://localhost:4200"}
+	got := cfg.CORS.AllowedOrigins
+	if len(got) != len(want) {
+		t.Fatalf("allowed-origins = %v", got)
+	}
+
+	for i, o := range want {
+		if got[i] != o {
+			t.Errorf("allowed-origins[%d] = %q, want %q", i, got[i], o)
+		}
+	}
+
+	if cfg, err = parse([]byte("projects: []\n")); err != nil || len(cfg.CORS.AllowedOrigins) != 0 {
+		t.Fatalf("ohne cors: %+v, %v", cfg.CORS, err)
+	}
+}
+
+func TestCORSValidation(t *testing.T) {
+	invalid := []string{
+		"*", "https://*", "https://*.mycomp.de", "mycomp.de", "https://mycomp.de/",
+		"https://mycomp.de/path", "https://mycomp.de?x=1", "https://mycomp.de#f",
+		"ftp://mycomp.de", "https://nutzer@mycomp.de", "https://mycomp.de:port", "",
+	}
+
+	for _, o := range invalid {
+		if _, err := parse([]byte("cors:\n  allowed-origins: [\"" + o + "\"]\n")); err == nil {
+			t.Errorf("%q: Fehler erwartet", o)
+		}
+	}
+
+	// Ein doppelter Eintrag ist ein Konfigurationsfehler, keine stille Kürzung
+	if _, err := parse([]byte("cors:\n  allowed-origins: [\"https://a.de\", \"https://a.de\"]\n")); err == nil {
+		t.Errorf("duplizierter Origin: Fehler erwartet")
+	}
+}
